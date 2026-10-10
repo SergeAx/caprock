@@ -7,6 +7,15 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Added
+
+- **Start an agent from a fresh main.** New agent's *Where* leads with *New
+  copy from a branch*: pick the branch it starts from in a search that puts
+  the main branches first (the default one on top) instead of a list of
+  every branch, and the copy starts from the latest of it on the server —
+  Caprock fetches it first unless you untick *Pull the latest*. Choosing a
+  new copy is remembered, so the next agent starts the same way.
+
 ## [0.99.0] - 2026-10-10
 
 ### Added

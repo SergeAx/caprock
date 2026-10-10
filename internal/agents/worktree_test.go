@@ -60,7 +60,7 @@ func TestCreateWorktreePreservesExistingBranchCommits(t *testing.T) {
 	before := run("rev-parse", "caprock/worker-1")
 	run("checkout", "-q", "main")
 
-	_, err := createWorktree(context.Background(), dir, "worker-1")
+	_, err := createWorktree(context.Background(), dir, "worker-1", "", false)
 	if err == nil {
 		t.Fatal("createWorktree silently took over a branch that already existed; it must refuse by name")
 	}
@@ -85,7 +85,7 @@ func TestCreateWorktreePreservesExistingBranchCommits(t *testing.T) {
 func TestCreateWorktreeReattachesToItsOwn(t *testing.T) {
 	dir, run := gitRepo(t)
 
-	first, err := createWorktree(context.Background(), dir, "worker-1")
+	first, err := createWorktree(context.Background(), dir, "worker-1", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestCreateWorktreeReattachesToItsOwn(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(first, "wip"), []byte("in progress"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	second, err := createWorktree(context.Background(), dir, "worker-1")
+	second, err := createWorktree(context.Background(), dir, "worker-1", "", false)
 	if err != nil {
 		t.Fatalf("re-spawning the same worker must reuse its worktree, not fail: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestCreateWorktreeRefusesBranchCheckedOutElsewhere(t *testing.T) {
 	other := filepath.Join(t.TempDir(), "user-worktree")
 	run("worktree", "add", "-q", "-b", "caprock/worker-1", other)
 
-	_, err := createWorktree(context.Background(), dir, "worker-1")
+	_, err := createWorktree(context.Background(), dir, "worker-1", "", false)
 	if err == nil {
 		t.Fatal("took over a branch checked out in the user's own worktree")
 	}
@@ -125,7 +125,7 @@ func TestCreateWorktreeRefusesBranchCheckedOutElsewhere(t *testing.T) {
 func TestCreateWorktreeRejectsPathSeparators(t *testing.T) {
 	dir, _ := gitRepo(t)
 	for _, bad := range []string{"bad/name", `bad\name`, "c:name"} {
-		if _, err := createWorktree(context.Background(), dir, bad); err == nil {
+		if _, err := createWorktree(context.Background(), dir, bad, "", false); err == nil {
 			t.Errorf("accepted path separator in worker name %q", bad)
 		}
 	}
@@ -136,7 +136,7 @@ func TestCreateWorktreeRejectsPathSeparators(t *testing.T) {
 // all would commit it.
 func TestCreateWorktreeLeavesMainCheckoutClean(t *testing.T) {
 	dir, run := gitRepo(t)
-	if _, err := createWorktree(context.Background(), dir, "ux-try"); err != nil {
+	if _, err := createWorktree(context.Background(), dir, "ux-try", "", false); err != nil {
 		t.Fatal(err)
 	}
 	if got := run("status", "--porcelain"); got != "" {

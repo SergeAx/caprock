@@ -41,6 +41,7 @@ import (
 	"github.com/dspv/caprock/internal/premium"
 	"github.com/dspv/caprock/internal/projects"
 	"github.com/dspv/caprock/internal/store"
+	"github.com/dspv/caprock/internal/subs"
 	"github.com/dspv/caprock/internal/update"
 )
 
@@ -128,6 +129,9 @@ type Deps struct {
 	// Catalog answers the agent pickers and keeps the custom agents
 	// (ADR-046). nil ⇒ /v1/agents/catalog and /v1/agents/custom return 501.
 	Catalog AgentCatalog
+	// Subscriptions keeps the sign-ins of Settings → Subscriptions (ADR-048).
+	// nil ⇒ /v1/subscriptions returns 501.
+	Subscriptions SubscriptionManager
 	// Tasks is the Phase 2 hive-backed task board (nil ⇒ endpoints return 501).
 	Tasks TaskController
 	// Settings reads and persists the user-editable settings (the subscription
@@ -496,6 +500,10 @@ func New(d Deps) *Server {
 	m.HandleFunc("GET /v1/agents/catalog", s.handleAgentCatalog)
 	m.HandleFunc("GET /v1/agents/custom", s.handleCustomAgents)
 	m.HandleFunc("PUT /v1/agents/custom", s.handlePutCustomAgents)
+	m.HandleFunc("GET /v1/subscriptions", s.handleSubscriptions)
+	m.HandleFunc("POST /v1/subscriptions", s.handleAddSubscription)
+	m.HandleFunc("PATCH /v1/subscriptions/{id}", s.handleRenameSubscription)
+	m.HandleFunc("DELETE /v1/subscriptions/{id}", s.handleRemoveSubscription)
 	m.HandleFunc("POST /v1/agents/{id}/input", s.handleAgentInput)
 	m.HandleFunc("POST /v1/agents/{id}/signal", s.handleAgentSignal)
 	m.HandleFunc("GET /v1/agents/{id}/permission", s.handlePermission)
@@ -1855,6 +1863,7 @@ func (s *Server) handleStatusline(w http.ResponseWriter, r *http.Request) {
 		SessionID string        `json:"session_id"`
 		FiveHour  *rateWindowIn `json:"five_hour"`
 		SevenDay  *rateWindowIn `json:"seven_day"`
+		ConfigDir string        `json:"config_dir"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&body); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
@@ -1862,6 +1871,20 @@ func (s *Server) handleStatusline(w http.ResponseWriter, r *http.Request) {
 	}
 	now := s.d.Now().UnixMilli()
 	ctx := r.Context()
+	// Whose windows these are (ADR-048): a status line run under one of
+	// Caprock's subscription directories reports that sign-in's plan, which
+	// must not overwrite the Default one's. The directory says so directly;
+	// a session Caprock started on a subscription says so too.
+	sub := subs.OfDir(s.d.DataDir, body.ConfigDir)
+	if sub == "" && body.ConfigDir == "" && body.SessionID != "" {
+		if sess, err := store.GetSession(ctx, s.d.Store.DB(), body.SessionID); err == nil {
+			sub = sess.Subscription
+		}
+	}
+	prefix := ""
+	if sub != "" {
+		prefix = subs.LimitPrefix(sub)
+	}
 	// Validate before storing. These values are relayed from Claude Code and
 	// were taken on trust, which is how a five-hour window came to claim it
 	// resets in 2030 — a figure the dashboard then presented as a fact.
@@ -1870,13 +1893,14 @@ func (s *Server) handleStatusline(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := store.RecordRateLimit(ctx, s.d.Store.DB(), store.RateLimitSnapshot{
-			Window: window, Ts: now, UsedPercentage: w.UsedPercentage, ResetsAt: w.ResetsAt}, body.SessionID); err != nil {
+			Window: prefix + window, Ts: now, UsedPercentage: w.UsedPercentage, ResetsAt: w.ResetsAt}, body.SessionID); err != nil {
 			s.d.Log.Debug("record rate limit", "component", "api", "window", window, "err", err)
 		}
 	}
 	record("five_hour", body.FiveHour)
 	record("seven_day", body.SevenDay)
-	if s.d.RateLimitsRecorded != nil && (body.FiveHour != nil || body.SevenDay != nil) {
+	// The plan-window stop watches the Default sign-in's windows only.
+	if s.d.RateLimitsRecorded != nil && prefix == "" && (body.FiveHour != nil || body.SevenDay != nil) {
 		// Detached: pausing sessions must not be cancelled because the status
 		// line's 300 ms budget ran out first.
 		go s.d.RateLimitsRecorded(context.WithoutCancel(ctx))

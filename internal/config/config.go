@@ -143,6 +143,10 @@ type Config struct {
 	// while it is active. Edited through PUT /v1/agents/custom, which
 	// validates them; see internal/agentcat.
 	CustomAgents []CustomAgent `json:"custom_agents,omitempty"`
+	// Subscriptions are the sign-ins added in Settings → Subscriptions
+	// (ADR-048), each in its own configuration directory under the data dir.
+	// The Default one is the user's normal sign-in and is not listed here.
+	Subscriptions []Subscription `json:"subscriptions,omitempty"`
 	// Prompts records when each of the dashboard's own offers was last
 	// answered — the GitHub star strip, the Premium and Teams nudges, the
 	// share prompt — keyed by prompt id, in Unix ms. Kept here rather than in

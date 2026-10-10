@@ -55,6 +55,7 @@ import (
 	"github.com/dspv/caprock/internal/rollup"
 	"github.com/dspv/caprock/internal/sessionlink"
 	"github.com/dspv/caprock/internal/store"
+	"github.com/dspv/caprock/internal/subs"
 	"github.com/dspv/caprock/internal/telegram"
 	"github.com/dspv/caprock/internal/termbuf"
 	"github.com/dspv/caprock/internal/update"
@@ -162,6 +163,9 @@ type Daemon struct {
 	// no hooks and no transcript, so without this Caprock starts a session and
 	// then observes nothing about it — which is what 0.44.x shipped.
 	gemIn *gemini.Ingester
+	// subIn reads the transcripts of each subscription's configuration
+	// directory (ADR-048, subscriptions.go).
+	subIn subIngest
 	mgr   *agents.Manager
 	// projs is the projects list and its git watcher (WP-05).
 	projs *projects.Service
@@ -326,6 +330,9 @@ func newDaemon(ctx context.Context, opt Options) (*Daemon, error) {
 	_ = st.SetMeta(ctx, store.MetaTranscriptSchema, strconv.Itoa(ingest.SchemaVersion))
 	b := bus.New()
 	rec := rollup.New(st, table, b, log)
+	// A transcript under a subscription's directory is that subscription's (ADR-048).
+	dataDir := opt.DataDir
+	rec.SubscriptionOf = func(p string) string { return subs.Of(dataDir, p) }
 	det := loop.New(opt.Config.LoopK, time.Duration(opt.Config.LoopTMinutes)*time.Minute)
 	d := &Daemon{opt: opt, log: log, store: st, bus: b, table: table, rec: rec, det: det, alerts: map[string]*loop.Alert{}, start: time.Now(), upd: update.New(), res: newResourceMeter()}
 	return d, nil
@@ -524,7 +531,7 @@ func (d *Daemon) run(ctx context.Context) error {
 		},
 		ActiveLoops: d.activeLoop, IdleAfter: d.opt.IdleAfter,
 		LoopK: d.det.K, LoopWindow: d.det.Window,
-		Token: rt.Token, Shutdown: cancel, Agents: &agentAdapter{m: d.mgr, d: d}, Catalog: &catalogAdapter{d: d},
+		Token: rt.Token, Shutdown: cancel, Agents: &agentAdapter{m: d.mgr, d: d}, Catalog: &catalogAdapter{d: d}, Subscriptions: &subsAdapter{d: d},
 		Tasks: &boardAdapter{d: d}, Settings: &settingsAdapter{d: d}, Update: d.upd,
 		AskGemini: d.askGemini,
 		DataDir:   d.opt.DataDir,
@@ -594,6 +601,9 @@ func (d *Daemon) run(ctx context.Context) error {
 	// normal case and is silent. With the CLI installed it starts even with no
 	// transcripts yet: the first rollout may be one a session Caprock starts.
 	d.startCodex(ctx, d.mgr.AgentAvailable(agents.AgentCodex))
+	// Each subscription's directory (ADR-048): its hooks brought up to date
+	// and its transcripts read.
+	d.startSubscriptions()
 
 	// DeepSeek Harness, when this machine has it. The same shape as Codex: one
 	// zstd JSONL transcript per session under ~/.dsh/sessions, read-only, no
@@ -1590,13 +1600,20 @@ func (a *agentAdapter) Spawn(ctx context.Context, req any) (string, string, erro
 	// Continuing a session is continuing it in the agent that ran it, whatever
 	// the request said — the pick-up button sends only the id — and with the
 	// agent's own id for it when Caprock started it under one of its own.
+	var prev *store.Session
 	if sr.Resume != "" {
-		if prev, err := store.GetSession(ctx, a.d.store.DB(), sr.Resume); err == nil {
-			if prev.Agent != "" {
-				sr.Agent = prev.Agent
+		if p, err := store.GetSession(ctx, a.d.store.DB(), sr.Resume); err == nil {
+			if p.Agent != "" {
+				sr.Agent = p.Agent
 			}
-			sr.NativeResume = prev.NativeID
+			sr.NativeResume = p.NativeID
+			prev = &p
 		}
+	}
+	// The sign-in it runs on (ADR-048). The directory is the daemon's to
+	// name, never the request's; a continued session keeps its own.
+	if err := a.d.resolveSubscription(&sr, prev); err != nil {
+		return "", "", err
 	}
 	// A relay starts in the folder the source session worked in, unless the
 	// request names one.

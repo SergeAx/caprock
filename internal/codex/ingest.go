@@ -69,6 +69,14 @@ type Ingester struct {
 	// is anyway.
 	Link *sessionlink.Linker
 
+	// Subscription is set on an importer reading a subscription's CODEX_HOME
+	// rather than the user's own (ADR-048): its sessions are recorded on it,
+	// its plan windows are stored under LimitPrefix, and the files it has read
+	// are remembered under a key of their own. Empty is the Default sign-in.
+	Subscription string
+	// LimitPrefix replaces store.CodexRateLimitPrefix when set.
+	LimitPrefix string
+
 	namesAt time.Time
 	// namesFor is how many transcripts had been imported at that sync. A
 	// thread can be indexed before its transcript is imported, and then its
@@ -106,6 +114,24 @@ func NewIngester(dirs []string, rec *rollup.Recorder, log *slog.Logger, every ti
 		every = 5 * time.Second
 	}
 	return &Ingester{dirs: dirs, rec: rec, log: log, every: every, seen: map[string]fileState{}}
+}
+
+// limitPrefix is where this importer's plan windows are stored.
+func (in *Ingester) limitPrefix() string {
+	if in.LimitPrefix != "" {
+		return in.LimitPrefix
+	}
+	return store.CodexRateLimitPrefix
+}
+
+// seenKey is the meta key remembering the files this importer has read. A
+// subscription's importer has its own, so two importers never overwrite each
+// other's list.
+func (in *Ingester) seenKey() string {
+	if in.Subscription != "" {
+		return store.MetaCodexSeen + ":" + in.Subscription
+	}
+	return store.MetaCodexSeen
 }
 
 // Stats returns a snapshot of what has been imported.
@@ -310,7 +336,7 @@ func (in *Ingester) session(ctx context.Context, s *Session) error {
 		}
 		return nil
 	}
-	info := rollup.SessionInfo{Cwd: s.Cwd, Model: s.Model, Version: s.CLIVersion, Agent: Agent}
+	info := rollup.SessionInfo{Cwd: s.Cwd, Model: s.Model, Version: s.CLIVersion, Agent: Agent, Subscription: in.Subscription}
 	if s.Subagent {
 		// A subagent's events belong to its parent's session, as a Claude
 		// Code subagent's do, so the session is described by the parent's
@@ -318,7 +344,7 @@ func (in *Ingester) session(ctx context.Context, s *Session) error {
 		// carry its own model, which prices them. Its cwd is kept: read
 		// before the parent's file, it is the only directory the session
 		// has, and without it the turns are filed under no project.
-		info = rollup.SessionInfo{Cwd: s.Cwd, Agent: Agent}
+		info = rollup.SessionInfo{Cwd: s.Cwd, Agent: Agent, Subscription: in.Subscription}
 	}
 
 	// Prompts, turns, tools and their results are interleaved by time so the
@@ -905,7 +931,7 @@ func (in *Ingester) backfillChat(ctx context.Context, files []Transcript, readNo
 		}
 		parsed++
 		in.link(ctx, s)
-		info := rollup.SessionInfo{Cwd: s.Cwd, Agent: Agent}
+		info := rollup.SessionInfo{Cwd: s.Cwd, Agent: Agent, Subscription: in.Subscription}
 		before := in.Stats().Events
 		for _, p := range s.Prompts {
 			if err := in.prompt(ctx, s, p, info); err != nil {
@@ -1077,7 +1103,7 @@ func (in *Ingester) restoreSeen(ctx context.Context) {
 	if in.rec == nil || in.rec.Store == nil {
 		return
 	}
-	raw, err := in.rec.Store.GetMeta(ctx, store.MetaCodexSeen)
+	raw, err := in.rec.Store.GetMeta(ctx, in.seenKey())
 	if err != nil || raw == "" {
 		return
 	}
@@ -1171,7 +1197,7 @@ func (in *Ingester) saveSeen(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	if err := in.rec.Store.SetMeta(ctx, store.MetaCodexSeen, string(b)); err != nil {
+	if err := in.rec.Store.SetMeta(ctx, in.seenKey(), string(b)); err != nil {
 		in.log.Debug("remember codex files read", "component", "codex", "err", err)
 	}
 }

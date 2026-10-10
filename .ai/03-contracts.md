@@ -985,11 +985,15 @@ machine, never from a forge's API (rule 4):
   guarded recent folder without checking that it still exists.
 
 ```
-POST   /v1/agents                    {cwd?, chat?, create?, worktree?, worktree_base?, worktree_pull?, agent?, model?, permission_mode?, resume?, fork?, command?, args?} → {session_id, cwd}
+POST   /v1/agents                    {cwd?, chat?, create?, worktree?, worktree_base?, worktree_pull?, agent?, subscription?, model?, permission_mode?, resume?, fork?, command?, args?} → {session_id, cwd}
 GET    /v1/agents/models?agent=      {agent, default?, models:[{id,label}]}
 GET    /v1/agents/catalog            → {agents: [CatalogEntry], licensed, home?}
 GET    /v1/agents/custom             → {agents: [CustomAgent], licensed}
 PUT    /v1/agents/custom             {agents: [CustomAgent]} → {agents, licensed}; 402 without an active licence
+GET    /v1/subscriptions             → {agents: [{agent, label, installed, subscriptions: [Subscription]}], licensed, free_per_agent, home?}
+POST   /v1/subscriptions             {agent: claude|codex, label} → Subscription; 402 at the free number without a licence
+PATCH  /v1/subscriptions/{id}        {label} → Subscription
+DELETE /v1/subscriptions/{id}        → 204; 409 while a session Caprock started runs on it
 POST   /v1/agents/{id}/input         {data}            → 204   (owned PTYs only)
 POST   /v1/agents/{id}/signal        {action: pause|resume|kill} → 204 (owned PTYs only)
 GET    /v1/agents/{id}/permission    → {permission: {id, tool, detail, always?, since, queued?, agent_id?, agent_type?, waiting?} | null}; the oldest prompt an owned session waits on, queued = how many more are outstanding, waiting = all of them when two or more
@@ -1151,6 +1155,57 @@ the command — and drops `model`, `permission_mode` and `fork`, which it cannot
 map. A custom session is recorded with `agent = "custom:<id>"`; resume is not
 offered. `GET /v1/agents/custom` lists the stored agents whatever the licence
 says, so a renewed licence restores them.
+
+**Subscriptions** ([ADR-048](08-decisions.md)). A subscription is a sign-in
+to Claude Code or Codex kept in `<data dir>/profiles/<id>/` (0700), stored as
+`subscriptions: [{id, label, agent, created_at}]` in `config.json`; `id` is
+eight lowercase hex digits. The user's normal sign-in is the **Default**
+subscription: never stored, always listed first with `id: "default"`, and
+recorded on a session as `""`. A `Subscription` in the API is `{id, agent,
+label, default, dir, env_var?, signed_in, account?, login_command, windows:
+[{window, used_percentage, resets_at, observed_at}], sessions_7d,
+cost_7d_usd, running, created_at?}`.
+
+- **`signed_in` and `account` come from files, never from running the
+  agent.** Claude Code: `oauthAccount.emailAddress` in the directory's
+  `.claude.json` (the Default one's is `~/.claude.json`), or a
+  `.credentials.json` beside it. Codex: `auth.json`, whose id token's `email`
+  claim is decoded and nothing else kept. Plan windows stored for it also
+  count as signed in (a Codex kept in the OS keyring leaves no file).
+- **`login_command`** is the agent's own sign-in for the directory —
+  `CLAUDE_CONFIG_DIR='<dir>' claude auth login` or `CODEX_HOME='<dir>' codex
+  login`, `$env:…='<dir>'; …` on Windows — which the page types into a shell
+  tab and the user runs. Caprock never runs it.
+- **`POST`** makes the directory and, for Claude Code, writes Caprock's hooks
+  and status line into its `settings.json` (the same entries `caprock hooks
+  install` writes into `~/.claude/settings.json`) and, when the user's own
+  settings already carry `skipDangerousModePermissionPrompt: true`, that key
+  too. Nothing else of the user's settings is copied. The daemon writes the
+  same again at every start and before every spawn on it, so a moved shim
+  follows. `400` for an agent other than `claude` or `codex`, an empty or
+  over-40-character label, `Default`, or a label the agent already has;
+  `402` when the agent already has `free_per_agent` (3, the Default one
+  included) and the licence is not active; `403` from a paired device.
+- **`DELETE`** removes it from the config and deletes its directory — only a
+  directory directly under `profiles/`. `404` for an unknown id, `409` while
+  a session Caprock started runs on it. Sessions recorded on it keep the id.
+- **`GET`** is open to a controller phone (the start form's picker); the
+  writes are not.
+
+`POST /v1/agents` takes `subscription` (an id, `"default"` or empty) for
+`agent` `claude` or `codex`. The daemon resolves it to the directory — the
+request never names one — and the child gets `CLAUDE_CONFIG_DIR` or
+`CODEX_HOME` set to it, replacing any value the login shell exports; Claude
+Code's folder trust is written to that directory's `.claude.json`, not
+`~/.claude.json`. A `resume` runs on the subscription the session ran on,
+whatever the request says, and is refused when that subscription has been
+removed. An unknown id, or a subscription of the other agent, is `400`.
+
+The daemon reads each subscription's transcripts as it reads the Default
+one's: Claude Code's under `<dir>/projects/`, Codex's under
+`<dir>/sessions/` and `<dir>/archived_sessions/`. A hook or transcript line
+whose transcript path is under `profiles/<id>/` records `sessions.subscription
+= <id>`.
 
 **`/v1/status`** carries `codex_available`, `opencode_available` and
 `grok_available` beside `claude_available` and `gemini_available`: the binary
@@ -2062,6 +2117,22 @@ than its conversation ([ADR-032](08-decisions.md)); written by the daemon when
 fork), and the two must not be read as one. `SessionSummary` carries it as
 `relay_from`, omitted when empty.
 
+### Subscription DDL (migration 0044)
+
+```sql
+ALTER TABLE sessions ADD COLUMN subscription TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_sessions_subscription
+  ON sessions(subscription) WHERE subscription <> '';
+```
+
+The sign-in a session ran on ([ADR-048](08-decisions.md)): a subscription id
+from `config.json`, or `''` for the Default sign-in and for every session
+stored before. The first non-empty value written is kept — the spawn knows it
+before any event arrives, and a session cannot move between sign-ins. Written
+by `POST /v1/agents`, by any hook or transcript line whose transcript path is
+under `<data dir>/profiles/<id>/`, and by a subscription's Codex importer.
+`SessionSummary` carries it as `subscription`, omitted when empty.
+
 ### Pending permission DDL (migrations 0039, 0042, 0043)
 
 ```sql
@@ -2313,6 +2384,17 @@ is free text, and the migration-0005 comment listing two values is history.
 observed_at}` with `observed_at` = that `ts` in unix ms; never `forecast`),
 omitted when there are none. Like `rate_limits` it is current state, not
 range- or agent-scoped.
+
+**A subscription's windows are stored under `sub:<id>:`** —
+`sub:ab12cd34:five_hour` — for either agent ([ADR-048](08-decisions.md)), so
+they never replace the Default sign-in's `five_hour` or `codex_five_hour`.
+Claude Code's come from the status line: `POST /v1/statusline` carries
+`config_dir`, the `CLAUDE_CONFIG_DIR` the command ran under; a directory
+directly under `<data dir>/profiles/` names the subscription, and with no
+directory the session's own `subscription` does. Codex's come from the
+subscription's own importer, replaced as a set like `codex_`. They are read
+by `GET /v1/subscriptions` only: `/v1/stats/summary` and the plan-window stop
+see the Default sign-in's, and the stop pauses only sessions on it.
 
 ## Export (`caprock export`)
 

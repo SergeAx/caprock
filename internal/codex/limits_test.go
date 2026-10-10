@@ -172,3 +172,30 @@ func TestLimitSnapshotsDropWhatTheyCannotName(t *testing.T) {
 		t.Fatalf("snapshots: %+v", got)
 	}
 }
+
+// An importer reading a subscription's CODEX_HOME (ADR-048) stores its plan
+// windows under that subscription's prefix, never over the Default sign-in's,
+// and records its sessions as run on it.
+func TestASubscriptionsWindowsAndSessionsAreItsOwn(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	h.in.Subscription = "ab12"
+	h.in.LimitPrefix = "sub:ab12:"
+	h.writeLimits("rollout-1.jsonl", "s-1", "2026-09-14T12:00:00.000Z", plusLimits)
+	h.poll()
+	if got := h.codexLimits(); len(got) != 0 {
+		t.Fatalf("the Default sign-in got a subscription's windows: %+v", got)
+	}
+	mine, err := store.RateLimitsWithPrefix(ctx, h.out, "sub:ab12:")
+	if err != nil || len(mine) != 2 {
+		t.Fatalf("subscription windows: %+v %v", mine, err)
+	}
+	h.put()
+	h.poll()
+	if n := count(t, h.out, `SELECT COUNT(*) FROM sessions WHERE agent = 'codex' AND subscription = 'ab12'`); n == 0 {
+		t.Fatal("no session recorded on the subscription")
+	}
+	if n := count(t, h.out, `SELECT COUNT(*) FROM sessions WHERE subscription = ''`); n != 0 {
+		t.Fatalf("%d sessions on the Default sign-in", n)
+	}
+}

@@ -74,7 +74,7 @@ func (in *Ingester) recordLimits(ctx context.Context, s *Session) {
 		return
 	}
 	err := in.rec.Store.WithTx(ctx, func(q store.Querier) error {
-		_, err := store.ReplaceRateLimits(ctx, q, store.CodexRateLimitPrefix, s.ID, snaps)
+		_, err := store.ReplaceRateLimits(ctx, q, in.limitPrefix(), s.ID, snaps)
 		return err
 	})
 	if err != nil {
@@ -91,7 +91,7 @@ func (in *Ingester) backfillLimits(ctx context.Context, files []Transcript) {
 	if in.rec == nil || in.rec.Store == nil {
 		return
 	}
-	have, err := store.RateLimitsWithPrefix(ctx, in.rec.Store.DB(), store.CodexRateLimitPrefix)
+	have, err := store.RateLimitsWithPrefix(ctx, in.rec.Store.DB(), in.limitPrefix())
 	if err != nil || len(have) > 0 {
 		return
 	}

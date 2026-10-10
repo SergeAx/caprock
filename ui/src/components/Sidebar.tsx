@@ -345,9 +345,27 @@ export function Sidebar(props: SidebarProps) {
             <span className="flex-1">Dashboard</span>
             <kbd className="app-kbd">{keys('⇧⌘D')}</kbd>
           </button>
-          {props.onSettings && <IconButton label={`Settings (${keys('⌘,')})`} onClick={props.onSettings}><SettingsIcon size={15} /></IconButton>}
-          <ThemeButton />
+          {!props.onSettings && <ThemeButton />}
         </div>
+        {/* Settings as a row with its name, not a bare icon (owner, 2026-10-11,
+          * translated: "I don't see Settings from here"). Phone, Telegram and
+          * subscriptions are set up there. */}
+        {props.onSettings && (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              data-nav-row
+              onClick={props.onSettings}
+              className="app-row flex h-[30px] min-w-0 flex-1 items-center gap-2 rounded-[7px] px-2 text-left text-[13px] text-fg"
+            >
+              <SettingsIcon size={15} className="text-fg-muted" />
+              <span className="flex-1">Settings</span>
+              <span className="truncate text-[11px] text-fg-faint">phone, Telegram</span>
+              <kbd className="app-kbd">{keys('⌘,')}</kbd>
+            </button>
+            <ThemeButton />
+          </div>
+        )}
       </div>
       {menuAt && menuNode && (
         <ProjectMenu

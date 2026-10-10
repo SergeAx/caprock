@@ -13,6 +13,9 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   sessions are listed under it whichever project is current, so one click
   opens any of them and picking one never folds another. Projects with
   nothing running still fold.
+- **Settings is a row you can find.** The sidebar's bottom now has
+  *Settings ⌘,* by name, with *phone, Telegram* beside it, instead of a
+  bare sliders icon; the palette gains *Connect Telegram*.
 
 ## [0.101.1] - 2026-10-11
 

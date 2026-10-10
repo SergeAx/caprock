@@ -152,23 +152,26 @@ func eventBreakdown(ctx context.Context, db *sql.DB, now time.Time, st *Storage)
 	nowMs := now.UnixMilli()
 	r7, r30 := nowMs-int64(recentWindows[0])*day, nowMs-int64(recentWindows[1])*day
 	o30, o90 := nowMs-int64(olderWindows[0])*day, nowMs-int64(olderWindows[1])*day
-	// One pass, grouped by agent and kind, with the windows as conditional
-	// sums: four separate scans of an 800 MB table would cost four times as
-	// much for the same rows. octet_length counts bytes; length() would count
-	// characters, which undercounts any payload that is not ASCII.
+	// One pass in rowid order, folded here rather than in SQL.
+	//
+	// This was a GROUP BY over a join, with the windows as conditional sums.
+	// SQLite answered it with a temporary b-tree, and the sorter records it
+	// spilled to disk carried each row's payload rather than its length (an
+	// aggregate's argument is evaluated after the sort), so the whole table
+	// went through temp files every half hour: 11 s in the sqlite3 shell on
+	// the owner's 1.8 GB database (2026-10-10), against 0.4 s for the plain
+	// scan below. octet_length counts bytes without reading a payload's
+	// overflow pages; length() would count characters, which undercounts
+	// any payload that is not ASCII.
 	//
 	// The agent comes from the session row — the one place it is recorded for
 	// every agent. An event whose session row is missing is counted under the
 	// default agent, which is what the sessions column itself defaults to.
-	rows, err := db.QueryContext(ctx, `
-		SELECT COALESCE(s.agent, 'claude'), e.kind,
-		       COUNT(*), COALESCE(SUM(octet_length(e.payload)), 0), MIN(e.ts),
-		       SUM(e.ts >= ?1), COALESCE(SUM(CASE WHEN e.ts >= ?1 THEN octet_length(e.payload) END), 0),
-		       SUM(e.ts >= ?2), COALESCE(SUM(CASE WHEN e.ts >= ?2 THEN octet_length(e.payload) END), 0),
-		       SUM(e.ts <  ?3), COALESCE(SUM(CASE WHEN e.ts <  ?3 THEN octet_length(e.payload) END), 0),
-		       SUM(e.ts <  ?4), COALESCE(SUM(CASE WHEN e.ts <  ?4 THEN octet_length(e.payload) END), 0)
-		FROM events AS e LEFT JOIN sessions AS s ON s.session_id = e.session_id
-		GROUP BY 1, 2`, r7, r30, o30, o90)
+	agentOf, err := sessionAgents(ctx, db)
+	if err != nil {
+		return fmt.Errorf("events breakdown: %w", err)
+	}
+	rows, err := db.QueryContext(ctx, `SELECT session_id, kind, ts, COALESCE(octet_length(payload), 0) FROM events`)
 	if err != nil {
 		return fmt.Errorf("events breakdown: %w", err)
 	}
@@ -176,42 +179,74 @@ func eventBreakdown(ctx context.Context, db *sql.DB, now time.Time, st *Storage)
 	agents, kinds := map[string]*SliceSize{}, map[string]*SliceSize{}
 	st.Recent = []WindowSize{{Days: recentWindows[0]}, {Days: recentWindows[1]}}
 	st.Older = []WindowSize{{Days: olderWindows[0]}, {Days: olderWindows[1]}}
-	add := func(m map[string]*SliceSize, name string, n, b int64) {
-		s := m[name]
+	add := func(m map[string]*SliceSize, name []byte, b int64) {
+		s := m[string(name)] // no allocation for the lookup
 		if s == nil {
-			s = &SliceSize{Name: name}
-			m[name] = s
+			s = &SliceSize{Name: string(name)}
+			m[s.Name] = s
 		}
-		s.Events += n
+		s.Events++
 		s.PayloadBytes += b
 	}
+	window := func(w *WindowSize, b int64) {
+		w.Events++
+		w.PayloadBytes += b
+	}
+	defaultAgent := []byte("claude")
 	for rows.Next() {
-		var agent, kind string
-		var n, b, minTs, n7, b7, n30, b30, no30, bo30, no90, bo90 int64
-		if err := rows.Scan(&agent, &kind, &n, &b, &minTs, &n7, &b7, &n30, &b30, &no30, &bo30, &no90, &bo90); err != nil {
+		var sid, kind sql.RawBytes
+		var ts, b int64
+		if err := rows.Scan(&sid, &kind, &ts, &b); err != nil {
 			return err
 		}
-		add(agents, agent, n, b)
-		add(kinds, kind, n, b)
-		st.Events += n
-		st.PayloadBytes += b
-		if st.OldestTs == 0 || minTs < st.OldestTs {
-			st.OldestTs = minTs
+		agent := defaultAgent
+		if a, ok := agentOf[string(sid)]; ok {
+			agent = a
 		}
-		st.Recent[0].Events += n7
-		st.Recent[0].PayloadBytes += b7
-		st.Recent[1].Events += n30
-		st.Recent[1].PayloadBytes += b30
-		st.Older[0].Events += no30
-		st.Older[0].PayloadBytes += bo30
-		st.Older[1].Events += no90
-		st.Older[1].PayloadBytes += bo90
+		add(agents, agent, b)
+		add(kinds, kind, b)
+		st.Events++
+		st.PayloadBytes += b
+		if st.OldestTs == 0 || ts < st.OldestTs {
+			st.OldestTs = ts
+		}
+		if ts >= r7 {
+			window(&st.Recent[0], b)
+		}
+		if ts >= r30 {
+			window(&st.Recent[1], b)
+		}
+		if ts < o30 {
+			window(&st.Older[0], b)
+		}
+		if ts < o90 {
+			window(&st.Older[1], b)
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return err
 	}
 	st.Agents, st.Kinds = sortedSlices(agents), sortedSlices(kinds)
 	return nil
+}
+
+// sessionAgents maps each session to the agent that ran it, as bytes so the
+// breakdown can name a slice without converting per row.
+func sessionAgents(ctx context.Context, db *sql.DB) (map[string][]byte, error) {
+	rows, err := db.QueryContext(ctx, `SELECT session_id, COALESCE(agent, 'claude') FROM sessions`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string][]byte{}
+	for rows.Next() {
+		var id, agent string
+		if err := rows.Scan(&id, &agent); err != nil {
+			return nil, err
+		}
+		out[id] = []byte(agent)
+	}
+	return out, rows.Err()
 }
 
 func sortedSlices(m map[string]*SliceSize) []SliceSize {

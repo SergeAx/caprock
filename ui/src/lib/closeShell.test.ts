@@ -3,6 +3,10 @@ import type { SessionSummary } from './api'
 import { closeQuestion, closeTitle, closeWord, liveShells, planClose, planProjectClose, projectCloseQuestion, shellNames } from './closeShell'
 import type { PaneLeaf, Tab } from './tabs'
 
+// These read the labels in their macOS spelling; lib/appkeys.test.ts covers
+// Windows and Linux.
+Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true })
+
 const pane = (id: string, kind: 'session' | 'shell' | 'file', sessionId: string): PaneLeaf => ({ type: 'pane', id, target: { kind, sessionId } })
 const tab = (...panes: PaneLeaf[]): Tab => ({
   id: 't1', projectId: 'p', title: 'x', focusedPaneId: panes[0]!.id,

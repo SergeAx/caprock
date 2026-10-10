@@ -10,6 +10,8 @@
  * listener ask the same question and can never disagree about whose key it is.
  */
 
+import { isMacPlatform } from './appmode'
+
 /** Dispatched on window by ⌘F; the focused pane of the tab in front opens its find bar (F16). */
 export const FIND_EVENT = 'caprock:terminal-find'
 
@@ -117,14 +119,39 @@ function plain(k: string): AppCommand | null {
   }
 }
 
+/**
+ * A key written the macOS way ('⇧⌘N', '⌘↩', '⌃Tab') in this platform's words.
+ *
+ * Every label in the UI is written once, in macOS spelling, and passes through
+ * here: Windows and Linux users were reading ⌘ on keys they do not have. Off
+ * macOS the app's chords are Ctrl+Shift with the same key (matchAppShortcut),
+ * Quick chat is Ctrl+Alt+Shift, an Enter chord in a text field is Ctrl alone,
+ * reload is F5, and ⌘[ ⌘] (panes) have no key, so they come back empty.
+ */
+export function keys(mac: string, isMac = isMacPlatform()): string {
+  if (isMac) return mac
+  return mac.split(', ').map(offMac).filter(Boolean).join(', ')
+}
+
+function offMac(k: string): string {
+  if (/[↩↵]/.test(k)) return `${k.includes('⌘') ? 'Ctrl+' : ''}${k.includes('⇧') ? 'Shift+' : ''}Enter`
+  if (k.startsWith('⌃')) return `Ctrl+${k.slice(1)}`
+  if (!k.includes('⌘')) return k
+  const key = k.replace(/[⇧⌘⌥⌃]/g, '')
+  if (k.includes('⌥')) return `Ctrl+Alt+Shift+${key}`
+  if (k === '⌘R') return 'F5'
+  if (!k.includes('⇧') && /^(\[|\]|\[ \])$/.test(key)) return ''
+  return `Ctrl+Shift+${key}`
+}
+
 /** How a shortcut is written in a menu or a tooltip on this platform. */
 export function shortcutLabel(keys: string, opts: { shift?: boolean } = {}, isMac = true): string {
   if (isMac) return `${opts.shift ? '⇧' : ''}⌘${keys}`
   return `Ctrl+Shift+${keys}`
 }
 
-/** The app's keys as the shortcuts sheet lists them, macOS spelling; off
- *  macOS each is Ctrl+Shift with the same key (docs/app.md § Keyboard). */
+/** The app's keys as the shortcuts sheet lists them, in macOS spelling; the
+ *  sheet writes each through `keys` (docs/app.md § Keyboard). */
 export const SHORTCUTS: [keys: string, does: string][] = [
   ['⇧⌘N', 'New agent'],
   ['⌥⌘N', 'Quick chat: no folder, the agent and model used last'],

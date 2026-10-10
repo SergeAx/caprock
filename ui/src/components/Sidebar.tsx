@@ -5,8 +5,9 @@
  * dashboard.
  *
  * The projects are an accordion (owner, 2026-10-09: "which one is active,
- * which to pick, unclear", translated): only the current project is open,
- * and under it exactly the tabs the strip shows for it. Picking another
+ * which to pick, unclear", translated): the current project is open, and so
+ * is every project where something runs or waits (owner, 2026-10-11), each
+ * with exactly the tabs the strip shows for it. Picking another
  * project makes it current; nothing is expanded or collapsed by hand. The
  * one highlighted row in the sidebar is the tab in front.
  *
@@ -119,8 +120,19 @@ export function Sidebar(props: SidebarProps) {
   const allTabs = props.tabs
   const tabbed = useMemo(() => new Set((allTabs ?? []).map((t) => t.projectId)), [allTabs])
   const groups = useMemo(() => groupProjects(model.projects, { hidden, activeProjectId, tabbed }), [model.projects, hidden, activeProjectId, tabbed])
-  const currentTabs = useMemo(() => (allTabs ?? []).filter((t) => t.projectId === activeProjectId), [allTabs, activeProjectId])
+  // Every project's tabs: the current one lists them, and so does any
+  // project where something runs or waits (ProjectRow decides it is open).
+  const tabsByProject = useMemo(() => {
+    const m = new Map<string, Tab[]>()
+    for (const t of allTabs ?? []) {
+      const list = m.get(t.projectId)
+      if (list) list.push(t)
+      else m.set(t.projectId, [t])
+    }
+    return m
+  }, [allTabs])
   const noLabels = useMemo(() => new Map<string, TabLabel>(), [])
+  const noTabs = useMemo<Tab[]>(() => [], [])
   const now = useNow(30_000)
   const today = useMemo(() => buildToday(model, props.summary, now), [model, props.summary, now])
   const [menuAt, setMenuAt] = useState<ProjectMenuAt | null>(null)
@@ -192,7 +204,7 @@ export function Sidebar(props: SidebarProps) {
         key={n.project.id}
         node={n}
         current={current}
-        tabs={current ? currentTabs : []}
+        tabs={tabsByProject.get(n.project.id) ?? noTabs}
         labels={props.tabLabels ?? noLabels}
         activeTabId={props.dashboardActive ? undefined : props.activeTabId}
         onSelect={props.onSelectProject}
@@ -315,7 +327,7 @@ export function Sidebar(props: SidebarProps) {
         )}
       </div>
 
-      <div className="shrink-0 border-t border-[var(--app-hairline)] px-2 py-2">
+      <div className="grid shrink-0 gap-1.5 border-t border-[var(--app-hairline)] px-2 py-2">
         {/* Feedback on a labelled row of its own: on screen whatever tab is in
           * front, where the header's button is only on the dashboard. As a bare
           * icon beside Settings and the theme switch it read as a volume
@@ -327,15 +339,33 @@ export function Sidebar(props: SidebarProps) {
             data-nav-row
             aria-current={props.dashboardActive ? 'true' : undefined}
             onClick={props.onDashboard}
-            className="app-row flex h-[30px] min-w-0 flex-1 items-center gap-2 rounded-[7px] px-2 text-left text-[13px] text-fg"
+            className="app-row flex h-[32px] min-w-0 flex-1 items-center gap-2 rounded-[8px] border border-[var(--app-hairline-strong)] px-2 text-left text-[13px] text-fg"
           >
             <DashboardIcon size={15} className="text-fg-muted" />
             <span className="flex-1">Dashboard</span>
             <kbd className="app-kbd">{keys('⇧⌘D')}</kbd>
           </button>
-          {props.onSettings && <IconButton label={`Settings (${keys('⌘,')})`} onClick={props.onSettings}><SettingsIcon size={15} /></IconButton>}
-          <ThemeButton />
+          {!props.onSettings && <ThemeButton />}
         </div>
+        {/* Settings as a row with its name, not a bare icon (owner, 2026-10-11,
+          * translated: "I don't see Settings from here"). Phone, Telegram and
+          * subscriptions are set up there. */}
+        {props.onSettings && (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              data-nav-row
+              onClick={props.onSettings}
+              className="app-row flex h-[32px] min-w-0 flex-1 items-center gap-2 rounded-[8px] border border-[var(--app-hairline-strong)] px-2 text-left text-[13px] text-fg"
+            >
+              <SettingsIcon size={15} className="text-fg-muted" />
+              <span className="flex-1">Settings</span>
+              <span className="truncate text-[11px] text-fg-faint">phone, Telegram</span>
+              <kbd className="app-kbd">{keys('⌘,')}</kbd>
+            </button>
+            <ThemeButton />
+          </div>
+        )}
       </div>
       {menuAt && menuNode && (
         <ProjectMenu

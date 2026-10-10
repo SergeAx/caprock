@@ -171,7 +171,7 @@ export function AddProjectSheet({
   const typedAbs = path.trim().replace(/[\\/]+$/, '')
   const matches = useMemo(() => {
     if (!query) return []
-    const ranked = rankCandidates(query, candidates, 6)
+    const ranked = rankCandidates(query, candidates, 6, home)
     // The folder already in the field is picked, not a match to offer.
     return ranked.some((c) => tildePath(c.path, home) === typedAbs || c.path === typedAbs) ? [] : ranked
   }, [query, candidates, home, typedAbs])
@@ -179,7 +179,7 @@ export function AddProjectSheet({
   useEffect(() => { setActive(-1) }, [query])
   // Esc lets go of a highlighted match before it closes the sheet.
   useEscapeToClose(() => setActive(-1), active >= 0)
-  const suggestions = useMemo<Candidate[]>(() => (matches.length === 0 && query ? closest(query, candidates) : []), [matches.length, query, candidates])
+  const suggestions = useMemo<Candidate[]>(() => (matches.length === 0 && query ? closest(query, candidates, 2) : []), [matches.length, query, candidates])
   const pickMatch = (c: Candidate) => { editPath(tildePath(c.path, home)); setActive(-1); field.current?.focus() }
   const rawNote = statWorthy(mode, path) ? targetNote(mode, stat) : null
   const noSuchFolder = mode === 'folder' && !!stat && !stat.guarded && !stat.exists
@@ -215,7 +215,7 @@ export function AddProjectSheet({
   }
 
   const candidate = defaultCandidate(mode, path)
-  const showSetDefault = !!candidate && candidate !== base.replace(/[\\/]+$/, '') && source !== 'derived'
+  const showSetDefault = !!candidate && candidate !== base.replace(/[\\/]+$/, '') && source !== 'derived' && !(mode === 'folder' && stat && !stat.exists)
   const setAsDefault = async () => {
     try {
       await api.saveSettings({ default_folder: candidate } as Settings)

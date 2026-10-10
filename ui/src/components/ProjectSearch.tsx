@@ -119,12 +119,12 @@ export function ProjectCombobox({
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const items = useMemo(() => {
-    const ranked = rankCandidates(query, candidates)
+    const ranked = rankCandidates(query, candidates, 50, home)
     if (query.trim() || !chosen) return ranked
     // Unfiltered, the chosen project leads: Enter keeps it.
     const at = ranked.findIndex((c) => c.projectId === chosen.id)
     return at > 0 ? [ranked[at]!, ...ranked.slice(0, at), ...ranked.slice(at + 1)] : ranked
-  }, [query, candidates, chosen])
+  }, [query, candidates, chosen, home])
   useEffect(() => { setActive(0) }, [query])
   // Esc closes the list first, and the sheet only on a second press.
   useEscapeToClose(() => { setOpen(false); setQuery('') }, open)
@@ -171,7 +171,9 @@ export function ProjectCombobox({
         onKeyDown={onKey}
       />
       {open && (
-        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 rounded-[8px] border border-[var(--app-hairline-strong)] bg-panel p-1 shadow-lg">
+        // As wide as the row the field sits in (two columns and their gap), so
+        // a path and where it came from fit beside the name.
+        <div className="absolute left-0 top-[calc(100%+4px)] z-20 max-w-[calc(100vw-48px)] rounded-[8px] border border-[var(--app-hairline-strong)] bg-panel p-1 shadow-lg" style={{ width: 'calc(200% + 12px)' }}>
           {items.length > 0 ? (
             <CandidateList id={`${id}-list`} label="Projects and repositories" items={items} active={active} home={home} onPick={pick} onHover={setActive} />
           ) : (

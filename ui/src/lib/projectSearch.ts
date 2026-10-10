@@ -90,15 +90,17 @@ export function queryOf(text: string): string {
   return t.split(/[\\/]/).pop()?.replace(/^~$/, '') ?? ''
 }
 
-/** Every candidate that matches `q`, best first. An empty query lists them all in source order. */
-export function rankCandidates(q: string, candidates: Candidate[], limit = 50): Ranked[] {
+/** Every candidate that matches `q`, best first. An empty query lists them all in source order.
+ *  The path is matched as the user writes it, from `~`: the folders above
+ *  home are the same for every candidate and would match them all. */
+export function rankCandidates(q: string, candidates: Candidate[], limit = 50, home?: string): Ranked[] {
   const out: Ranked[] = []
   const fq = fold(q.trim())
   for (const c of candidates) {
     const m = matchName(q.trim(), c.name)
     if (m) { out.push({ ...c, ...m }); continue }
     // The path, for "work/api" or a parent folder's name.
-    if (fq.length >= 2 && fold(c.path).includes(fq)) out.push({ ...c, score: 10, hits: [] })
+    if (fq.length >= 2 && fold(tildePath(c.path, home)).includes(fq)) out.push({ ...c, score: 10, hits: [] })
   }
   out.sort((a, b) => b.score - a.score || KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.name.length - b.name.length || a.name.localeCompare(b.name))
   return out.slice(0, limit)

@@ -73,6 +73,14 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-10 — 0.100.0: a new copy from a fresh main, the phone section at a glance
+
+New agent's Where leads with *New copy from a branch*: a branch search with
+the main branches first, pulled from the remote first (`GET
+/v1/projects/{id}/branches`, `worktree_base` / `worktree_pull`). The phone
+section of Settings is three large steps and one readable button, and after a
+restart leads with *Turn on*.
+
 ### 2026-10-10 — 0.99.0: find a project by typing, Grok, custom agents
 
 New agent's Project field searches added projects, recent folders and git

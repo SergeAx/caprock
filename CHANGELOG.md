@@ -7,6 +7,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+## [0.99.0] - 2026-10-10
+
 ### Added
 
 - **Find a project by typing a few letters.** New agent's Project field is

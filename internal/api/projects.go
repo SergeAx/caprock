@@ -247,6 +247,33 @@ func (s *Server) handleWorktrees(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"worktrees": wts})
 }
 
+// handleBranches lists a project's branches for New agent's *New copy from*:
+// main branches first, then by newest commit (agents.ListBranches).
+func (s *Server) handleBranches(w http.ResponseWriter, r *http.Request) {
+	if !s.requireProjects(w) {
+		return
+	}
+	id, ok := pathID(r)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such project"})
+		return
+	}
+	if !s.deviceMayTouchProject(w, r, id) {
+		return
+	}
+	v, err := s.d.Projects.Get(r.Context(), id)
+	if err != nil {
+		projectErr(w, err)
+		return
+	}
+	list, err := agents.ListBranches(r.Context(), v.Root)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"branches": []agents.Branch{}})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"branches": list})
+}
+
 // deviceMayTouchProject refuses a device a project whose folder is outside
 // home, and says so. True when the request may go on.
 func (s *Server) deviceMayTouchProject(w http.ResponseWriter, r *http.Request, id int64) bool {

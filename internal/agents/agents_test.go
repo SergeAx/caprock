@@ -310,14 +310,14 @@ func TestWorktreeCreation(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(dir, "f"), []byte("x"), 0o600)
 	run("add", "f")
 	run("commit", "-q", "-m", "init")
-	wt, err := createWorktree(context.Background(), dir, "feature-x")
+	wt, err := createWorktree(context.Background(), dir, "feature-x", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if fi, err := os.Stat(wt); err != nil || !fi.IsDir() {
 		t.Fatalf("worktree not created: %v", err)
 	}
-	if _, err := createWorktree(context.Background(), dir, "bad/name"); err == nil {
+	if _, err := createWorktree(context.Background(), dir, "bad/name", "", false); err == nil {
 		t.Fatal("accepted path separator in name")
 	}
 }

@@ -264,6 +264,16 @@ export function instructionsPatch(defaults: ProjectDefaults | undefined, text: s
   return { defaults: t ? { ...rest, system_prompt: t } : rest }
 }
 
+/** A branch a new copy can start from (agents.Branch on the wire). */
+export interface BranchInfo {
+  name: string
+  main?: boolean
+  default?: boolean
+  local?: boolean
+  remote?: string
+  committed_ms: number
+}
+
 export const projectsApi = {
   /** GET /v1/projects → `{projects}`, flattened; a bare array is read too. */
   list: async (): Promise<Project[]> => {
@@ -294,6 +304,11 @@ export const projectsApi = {
   createWorktree: async (id: string, req: { branch: string; create?: boolean; base?: string }): Promise<{ path: string; branch: string; tracks?: string }> => {
     const v = await call<{ worktree: { path: string; branch: string; tracks?: string } }>('A new worktree', `/v1/projects/${encodeURIComponent(id)}/worktrees`, { method: 'POST', body: req })
     return v.worktree
+  },
+  /** GET /v1/projects/{id}/branches: main branches first, then by newest commit. */
+  branches: async (id: string): Promise<BranchInfo[]> => {
+    const v = await call<{ branches?: BranchInfo[] }>('Branches', `/v1/projects/${encodeURIComponent(id)}/branches`)
+    return Array.isArray(v?.branches) ? v.branches : []
   },
   removeWorktree: (id: string, name: string) =>
     call<void>('Removing a worktree', `/v1/projects/${encodeURIComponent(id)}/worktrees/${encodeURIComponent(name)}`, { method: 'DELETE', body: {} }),

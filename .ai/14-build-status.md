@@ -85,7 +85,19 @@ a switch: replies typed into sessions Caprock started, `/sessions`, `/new`,
 session's reply sent the moment its turn ends. Tested against a fake Bot API
 (`telegramtest`): pairing, other chats ignored, reply routing, the rule-7
 refusal, licence gating, 429s, the token kept out of logs and responses.
-Not verified against the real Telegram API in CI (no test ever calls it).
+Also end to end on the real binary (`internal/smoke/telegram_test.go`: fake
+`claude`, fake Bot API). Not verified against the real Telegram API: no test
+ever calls it.
+
+### 2026-10-10 — 0.99.0: find a project by typing, Grok, custom agents
+
+New agent's Project field searches added projects, recent folders and git
+repositories under the default folder (`GET /v1/browse/repos`); Add a project
+suggests as you type and says "did you mean". Every agent shows whether it is
+installed and ready and how to set it up (`GET /v1/agents/catalog`); OpenCode
+lists its connected providers' models; agents installed under nvm, Volta or
+bun are found. Grok Build starts from Caprock (not observed). Custom agents
+are Premium (ADR-046).
 
 ### 2026-10-10 — unreleased: project search, agents that say what they lack, Grok, custom agents
 

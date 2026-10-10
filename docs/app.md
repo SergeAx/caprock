@@ -198,11 +198,15 @@ others. Installing it: [install-app.md](install-app.md).
   key. Type a task that matches
   nothing — "Add rate limiting to the API" — and Enter opens *New agent* with
   it as the first message, in a new worktree named after it.
-- **A new copy on its own branch.** In the New agent sheet, *Where* offers
-  *This folder* (the project's own checkout, on its current branch), each
-  *Existing copy* by its branch, and *New copy on its own branch* — a git
+- **A new copy from a branch.** In the New agent sheet, *Where* offers
+  *New copy from a branch*, *This folder* (the project's own checkout, on its
+  current branch) and each *Existing copy* by its branch. A new copy is a git
   worktree: a separate folder on a new `caprock/<name>` branch, so the agent
-  does not collide with others. The branch is named after the first message
+  does not collide with others. *From branch* searches the repository's
+  branches, the main ones first (the default branch on top), and *Pull the
+  latest … first* (on unless you untick it) fetches it from the remote so the
+  copy starts from what the server has now. Caprock remembers that you start
+  from a new copy. The branch is named after the first message
   unless you type a name, and `.caprock-worktrees/` is kept out of the main
   checkout's changes.
 - **Terminal.** A real terminal for every session Caprock started and every

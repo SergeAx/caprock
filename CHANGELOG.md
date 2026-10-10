@@ -7,6 +7,13 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Changed
+
+- **The phone section reads at a glance.** Three large steps — same Wi-Fi,
+  scan the code, let it work — and one large *Show a code* button whose text
+  is readable in the dark theme; the rest is folded under *Then: …*. After a
+  restart, with phones paired, the section leads with *Phone access is off*
+  and a large *Turn on*.
 ### Added
 
 - **Talk to your agents from Telegram (Premium).** Reply to a session's
@@ -30,6 +37,17 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   test* — and what happened moves to the second. Alerts carry *Mute this
   session* and, with phone access on, *Open on phone*; `/mute all` and
   `/unmute` work from the chat. Free, like the alerts.
+
+- **Start an agent from a fresh main.** New agent's *Where* leads with *New
+  copy from a branch*: pick the branch it starts from in a search that puts
+  the main branches first (the default one on top) instead of a list of
+  every branch, and the copy starts from the latest of it on the server —
+  Caprock fetches it first unless you untick *Pull the latest*. Choosing a
+  new copy is remembered, so the next agent starts the same way.
+
+## [0.99.0] - 2026-10-10
+
+### Added
 
 - **Find a project by typing a few letters.** New agent's Project field is
   now a search that opens with the cursor in it: type any part of a name

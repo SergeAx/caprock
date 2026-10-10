@@ -28,6 +28,16 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Fixed
 
+- **Voice mode can use the microphone on macOS.** Claude Code's `/voice` in
+  a Caprock terminal recorded silence ("No audio detected from microphone")
+  with no prompt: the app and its daemon were signed with the hardened
+  runtime but without the right to ask for the microphone, so macOS refused
+  every session it held Caprock responsible for (`tccd` log, 2026-10-10).
+  Both are now signed with `com.apple.security.device.audio-input` and the
+  app says why it asks, so macOS shows its one-time prompt; after Allow,
+  recording works. Update, open the app once, and start a new session for
+  voice ([docs](docs/app.md#voice-mode-and-the-microphone), ADR-045).
+
 - **Windows and Linux see their own shortcuts.** Hints, tooltips and the
   shortcuts sheet showed ⌘ on every platform; off macOS they now read
   Ctrl+Shift+N, Ctrl+Alt+Shift+N, Ctrl+Enter, F5, the keys that actually

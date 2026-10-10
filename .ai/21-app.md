@@ -1387,6 +1387,15 @@ other places, and remembers the answer per program and per code signature
 - **Isolated daemons stay out.** Tests, stands and previews run with a
   temporary HOME; such a daemon refuses the account's Desktop, Documents and
   Downloads (`internal/tcc`), and `bench/stand.sh` refuses to live there.
+- **The microphone** (ADR-045). The hardened runtime refuses the
+  microphone without a prompt to a program signed without
+  `com.apple.security.device.audio-input`, which the app and its daemon
+  were: an agent's voice mode recorded silence whenever the daemon was the
+  responsible program. The bundler now signs both with that entitlement
+  (`app/src-tauri/Entitlements.plist`), the app's Info.plist carries
+  `NSMicrophoneUsageDescription` (`app/src-tauri/Info.plist`), and
+  `scripts/check-app-mic.sh` checks both in CI and in `app-release.sh`. The formula's binary has no runtime
+  flag and needs neither.
 - **With a Developer ID** (the Apple account): one entry that survives
   updates, and, with the daemon as an `SMAppService` helper of the app, the
   app's name and icon — to verify on the first signed build.

@@ -122,5 +122,7 @@ pub fn set_zoom<R: Runtime>(scale: f64, webview: Webview<R>) -> Result<(), Strin
     if !scale.is_finite() {
         return Err("not a scale".into());
     }
-    webview.set_zoom(scale.clamp(0.8, 1.6)).map_err(|e| e.to_string())
+    webview
+        .set_zoom(scale.clamp(0.8, 1.6))
+        .map_err(|e| e.to_string())
 }

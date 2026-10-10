@@ -73,6 +73,14 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-11 — 0.101.1: Telegram in three steps, Claude Code by default, shares drawn
+
+Settings → Telegram leads with three step cards, *Open @BotFather* and one
+*Connect* button. New agent starts on the default agent (Claude Code until
+*Make default*), not on the last one used. Key chips on sheet buttons are
+larger and solid on the primary button. At a glance → Numbers draws each
+share as bars.
+
 ### 2026-10-11 — 0.101.0: Telegram both ways, several sign-ins, a resource meter, readable sizes
 
 Ships the three unreleased entries below (the Telegram bridge, subscriptions,

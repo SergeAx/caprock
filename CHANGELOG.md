@@ -7,6 +7,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+## [0.101.1] - 2026-10-11
+
 ### Changed
 
 - **At a glance, Numbers, draws its shares.** Each block leads with its

@@ -24,6 +24,7 @@ import { ShareButton } from '@/components/Share'
 import { PremiumChip } from '@/components/PremiumChip'
 import { SiteFooter } from '@/components/SiteFooter'
 import { StarStrip } from '@/components/StarStrip'
+import { SetupStrip } from '@/components/SetupStrip'
 import { ShareMoment } from '@/components/Nudges'
 import { openExternal, usePromptSync } from '@/lib/nudges'
 import { Prose } from './Prose'
@@ -127,6 +128,7 @@ export function Shell({ route, children }: { route: Route; children: ReactNode }
       <main className="flex-1 p-3 max-w-[1600px] w-full mx-auto">{children}</main>
       {/* The star strip sits above the footer, never over content; one offer
         * at a time (lib/nudges.ts). The share toast floats bottom-right. */}
+      <SetupStrip app={app} />
       <StarStrip app={app} />
       <ShareMoment />
       {!app && <SiteFooter />}

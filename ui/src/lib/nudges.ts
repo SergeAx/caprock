@@ -26,7 +26,7 @@ import { shell } from '@/lib/shell'
 
 export type NudgeId =
   | 'premium-limit' | 'premium-hint' | 'premium-cap' | 'premium-banner'
-  | 'teams-nudge' | 'share-moment' | 'star'
+  | 'teams-nudge' | 'share-moment' | 'setup' | 'star'
 
 /**
  * Who wins when several are eligible. The offer tied to something happening
@@ -39,6 +39,8 @@ export const NUDGE_PRIORITY: Record<NudgeId, number> = {
   'premium-cap': 50,
   'teams-nudge': 40,
   'share-moment': 30,
+  // Above the general offers: it sets up the product, it does not sell it.
+  setup: 25,
   'premium-banner': 20,
   star: 10,
 }

@@ -471,6 +471,7 @@ def main():
               'premium-banner': t, 'premium-hint': t, 'premium-limit': t,
               'premium-cap': t, 'share-week': t, 'share-month': t,
               'teams-banner': t, 'teams-nudge': t, 'star-dismissed': t,
+              'setup-later': t,
             }));
           } catch (e) {}
         """)

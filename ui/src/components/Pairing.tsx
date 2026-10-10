@@ -39,10 +39,15 @@ export const PHONE_SECTION = 'settings-phone'
 
 /** Open Settings and bring the phone section into view once it has rendered. */
 export function openPhoneSettings(): void {
+  openSettingsAt(PHONE_SECTION)
+}
+
+/** Open Settings and bring the section with this id into view once it has rendered. */
+export function openSettingsAt(id: string): void {
   location.hash = '#/settings'
   let tries = 0
   const look = () => {
-    const el = document.getElementById(PHONE_SECTION)
+    const el = document.getElementById(id)
     if (el) el.scrollIntoView({ block: 'start' })
     else if (++tries < 40) setTimeout(look, 25)
   }

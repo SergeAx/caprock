@@ -7,7 +7,14 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
-## [0.101.2] - 2026-10-11
+### Changed
+
+- **Hide a project with one click.** Hovering a project shows an eye; one
+  click moves it under Hidden, even while something runs in it (it keeps
+  running there, with its dot). It comes back out only when it is the
+  current project or something in it waits on you.
+- **Other folders is now *Outside projects***, with a tooltip saying what
+  it holds: sessions in folders not added as a project.
 
 ## [0.101.2] - 2026-10-11
 
@@ -21,12 +28,6 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   *Settings ⌘,* by name, with a gear and *phone, Telegram* beside it,
   instead of a bare sliders icon, and Dashboard and Settings are outlined
   so they read as buttons; the palette gains *Connect Telegram*.
-- **Hide a project with one click.** Hovering a project shows an eye; one
-  click moves it under Hidden, even while something runs in it (it keeps
-  running there, with its dot). It comes back out only when it is the
-  current project or something in it waits on you.
-- **Other folders is now *Outside projects***, with a tooltip saying what
-  it holds: sessions in folders not added as a project.
 
 ## [0.101.1] - 2026-10-11
 

@@ -3,8 +3,9 @@
  * 2026-10-09: "which one is active, which to pick, unclear", translated).
  *
  * A project is one line: its name, a green dot with how many sessions and
- * shells run in it, and how many wait on you. The current project is the one
- * open, with no chevron to manage: under it, exactly the tabs the tab strip
+ * shells run in it, and how many wait on you. The current project is open,
+ * and so is every project where something runs or waits (owner,
+ * 2026-10-11), with no chevron to manage: under it, exactly the tabs the tab strip
  * shows for it, in the same order and under the same names
  * (lib/tablabels.ts). After them, muted, whatever Caprock started in the
  * project that still runs with no tab — a tab closed on a live shell or
@@ -104,7 +105,7 @@ export interface ProjectRowProps {
   node: ProjectNode
   /** The project in front: open, its name bold. */
   current: boolean
-  /** Its tabs, in strip order, with their labels; drawn only when current. */
+  /** Its tabs, in strip order, with their labels; drawn when the project is open (current, or something runs or waits in it). */
   tabs: readonly Tab[]
   labels: ReadonlyMap<string, TabLabel>
   /** The tab in front, when the terminals are on screen. */
@@ -149,7 +150,12 @@ export const ProjectRow = memo(function ProjectRow({
 }: ProjectRowProps) {
   const p = node.project
   const id = p.id
-  const live = useMemo(() => (current ? liveWithoutTab(node) : { own: [], other: [] }), [current, node])
+  // Open when current, and also whenever something runs or waits in it
+  // (owner, 2026-10-11, translated: "active sessions should stay expanded,
+  // so I don't switch between projects and have the other one fold"). Only
+  // projects with nothing going on fold.
+  const open = current || node.live > 0 || node.waiting > 0
+  const live = useMemo(() => (open ? liveWithoutTab(node) : { own: [], other: [] }), [open, node])
   const [othersOpen, setOthersOpen] = useState(false)
   const [tabMenu, setTabMenu] = useState<(MenuAt & { tabId: string; from: HTMLElement | null }) | null>(null)
   const [stopping, setStopping] = useState<{ sessionId: string; what: StopWhat } | null>(null)
@@ -182,7 +188,7 @@ export const ProjectRow = memo(function ProjectRow({
           data-nav-row
           data-project-row={id}
           data-current={current || undefined}
-          aria-expanded={current}
+          aria-expanded={open}
           onClick={() => onSelect(id)}
           onContextMenu={menu
             ? (e) => { e.preventDefault(); onMenu(id, { x: e.clientX, y: e.clientY }, e.currentTarget) }
@@ -235,9 +241,9 @@ export const ProjectRow = memo(function ProjectRow({
           </span>
         )}
       </div>
-      {current && (
+      {open && (
         <ul className="grid grid-cols-1 pb-1" role="group" aria-label={`${p.name}: open tabs`}>
-          {tabs.length === 0 && live.own.length === 0 && (
+          {current && tabs.length === 0 && live.own.length === 0 && (
             <li className="flex h-[26px] items-center pl-[22px] pr-2 text-[12px] text-fg-faint">No tabs open.</li>
           )}
           {tabs.map((t) => {

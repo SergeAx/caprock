@@ -7,6 +7,13 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Changed
+
+- **Every project where something runs stays open in the sidebar.** Its
+  sessions are listed under it whichever project is current, so one click
+  opens any of them and picking one never folds another. Projects with
+  nothing running still fold.
+
 ## [0.101.1] - 2026-10-11
 
 ### Changed

@@ -173,13 +173,15 @@ describe('the app workspace', () => {
     expect(document.querySelectorAll('[aria-current="true"]')).toHaveLength(1)
     // Another project: its empty state, the app's tab still in the strip with
     // its project's chip (Vova, 2026-10-09: tabs must never vanish), and the
-    // app's row folded with its running count.
+    // app's row still open with its running count: a project where something
+    // runs stays expanded (owner, 2026-10-11).
     fireEvent.click(otherRow())
     await waitFor(() => expect(screen.getByRole('tab', { name: /Fix the login bug/ })).toHaveAttribute('aria-selected', 'false'))
     expect(within(screen.getByRole('tab', { name: /Fix the login bug/ })).getByText('app')).toBeInTheDocument()
     expect(screen.getByTestId('pane-agent-1')).toBeInTheDocument()
-    expect(screen.queryByRole('group', { name: 'app: open tabs' })).toBeNull()
+    expect(within(screen.getByRole('group', { name: 'app: open tabs' })).getByText('Fix the login bug')).toBeInTheDocument()
     expect(within(appRow()).getByLabelText(/running/)).toBeInTheDocument()
+    expect(document.querySelectorAll('[aria-current="true"]')).toHaveLength(0)
     // One click back on the tab, and its project is current again.
     fireEvent.click(screen.getByRole('tab', { name: /Fix the login bug/ }))
     expect(screen.getByRole('tab', { name: /Fix the login bug/ })).toHaveAttribute('aria-selected', 'true')

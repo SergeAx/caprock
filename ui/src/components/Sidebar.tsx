@@ -5,8 +5,9 @@
  * dashboard.
  *
  * The projects are an accordion (owner, 2026-10-09: "which one is active,
- * which to pick, unclear", translated): only the current project is open,
- * and under it exactly the tabs the strip shows for it. Picking another
+ * which to pick, unclear", translated): the current project is open, and so
+ * is every project where something runs or waits (owner, 2026-10-11), each
+ * with exactly the tabs the strip shows for it. Picking another
  * project makes it current; nothing is expanded or collapsed by hand. The
  * one highlighted row in the sidebar is the tab in front.
  *
@@ -119,8 +120,19 @@ export function Sidebar(props: SidebarProps) {
   const allTabs = props.tabs
   const tabbed = useMemo(() => new Set((allTabs ?? []).map((t) => t.projectId)), [allTabs])
   const groups = useMemo(() => groupProjects(model.projects, { hidden, activeProjectId, tabbed }), [model.projects, hidden, activeProjectId, tabbed])
-  const currentTabs = useMemo(() => (allTabs ?? []).filter((t) => t.projectId === activeProjectId), [allTabs, activeProjectId])
+  // Every project's tabs: the current one lists them, and so does any
+  // project where something runs or waits (ProjectRow decides it is open).
+  const tabsByProject = useMemo(() => {
+    const m = new Map<string, Tab[]>()
+    for (const t of allTabs ?? []) {
+      const list = m.get(t.projectId)
+      if (list) list.push(t)
+      else m.set(t.projectId, [t])
+    }
+    return m
+  }, [allTabs])
   const noLabels = useMemo(() => new Map<string, TabLabel>(), [])
+  const noTabs = useMemo<Tab[]>(() => [], [])
   const now = useNow(30_000)
   const today = useMemo(() => buildToday(model, props.summary, now), [model, props.summary, now])
   const [menuAt, setMenuAt] = useState<ProjectMenuAt | null>(null)
@@ -192,7 +204,7 @@ export function Sidebar(props: SidebarProps) {
         key={n.project.id}
         node={n}
         current={current}
-        tabs={current ? currentTabs : []}
+        tabs={tabsByProject.get(n.project.id) ?? noTabs}
         labels={props.tabLabels ?? noLabels}
         activeTabId={props.dashboardActive ? undefined : props.activeTabId}
         onSelect={props.onSelectProject}

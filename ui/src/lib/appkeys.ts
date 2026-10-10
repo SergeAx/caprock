@@ -144,6 +144,18 @@ function offMac(k: string): string {
   return `Ctrl+Shift+${key}`
 }
 
+/** The digit that jumps to the tab at `index` of `count`: ⌘1–⌘8 by
+ *  position, ⌘9 the last tab (tabs.ts 'activate-index'), else none. */
+export function tabDigit(index: number, count: number): number | null {
+  if (index === count - 1 && count > 8) return 9
+  return index < 8 ? index + 1 : null
+}
+
+/** A tab's jump key as the tab itself shows it: short enough for a tab. */
+export function tabKey(digit: number, isMac = isMacPlatform()): string {
+  return isMac ? `⌘${digit}` : `Ctrl⇧${digit}`
+}
+
 /** How a shortcut is written in a menu or a tooltip on this platform. */
 export function shortcutLabel(keys: string, opts: { shift?: boolean } = {}, isMac = true): string {
   if (isMac) return `${opts.shift ? '⇧' : ''}⌘${keys}`

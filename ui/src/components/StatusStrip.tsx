@@ -5,7 +5,13 @@
  * the spend show only while the sidebar is closed: open, its Today strip
  * carries them, and the same figures twice on one screen read as two.
  */
-import type { Summary } from '@/lib/api'
+import { useState } from 'react'
+import { createPortal } from 'react-dom'
+import type { SessionSummary, Summary } from '@/lib/api'
+import { useUpdateStatus } from './AppUpdateNotice'
+import { NotesDialog } from './Shell'
+import { openExternal } from '@/lib/nudges'
+import { v } from '@/lib/appupdate'
 import { live, useLiveLink } from '@/lib/live'
 import { fmtUSD } from '@/lib/format'
 import type { PaneStatus } from './TerminalPane'
@@ -14,9 +20,11 @@ import { AppUpdateNotice } from './AppUpdateNotice'
 import { StaleUiPill } from './StaleUiPill'
 import { useAppUpdate } from '@/lib/appupdate'
 
-export function StatusStrip({ summary, pane, version, figures = true }: {
+export function StatusStrip({ summary, pane, session, version, figures = true }: {
   summary?: Summary
   pane?: PaneStatus
+  /** The agent session in the focused pane; absent for a shell or a file. */
+  session?: SessionSummary
   version?: string
   /** The plan limits and today's spend; false while the sidebar shows them. */
   figures?: boolean
@@ -25,6 +33,13 @@ export function StatusStrip({ summary, pane, version, figures = true }: {
   // In the app, its own version: the one an update changes at once. The
   // daemon's follows within a minute of the move (AppShell asks again).
   const app = useAppUpdate()
+  const st = useUpdateStatus()
+  const [notes, setNotes] = useState(false)
+  const shown = app?.version || version
+  // "What's new" opens the release's own notes when the release check has
+  // them for the version running; otherwise the changelog on the site.
+  const ownNotes = Boolean(st?.notes && st.notes_for && shown && v(st.notes_for) === v(shown))
+  const whatsNew = () => (ownNotes ? setNotes(true) : openExternal('https://caprock.dev/changelog'))
   const five = figures ? summary?.rate_limits?.five_hour : undefined
   const seven = figures ? summary?.rate_limits?.seven_day : undefined
   // The front terminal's protocol and size are for debugging, not for
@@ -45,17 +60,23 @@ export function StatusStrip({ summary, pane, version, figures = true }: {
           Today <span className="num text-fg">{fmtUSD(summary.cost_usd)}</span>
         </span>
       )}
+      {/* The session in front, the figures you check while you work in its
+        * terminal: the strip stood empty beside an open sidebar, and the
+        * cockpit that carries them is often closed (owner, 2026-10-10). */}
+      {session && <SessionFigures s={session} />}
       <span className="ml-auto flex items-center gap-4">
         {pane && pane.status !== 'live' && (
           <span title="The terminal in front">{pane.status}</span>
         )}
         <StaleUiPill />
         <AppUpdateNotice />
-        {(app?.version || version) && (
-          <span className="mono text-fg-faint" title={versionTitle || undefined}>
-            {app?.version || version}
-          </span>
+        {shown && (
+          <button type="button" onClick={whatsNew} className="flex items-center gap-1.5 text-fg-faint hover:text-accent" title={[`What changed in ${shown}`, versionTitle].filter(Boolean).join('\n')}>
+            <span className="mono">{shown}</span>
+            <span>what&apos;s new</span>
+          </button>
         )}
+        {notes && st && createPortal(<NotesDialog u={st} onClose={() => setNotes(false)} />, document.body)}
       </span>
     </footer>
   )
@@ -72,6 +93,35 @@ function Limit({ label, pct }: { label: string; pct: number }) {
       </span>
       {/* Rounded as Now and the menu bar round it (readWindow), so one figure never reads 41% here and 42% there. */}
       <span className="num text-fg">{Math.round(v)}%</span>
+    </span>
+  )
+}
+
+/** Model, how full the context is, what the next call costs, what the session has cost. */
+function SessionFigures({ s }: { s: SessionSummary }) {
+  const ctx = s.context
+  const pct = ctx ? Math.max(0, Math.min(100, ctx.pct)) : 0
+  const tone = pct >= 85 ? 'bg-danger' : pct >= 65 ? 'bg-warn' : 'bg-fg-muted'
+  return (
+    <span data-session-figures className="flex min-w-0 items-center gap-3 truncate">
+      {s.model_display && <span className="truncate text-fg" title="The model of the session in front">{s.model_display}</span>}
+      {ctx && (
+        <span className="inline-flex items-center gap-1.5" title={`Context: ${Math.round(ctx.tokens / 1000)}k of ${Math.round(ctx.window / 1000)}k tokens`}>
+          context
+          <span className="relative h-[4px] w-[38px] overflow-hidden rounded-full bg-[var(--app-hairline-strong)]">
+            <span className={`absolute inset-y-0 left-0 rounded-full ${tone}`} style={{ width: `${pct}%` }} />
+          </span>
+          <span className="num text-fg">{Math.round(pct)}%</span>
+        </span>
+      )}
+      {ctx && ctx.next_call_usd > 0 && (
+        <span title="What the next call pays to re-read the context, before it does any work">
+          next call <span className="num text-fg">{fmtUSD(ctx.next_call_usd)}</span>
+        </span>
+      )}
+      <span title="What this session has cost at API list prices">
+        session <span className="num text-fg">{fmtUSD(s.stats.cost_usd)}</span>
+      </span>
     </span>
   )
 }

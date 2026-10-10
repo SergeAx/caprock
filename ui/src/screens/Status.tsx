@@ -89,14 +89,15 @@ export function StatusScreen() {
         <>
           {owner && <SpawnModeSetting />}
           <AppearanceSection />
+          {/* The phone high up: eighth of eleven, people asked where it was. */}
+          {owner && <Pairing />}
+          {owner && <PhoneAlerts />}
           <TerminalSettings />
           {owner && <EditorSetting />}
           {owner && <DefaultFolderSetting />}
           {owner && isTauri() && <DesktopNotifications />}
           {owner && isTauri() && <GlobalHotkey />}
           <GitHubSettings />
-          {owner && <Pairing />}
-          {owner && <PhoneAlerts />}
           {owner && <PlanSection />}
           {owner && <WindowStopSection />}
         </>

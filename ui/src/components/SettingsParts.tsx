@@ -8,9 +8,9 @@
  */
 import type { ReactNode } from 'react'
 
-export function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
+export function Section({ id, title, aside, children }: { id?: string; title: string; aside?: ReactNode; children: ReactNode }) {
   return (
-    <section className="min-w-0 rounded-[var(--radius-panel)] border border-border bg-panel shadow-[var(--shadow-panel)]">
+    <section id={id} className="min-w-0 scroll-mt-16 rounded-[var(--radius-panel)] border border-border bg-panel shadow-[var(--shadow-panel)]">
       {/* Wraps rather than squeezing: on a phone the status beside a long
         * title drops under it instead of pushing the page sideways. */}
       <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 pt-3.5">

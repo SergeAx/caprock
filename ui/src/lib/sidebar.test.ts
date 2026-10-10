@@ -83,6 +83,19 @@ describe('grouping the sidebar projects', () => {
     expect(g.more).toEqual([])
   })
 
+  it('keeps a hidden project under Hidden while it only runs, and brings it out when it waits on you', () => {
+    const nodes = model(
+      [proj('run', 1), proj('ask', 1)],
+      [
+        sess({ session_id: 'r', cwd: '/run', activity: { phrase: '', at: new Date(now - 60_000).toISOString(), health: 'working' } }),
+        sess({ session_id: 'a', cwd: '/ask', activity: { phrase: '', at: new Date(now - 60_000).toISOString(), health: 'waiting-on-you' } }),
+      ],
+    )
+    const g = groupProjects(nodes, { hidden: new Set(['run', 'ask']) })
+    expect(ids(g.hidden)).toEqual(['run'])
+    expect(ids(g.shown)).toEqual(['ask'])
+  })
+
   it('never folds Other folders', () => {
     const nodes = model([], [sess({ session_id: 'x', cwd: '/elsewhere', status: 'ended', last_event_at: 1 })], new Set(['x']))
     const g = groupProjects(nodes, { hidden: new Set([OTHER_FOLDERS_ID]) })

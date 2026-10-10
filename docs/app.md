@@ -54,7 +54,7 @@ others. Installing it: [install-app.md](install-app.md).
   end. An ended session is
   on the project's page (*Recent*) and in ⌘K. Pinned projects come first,
   then the rest by name, and clicking a project never moves it. Hover a project for *New agent* and *New shell*. Sessions in a
-  folder that is not a repository sit under *Other folders*, and so does a
+  folder that is not a repository sit under *Outside projects*, and so does a
   quick chat.
 - **Closing things: ×.** Hover a tab under the project — or look at the
   one in front, where it always shows — for its **×**: it closes the tab
@@ -114,7 +114,7 @@ others. Installing it: [install-app.md](install-app.md).
   panel to the sidebar, which lists the same sessions; the browser dashboard
   shows both.
 - **Quick chat.** Ask something without picking a folder: a session in
-  Caprock's data directory opens in a tab, under *Other folders* in the
+  Caprock's data directory opens in a tab, under *Outside projects* in the
   sidebar. ⌥⌘N starts it at once with the agent and model you used last.
   Clicking *Quick chat* (the sidebar, the + menu, or *Quick chat with…* in
   the palette) first shows the agents installed here — Claude Code, Codex,

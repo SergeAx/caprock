@@ -2,14 +2,14 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AddProjectSheet, cloneDest, defaultCandidate, repoName, requestFor } from './AddProjectSheet'
 
-const m = vi.hoisted(() => ({ add: vi.fn(), patch: vi.fn(), settings: vi.fn(), save: vi.fn(), stat: vi.fn() }))
+const m = vi.hoisted(() => ({ add: vi.fn(), patch: vi.fn(), settings: vi.fn(), save: vi.fn(), stat: vi.fn(), recent: vi.fn(), repos: vi.fn() }))
 vi.mock('@/lib/projects', async (orig) => {
   const actual = await orig<typeof import('@/lib/projects')>()
   return { ...actual, projectsApi: { ...actual.projectsApi, add: m.add, patch: m.patch } }
 })
 vi.mock('@/lib/api', async (orig) => {
   const actual = await orig<typeof import('@/lib/api')>()
-  return { ...actual, api: { ...actual.api, settings: m.settings, saveSettings: m.save, browseStat: m.stat } }
+  return { ...actual, api: { ...actual.api, settings: m.settings, saveSettings: m.save, browseStat: m.stat, recentDirs: m.recent, localRepos: m.repos } }
 })
 vi.mock('./DirPicker', () => ({ DirPicker: () => null }))
 vi.mock('@/lib/appmode', async (orig) => ({ ...(await orig<typeof import('@/lib/appmode')>()), isMacPlatform: () => true }))
@@ -20,6 +20,8 @@ beforeEach(() => {
   m.settings.mockReset().mockResolvedValue({})
   m.save.mockReset().mockResolvedValue({})
   m.stat.mockReset().mockResolvedValue({ path: '/x', exists: true, is_dir: true, empty: false, parent_exists: true })
+  m.recent.mockReset().mockResolvedValue([])
+  m.repos.mockReset().mockResolvedValue({ root: '/Users/me/dev', home: '/Users/me', scanned_at: 0, repos: [] })
 })
 afterEach(() => { vi.useRealTimers() })
 
@@ -144,5 +146,45 @@ describe('clone destination', () => {
     expect(requestFor('clone', '', 'git@h:a/b.git', '/d', 'op1')).toEqual({ clone: { url: 'git@h:a/b.git', parent: '/d', name: 'b' }, op_id: 'op1' })
     // A folder still open for a name is where the repository's folder goes.
     expect(requestFor('clone', '~/src/', 'git@h:a/b.git', '/d', 'op1')).toEqual({ clone: { url: 'git@h:a/b.git', parent: '~/src', name: 'b' }, op_id: 'op1' })
+  })
+})
+
+// Owner, 2026-10-10: ~/dev/caprock-website for ~/dev/caprock-web was answered
+// only with "no such folder".
+describe('the search under the Folder field', () => {
+  const repos = [
+    { name: 'caprock', path: '/Users/me/dev/caprock' },
+    { name: 'caprock-web', path: '/Users/me/dev/caprock-web' },
+    { name: 'notes', path: '/Users/me/dev/notes' },
+  ]
+
+  it('lists matches as the name is typed, and ↓ Enter picks one', async () => {
+    m.repos.mockResolvedValue({ root: '/Users/me/dev', home: '/Users/me', scanned_at: 0, repos })
+    render(<AddProjectSheet source="api" defaultParent="~/dev" onClose={() => {}} onAdded={() => {}} onAddLocal={() => {}} />)
+    await waitFor(() => expect(m.repos).toHaveBeenCalled())
+    fireEvent.change(folderField(), { target: { value: '~/dev/capr' } })
+    const options = await screen.findAllByRole('option')
+    expect(options.map((o) => o.textContent)).toEqual([expect.stringContaining('caprock'), expect.stringContaining('caprock-web')])
+    fireEvent.keyDown(folderField(), { key: 'ArrowDown' })
+    fireEvent.keyDown(folderField(), { key: 'ArrowDown' })
+    fireEvent.keyDown(folderField(), { key: 'Enter' })
+    expect(folderField()).toHaveValue('~/dev/caprock-web')
+    expect(m.add).not.toHaveBeenCalled()
+  })
+
+  it('says "no such folder" only when nothing matches, with the nearest names', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    m.repos.mockResolvedValue({ root: '/Users/me/dev', home: '/Users/me', scanned_at: 0, repos })
+    m.stat.mockResolvedValue({ path: '/Users/me/dev/x', exists: false, is_dir: false, empty: false, parent_exists: true })
+    render(<AddProjectSheet source="api" defaultParent="~/dev" onClose={() => {}} onAdded={() => {}} onAddLocal={() => {}} />)
+    await waitFor(() => expect(m.repos).toHaveBeenCalled())
+    fireEvent.change(folderField(), { target: { value: '~/dev/capro' } })
+    await act(async () => { vi.advanceTimersByTime(300) })
+    expect(screen.getByRole('status', { name: 'What is there' })).not.toHaveTextContent('no such folder')
+    fireEvent.change(folderField(), { target: { value: '~/dev/caprock-website' } })
+    await act(async () => { vi.advanceTimersByTime(300) })
+    expect(screen.getByRole('status', { name: 'What is there' })).toHaveTextContent('no such folder')
+    fireEvent.click(screen.getByRole('button', { name: '~/dev/caprock-web' }))
+    expect(folderField()).toHaveValue('~/dev/caprock-web')
   })
 })

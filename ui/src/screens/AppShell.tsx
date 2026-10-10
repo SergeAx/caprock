@@ -1015,6 +1015,7 @@ export function AppShell() {
           prompt={sheet.prompt}
           worktree={sheet.worktree}
           onClose={() => setSheet(null)}
+          onProjectAdded={() => refresh()}
           onStarted={(id, projectId, title) => { openTab({ kind: 'session', sessionId: id }, projectId, title); data.refresh() }}
         />
       )}
@@ -1028,6 +1029,7 @@ export function AppShell() {
       {sheet?.kind === 'project' && (
         <AddProjectSheet
           source={data.source}
+          projects={model.projects.map((n) => n.project)}
           ops={data.ops}
           onClose={closeSheet}
           onAdded={onProjectAdded}

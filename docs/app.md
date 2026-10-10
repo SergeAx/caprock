@@ -136,7 +136,10 @@ others. Installing it: [install-app.md](install-app.md).
   one in Settings → Projects or with *Set as default* beside the field — and
   a line under it says what is there as you type: *will be created*, *exists,
   empty — will clone here*, *exists — not empty, clone will fail*, *already in
-  Caprock*. *Browse* walks folders (double-click or Enter to go in, *Choose*
+  Caprock*. Typing a name lists the projects, recent folders and repositories
+  under the default folder that match it (↓ and Enter pick one); *no such
+  folder* appears only when nothing matches, with the nearest names offered
+  (*Did you mean ~/dev/caprock-web?*). *Browse* walks folders (double-click or Enter to go in, *Choose*
   to pick); *Recent* leaves out temp and scratch folders. Paste a repository
   URL and the destination fills in as `git clone` would name it — the
   default folder plus the repository's name; folders that do not exist yet
@@ -307,7 +310,12 @@ the session, not in the page. If a sheet is open with text in it, the page
 does not reload under you; *Reload — Caprock was updated* appears in the
 status strip (in a browser, in the header) instead, for when you are done.
 
-The *New agent* sheet needs no mouse. It opens on the first message; Tab and
+The *New agent* sheet needs no mouse. It opens on the Project search, with
+the current project first: Enter keeps it and a second Enter starts. Type any
+part of a name and the list narrows to your projects, the folders you worked
+in recently and the repositories under your default folder, two levels deep;
+↑ ↓ and Enter pick, Esc closes the list (a second Esc the sheet). A folder or
+repository that is not a project yet is added when you pick it. Tab and
 ⇧Tab walk Project, Where, Agent, Model, Permissions, First message, Cancel
 and Start; ↑ and ↓ change a choice in place (Space still opens the list);
 ⌘↩ (Ctrl+Enter off macOS) starts from anywhere in the sheet, the selects

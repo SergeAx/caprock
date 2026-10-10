@@ -7,6 +7,20 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Added
+
+- **Find a project by typing a few letters.** New agent's Project field is
+  now a search that opens with the cursor in it: type any part of a name
+  ("capr") and pick from the projects you added, the folders you worked in
+  recently and the git repositories under your default folder (two levels
+  deep). The matched letters are bold; ↑↓ and Enter pick, Esc closes the
+  list. The current project is first, so Enter, Enter still starts at once.
+  Picking a repository that is not a project yet adds it and selects it.
+- **Add a project suggests as you type.** Typing in the Folder field lists
+  the same matches live; *no such folder* appears only when nothing matches,
+  and then with the nearest names (*Did you mean ~/dev/caprock-web?*), one
+  click from being filled in.
+
 ### Fixed
 
 - **Windows and Linux see their own shortcuts.** Hints, tooltips and the

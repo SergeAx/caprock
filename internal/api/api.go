@@ -357,7 +357,10 @@ type Server struct {
 	// screen produces, and summ does the same for the wide ranges of
 	// /v1/stats/summary. See answercache.go.
 	hist *answerCache
-	summ *answerCache
+	// localRepos is the last scan for repositories under the default folder
+	// (GET /v1/browse/repos, repos.go).
+	localRepos localRepoCache
+	summ       *answerCache
 	// week, weekLong and glance hold the Week and Share answers (short and
 	// long periods) and Now's at-a-glance, each with its own freshness
 	// (weekTTL, weekLongTTL, glanceTTL).
@@ -438,6 +441,7 @@ func New(d Deps) *Server {
 	// this being a filesystem-read API.
 	m.HandleFunc("GET /v1/browse", s.handleBrowse)
 	m.HandleFunc("GET /v1/browse/stat", s.handleBrowseStat)
+	m.HandleFunc("GET /v1/browse/repos", s.handleLocalRepos)
 	m.HandleFunc("GET /v1/recent-dirs", s.handleRecentDirs)
 	m.HandleFunc("GET /v1/status", s.handleStatus)
 	m.HandleFunc("GET /v1/storage", s.handleStorage)

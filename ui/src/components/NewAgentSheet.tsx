@@ -5,7 +5,11 @@
  * dashboard's dialog and the phone use; the tab opens on success.
  *
  * Filled entirely from the keyboard (owner, 2026-10-07): focus opens on the
- * first message; Tab and ⇧Tab walk Project, Where, Agent, Model, Permissions,
+ * Project search (owner, 2026-10-10: a native select had no search), with the
+ * current project first, so Enter keeps it and a second Enter starts; typing
+ * finds a project, a recent folder or a repository under the default folder,
+ * and picking one that is not a project yet adds it (ProjectSearch.tsx).
+ * Tab and ⇧Tab walk Project, Where, Agent, Model, Permissions,
  * First message, Cancel, Start in that order; ↑ and ↓ change a select in
  * place; ⌘↩ starts from anywhere in the sheet, the buttons included; Esc
  * cancels. The keys are named in the footer and on Start itself.
@@ -22,7 +26,9 @@ import { AgentPicker, spawnableAgents, useAgentChoice } from './AgentPicker'
 import { DEFAULT_MODE, DEFAULT_MODELS, GEMINI_MAPPED, ModelField, modeNotes, modeOptions } from './SpawnDialog'
 import { useInitialMode } from '@/lib/permissionMode'
 import type { SpawnAgent } from './AgentPicker'
-import type { Project } from '@/lib/projects'
+import { projectsApi, type Project } from '@/lib/projects'
+import { ProjectCombobox } from './ProjectSearch'
+import type { Candidate } from '@/lib/projectSearch'
 import { ProjectInstructions } from './ProjectInstructions'
 import { Sheet, SheetButton, SheetField } from './Sheet'
 import { stepSelect } from '@/lib/selectKeys'
@@ -48,6 +54,7 @@ export function NewAgentSheet({
   prompt: initialPrompt = '',
   worktree: initialWorktree,
   onClose,
+  onProjectAdded,
   onStarted,
 }: {
   projects: Project[]
@@ -59,6 +66,8 @@ export function NewAgentSheet({
   /** A new worktree's name, proposed: the sheet opens on "New worktree…" with it filled in. */
   worktree?: string
   onClose: () => void
+  /** A repository picked in the search was added as a project. */
+  onProjectAdded?: (projectId: string) => void
   onStarted: (sessionId: string, projectId: string, title: string) => void
 }) {
   const status = useApi(() => api.status(), [], { live: false })
@@ -66,7 +75,12 @@ export function NewAgentSheet({
   const checking = !status.data && !status.error
   const [agent, setAgent] = useAgentChoice(agents)
   const [pid, setPid] = useState(projectId ?? projects[0]?.id ?? '')
-  const project = projects.find((p) => p.id === pid)
+  // Projects added from the search while the sheet is open, until the
+  // caller's list catches up.
+  const [added, setAdded] = useState<Project[]>([])
+  const [adding, setAdding] = useState(false)
+  const allProjects = useMemo(() => [...projects, ...added.filter((a) => !projects.some((p) => p.id === a.id))], [projects, added])
+  const project = allProjects.find((p) => p.id === pid)
   const worktrees = useMemo(() => (project?.worktrees ?? []).filter((w) => w.path !== project?.root), [project])
   const [where, setWhere] = useState(initialWorktree ? NEW_WORKTREE : initialCwd && initialCwd !== project?.root ? initialCwd : '')
   const [newBranch, setNewBranch] = useState(initialWorktree ?? '')
@@ -119,7 +133,27 @@ export function NewAgentSheet({
     }
   }
 
-  startRef.current = () => { if (!busy && agents.length > 0) void start() }
+  // A pick from the project search: a project is chosen; a recent folder or a
+  // repository under the default folder is added first, then chosen.
+  const pickProject = async (c: Candidate) => {
+    setError('')
+    if (c.projectId) { setPid(c.projectId); setWhere(''); return }
+    setAdding(true)
+    try {
+      const res = await projectsApi.add({ path: c.path })
+      if (!('project' in res)) return
+      setAdded((cur) => [...cur, res.project])
+      setPid(res.project.id)
+      setWhere('')
+      onProjectAdded?.(res.project.id)
+    } catch (e) {
+      setError(`Could not add ${c.name}: ${errText(e)}`)
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  startRef.current = () => { if (!busy && !adding && agents.length > 0) void start() }
   const startKey = isMacPlatform() ? '⌘↩' : 'Ctrl+↵'
 
   return (
@@ -162,11 +196,10 @@ export function NewAgentSheet({
       ) : (
         <div className="grid gap-4 px-5 py-4" onKeyDown={(e) => { stepSelect(e) }}>
           <div className="grid grid-cols-2 gap-3">
-            <SheetField label="Project">
-              <select className="input" value={pid} onChange={(e) => { setPid(e.target.value); setWhere('') }}>
-                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </SheetField>
+            <div className="grid min-w-0 gap-1.5">
+              <span className="text-[12px] font-medium text-fg-muted">Project</span>
+              <ProjectCombobox projects={allProjects} value={pid} busy={adding} autoFocus onPick={(c) => void pickProject(c)} onSubmit={() => startRef.current()} />
+            </div>
             <SheetField label="Where">
               <select className="input" title={WHERE_TOOLTIP} value={where} onChange={(e) => setWhere(e.target.value)}>
                 <option value="">{project?.branch ? `This folder · ${project.branch}` : 'This folder'}</option>
@@ -209,7 +242,6 @@ export function NewAgentSheet({
           <SheetField label="First message" hint="optional">
             <textarea
               className="input min-h-[84px] resize-y font-[family-name:var(--font-sans)] text-[13px] leading-relaxed"
-              autoFocus
               placeholder="What should it do?"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}

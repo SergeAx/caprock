@@ -80,18 +80,37 @@ export function Sheet({
 /** Right padding for the first row of a sheet without a title, clear of its ×. */
 export const SHEET_CLOSE_ROOM = 'pr-12'
 
-/** The sheet's buttons: one primary, the rest quiet. */
-export function SheetButton({ primary, children, ...rest }: { primary?: boolean; children: ReactNode } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+/** The sheet's buttons: one primary, the rest quiet. `keyHint` is the key
+ * that presses it, shown on the button as a chip big enough to read (owner,
+ * 2026-10-10: "the combos are too small, both need to be visible"). The
+ * accessible name stays the label; pass aria-keyshortcuts for the key. */
+export function SheetButton({ primary, keyHint, children, ...rest }: { primary?: boolean; keyHint?: string; children: ReactNode } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       type="button"
       {...rest}
-      className={`h-[30px] rounded-[7px] px-3.5 text-[13px] font-medium disabled:opacity-50 ${
+      className={`inline-flex h-[34px] items-center gap-2 rounded-[7px] px-4 text-[14px] font-medium disabled:opacity-50 ${
         primary ? 'bg-accent text-panel hover:brightness-110' : 'border border-[var(--app-hairline-strong)] text-fg hover:bg-[var(--app-row-hover)]'
       }`}
     >
       {children}
+      {keyHint && <KeyChip primary={primary}>{keyHint}</KeyChip>}
     </button>
+  )
+}
+
+/** A key on a button: bordered, full contrast, the label's own colour. */
+export function KeyChip({ primary, children }: { primary?: boolean; children: ReactNode }) {
+  return (
+    <kbd
+      aria-hidden="true"
+      data-key-chip
+      className={`mono rounded-[5px] border px-1.5 py-px text-[12.5px] font-semibold leading-[18px] ${
+        primary ? 'border-current/45 bg-black/10' : 'border-[var(--app-hairline-strong)] bg-[var(--app-row-hover)] text-fg'
+      }`}
+    >
+      {children}
+    </kbd>
   )
 }
 
@@ -99,7 +118,7 @@ export function SheetButton({ primary, children, ...rest }: { primary?: boolean;
 export function SheetField({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
     <label className="grid min-w-0 gap-1.5">
-      <span className="flex items-baseline gap-2 text-[12px] font-medium text-fg-muted">
+      <span className="flex items-baseline gap-2 text-[13px] font-medium text-fg-muted">
         {label}
         {hint && <span className="font-normal text-fg-faint">{hint}</span>}
       </span>

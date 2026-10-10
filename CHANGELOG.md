@@ -14,6 +14,10 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   is readable in the dark theme; the rest is folded under *Then: …*. After a
   restart, with phones paired, the section leads with *Phone access is off*
   and a large *Turn on*.
+- **Keys on buttons you can read.** *Start ⌘↩* and *Cancel Esc* (and the
+  same pair on Add project, Quick chat and Send feedback) carry the key as
+  a bordered chip at full contrast, on taller buttons. The feedback dialog
+  is wider, with larger text throughout.
 
 ### Added
 
@@ -22,6 +26,9 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   It ticks an item off by itself once a phone is paired or the bot has a
   chat, *Not needed* drops an item for good, × hides it for a week, and
   once both are done or skipped it never comes back.
+- **Interface size in the app.** Settings → Appearance sets 100, 110, 125
+  or 140%, and ⌘+ / ⌘− / ⌘0 (Ctrl+Shift off macOS) step it. The window
+  zooms natively, terminal included. The app now opens at 110%.
 - **Talk to your agents from Telegram (Premium).** Reply to a session's
   message in Telegram and Caprock types it into that session and presses
   Enter; the answer comes back in the chat as soon as the turn ends, with

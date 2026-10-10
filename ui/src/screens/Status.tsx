@@ -32,7 +32,8 @@ import { DesktopNotifications } from '@/components/DesktopNotifications'
 import { StoragePanel } from '@/components/Storage'
 import { Choice, Details, Section, Toggle } from '@/components/SettingsParts'
 import { GlobalHotkey } from '@/components/GlobalHotkey'
-import { isAppMode, isTauri } from '@/lib/appmode'
+import { isAppMode, isMacPlatform, isTauri } from '@/lib/appmode'
+import { UI_SCALES, setUiScale, useUiScale, type UiScale } from '@/lib/uiscale'
 import { TerminalSettings } from '@/components/TerminalSettings'
 import { EditorSetting } from '@/components/EditorSetting'
 import { DefaultFolderSetting } from '@/components/DefaultFolderSetting'
@@ -220,8 +221,28 @@ function AppearanceSection() {
           if (theme !== 'light') setTheme('light')
         }}
       />
+      {isTauri() && <InterfaceSize />}
       <p className="text-[12px] text-fg-muted">Saved in this browser only.</p>
     </Section>
+  )
+}
+
+/** The desktop app's zoom; a browser has its own (lib/uiscale). */
+function InterfaceSize() {
+  const scale = useUiScale()
+  const isMac = isMacPlatform()
+  return (
+    <div className="space-y-1">
+      <Choice
+        label="Interface size"
+        value={String(scale)}
+        options={UI_SCALES.map((s) => ({ value: String(s), label: `${Math.round(s * 100)}%` }))}
+        onChange={(v) => setUiScale(Number(v) as UiScale)}
+      />
+      <p className="text-[12px] text-fg-muted">
+        Or {isMac ? '⌘+ and ⌘−, ⌘0 to reset' : 'Ctrl+Shift+= and Ctrl+Shift+−, Ctrl+Shift+0 to reset'}.
+      </p>
+    </div>
   )
 }
 

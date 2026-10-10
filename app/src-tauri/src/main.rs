@@ -45,6 +45,7 @@ macro_rules! handler {
             commands::open_external,
             commands::set_tray,
             commands::set_badge,
+            commands::set_zoom,
             commands::hotkey_status,
             commands::register_hotkey,
             notify::notify,

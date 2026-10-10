@@ -292,13 +292,11 @@ export function AddProjectSheet({
               {op.phase ? `${op.phase} ${op.progress ?? 0}%` : 'Starting the clone…'}
             </p>
           )}
-          <SheetButton onClick={onClose} aria-keyshortcuts="Escape" title="Cancel (Esc)">
+          <SheetButton onClick={onClose} aria-keyshortcuts="Escape" title="Cancel (Esc)" keyHint="Esc">
             Cancel
-            <kbd aria-hidden="true" className="mono ml-2 text-[11px] font-normal opacity-60">Esc</kbd>
           </SheetButton>
-          <SheetButton primary disabled={busy} onClick={() => void submit()} aria-keyshortcuts={isMac ? 'Meta+Enter' : 'Control+Enter'} title={`${verb} (${submitKey})`}>
+          <SheetButton primary disabled={busy} onClick={() => void submit()} aria-keyshortcuts={isMac ? 'Meta+Enter' : 'Control+Enter'} title={`${verb} (${submitKey})`} keyHint={busy ? undefined : submitKey}>
             {busy ? (mode === 'clone' ? 'Cloning…' : 'Adding…') : verb}
-            {!busy && <kbd aria-hidden="true" className="mono ml-2 text-[11px] font-normal opacity-70">{submitKey}</kbd>}
           </SheetButton>
         </>
       }
@@ -317,7 +315,7 @@ export function AddProjectSheet({
               className={`flex h-[26px] items-center gap-1.5 rounded-[6px] px-3 text-[12.5px] ${mode === m.key ? 'bg-panel font-medium text-fg shadow-sm' : 'text-fg-muted hover:text-fg'}`}
             >
               {m.label}
-              <kbd aria-hidden="true" className="mono text-[10.5px] font-normal text-fg-faint">{keyLabel(m.key, isMac)}</kbd>
+              <kbd aria-hidden="true" className="mono text-[12px] font-normal text-fg-muted">{keyLabel(m.key, isMac)}</kbd>
             </button>
           ))}
         </div>
@@ -397,7 +395,7 @@ export function AddProjectSheet({
               onTab={setList}
               onPick={(d) => editPath(mode === 'clone' && repoName(url) ? `${d.replace(/[\\/]+$/, '')}/${repoName(url)}` : mode === 'new' ? withSlash(d) : d)}
             />
-            <p className="mt-1 text-[11px] text-fg-faint"><kbd className="mono">{keyLabel('toggle-list', isMac)}</kbd> switches Recent and Browse</p>
+            <p className="mt-1 text-[12px] text-fg-muted"><kbd className="mono">{keyLabel('toggle-list', isMac)}</kbd> switches Recent and Browse</p>
           </div>
         </div>
         {source !== 'derived' && (

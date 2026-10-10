@@ -7,6 +7,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+## [0.101.3] - 2026-10-11
+
 ### Changed
 
 - **Hide a project with one click.** Hovering a project shows an eye; one

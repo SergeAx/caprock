@@ -7,6 +7,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+## [0.101.0] - 2026-10-11
+
 ### Changed
 
 - **The phone section reads at a glance.** Three large steps — same Wi-Fi,

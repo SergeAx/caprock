@@ -329,7 +329,7 @@ function StatusPill({ status }: { status: PhoneStatus }) {
   )
 }
 
-function BigStep({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+export function BigStep({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
     <li className="grid content-start gap-1 rounded-[12px] border border-border bg-panel-2/50 px-4 py-3.5">
       <span className="num text-[26px] font-semibold leading-none text-accent">{n}</span>

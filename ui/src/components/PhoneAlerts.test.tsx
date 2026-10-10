@@ -33,14 +33,14 @@ vi.mock('@/lib/api', async (orig) => {
 })
 
 describe('PhoneAlerts', () => {
-  it('asks for a bot when there is none, with both switches on', async () => {
+  it('leads with the three setup steps when there is no bot, and holds the switches until there is', async () => {
     settings.value = { alert_approval: true, alert_finished: true } as Settings
     render(<PhoneAlerts />)
     await waitFor(() => expect(screen.getByText('needs a Telegram bot')).toBeInTheDocument())
-    expect(await screen.findByPlaceholderText('123456:ABC-DEF…')).toBeInTheDocument()
-    expect(screen.getByLabelText(/waiting for approval/)).toBeChecked()
-    expect(screen.getByLabelText(/has finished/)).toBeChecked()
-    expect(screen.getByLabelText(/last reply's first line/)).toBeChecked()
+    expect(await screen.findByPlaceholderText('Paste the bot token')).toBeInTheDocument()
+    expect(screen.getByText('Make a bot')).toBeInTheDocument()
+    expect(screen.getByText('Open @BotFather')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/waiting for approval/)).toBeNull()
     expect(screen.queryByText('Send a test alert')).toBeNull()
   })
 

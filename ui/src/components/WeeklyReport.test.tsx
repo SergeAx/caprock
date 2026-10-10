@@ -59,7 +59,7 @@ describe('WeeklyReport', () => {
     settings.value = { report_bot_set: true, report_chat_id: '123' } as Settings
     render(<WeeklyReport />)
     fireEvent.click(await screen.findByText('Change bot'))
-    expect(screen.getByText('Check and save')).toBeDisabled()
+    expect(screen.getByText('Connect')).toBeDisabled()
     expect(saved.calls).toEqual([])
   })
 

@@ -33,19 +33,19 @@ Telegram — Wi-Fi, mobile data, another country.
 
 Settings → **Telegram**.
 
-1. **Make a bot.** In Telegram, open `@BotFather`, send `/newbot`, give it a
-   name and a username ending in `bot`. BotFather answers with a token that
-   looks like `123456789:AAH…`. Paste it into **Bot token** and press **Check
-   and save**. Caprock asks Telegram whether the token is real before keeping
-   it; a wrong one is refused with Telegram's own reason and nothing is saved.
-2. **Pair your chat.** Caprock shows a six-digit code and a button, **Open
+1. **Make a bot.** Press **Open @BotFather** (or open `@BotFather` in
+   Telegram), send `/newbot`, give it a name and a username ending in `bot`.
+2. **Paste its token.** BotFather answers with a token that looks like
+   `123456789:AAH…`. Paste it into the token field and press **Connect**.
+   Caprock asks Telegram whether the token is real before keeping it; a wrong one is refused with Telegram's own reason and nothing is saved.
+3. **Send it a code.** Caprock shows a six-digit code and a button, **Open
    @yourbot and send it**. On your phone, that button (or opening the bot and
-   typing `/start 123456`) sends the code. The section turns into *Paired with
+   typing `/start 123456`) sends the code. The section turns into *Connected to
    <your name>* within a couple of seconds. The code works for ten minutes,
    only from a private chat, and only once.
-3. **Choose what to hear.** Tick *When a session is waiting for approval*
+4. **Choose what to hear.** Tick *When a session is waiting for approval*
    and/or *When a session has finished*, then **Send a test alert**.
-4. **Talk back (Premium).** With a licence, tick *Let my paired chat talk to
+5. **Talk back (Premium).** With a licence, tick *Let my paired chat talk to
    sessions* in **Talk to your agents from Telegram**, just under. It is off
    until you turn it on, licence or not.
 

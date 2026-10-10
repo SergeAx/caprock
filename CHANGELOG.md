@@ -14,9 +14,16 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   is readable in the dark theme; the rest is folded under *Then: …*. After a
   restart, with phones paired, the section leads with *Phone access is off*
   and a large *Turn on*.
+- **Keys on buttons you can read.** *Start ⌘↩* and *Cancel Esc* (and the
+  same pair on Add project, Quick chat and Send feedback) carry the key as
+  a bordered chip at full contrast, on taller buttons. The feedback dialog
+  is wider, with larger text throughout.
 
 ### Added
 
+- **Interface size in the app.** Settings → Appearance sets 100, 110, 125
+  or 140%, and ⌘+ / ⌘− / ⌘0 (Ctrl+Shift off macOS) step it. The window
+  zooms natively, terminal included. The app now opens at 110%.
 - **See what your sessions cost the machine.** While Caprock is open it
   samples every live session's processes every 5 seconds: the status bar
   shows the session's CPU and memory, the inspector lists its three busiest

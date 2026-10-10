@@ -52,6 +52,8 @@ function shellInvoke<T>(cmd: string, args?: Args): Promise<T> {
 export const shell = {
   setTray: (view: TrayView) => shellInvoke<void>('set_tray', { view }),
   setBadge: (count: number) => shellInvoke<void>('set_badge', { count }),
+  /** The webview's zoom, which the shell clamps to 0.8–1.6 (lib/uiscale.ts). */
+  setZoom: (scale: number) => shellInvoke<void>('set_zoom', { scale }),
   hotkeyStatus: () => shellInvoke<HotkeyStatus>('hotkey_status'),
   /** `null` turns the hotkey off. Rejects with the system's reason when it refuses one. */
   registerHotkey: (accelerator: string | null) => shellInvoke<HotkeyStatus>('register_hotkey', { accelerator }),

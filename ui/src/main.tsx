@@ -8,10 +8,14 @@ import '@/design/tokens.css'
 import { isAppMode, isTrayRoute } from '@/lib/appmode'
 import { loadTerminalFont } from '@/lib/termfont'
 import { watchUiVersion } from '@/lib/staleui'
+import { applyUiScale } from '@/lib/uiscale'
 
 // The app opens on terminals: start fetching every subset of their face now,
 // while the workspace chunk is still loading (lib/termfont).
 if (isAppMode() && !isTrayRoute()) loadTerminalFont()
+
+// The desktop window's interface size; the popover keeps its own (lib/uiscale).
+if (!isTrayRoute()) applyUiScale()
 
 // A daemon updated under this page: reload onto its UI (lib/staleui).
 watchUiVersion()

@@ -70,7 +70,7 @@ async function pick(mode: string) {
 describe('the New agent sheet on the keyboard', () => {
   it('names its keys in the sheet', async () => {
     open()
-    expect(await screen.findByLabelText(/Tab moves, arrows change a choice, Control Enter starts, Escape cancels/)).toBeTruthy()
+    expect(await screen.findByLabelText('Keys: Tab moves, arrows change a choice')).toBeTruthy()
   })
 
   it('changes a select with the arrow keys, in place', async () => {
@@ -262,7 +262,7 @@ describe('the start key on the Start button', () => {
       const start = await screen.findByRole('button', { name: 'Start' })
       expect(start.querySelector('kbd')?.textContent).toBe('⌘↩')
       expect(start.getAttribute('aria-keyshortcuts')).toBe('Meta+Enter')
-      expect(screen.getByLabelText(/Command Enter starts/).textContent).toContain('⌘↩ starts')
+      expect(screen.getByRole('button', { name: 'Cancel' }).querySelector('kbd')?.textContent).toBe('Esc')
     } finally {
       platform.mockRestore()
     }

@@ -149,6 +149,7 @@ Commands are granted per origin (`src-tauri/capabilities/`):
 | `set_background`         | no          | yes          | no      |
 | `set_tray`               | yes         | no           | no      |
 | `set_badge`              | yes         | no           | no      |
+| `set_zoom`               | yes         | no           | no      |
 | `hotkey_status`          | yes         | no           | yes     |
 | `register_hotkey`        | yes         | no           | no      |
 | `tray_open`              | no          | no           | yes     |

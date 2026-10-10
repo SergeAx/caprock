@@ -202,23 +202,21 @@ export function NewAgentSheet({
           {error
             ? <p role="alert" className="mr-auto min-w-0 truncate text-[12px] text-danger" title={error}>{error}</p>
             : (
-              <p className="mr-auto min-w-0 truncate text-[11.5px] text-fg-faint" aria-label={`Keys: Tab moves, arrows change a choice, ${isMacPlatform() ? 'Command' : 'Control'} Enter starts, Escape cancels`}>
-                <span className="mono">Tab</span> moves · <span className="mono">↑↓</span> change · <span className="mono">{startKey}</span> starts · <span className="mono">Esc</span> cancels
+              <p className="mr-auto min-w-0 truncate text-[12.5px] text-fg-muted" aria-label="Keys: Tab moves, arrows change a choice">
+                {/* Start and Cancel carry their own keys on the buttons. */}
+                <span className="mono">Tab</span> moves · <span className="mono">↑↓</span> change
               </p>
             )}
-          <SheetButton onClick={onClose}>Cancel</SheetButton>
+          <SheetButton onClick={onClose} aria-keyshortcuts="Escape" title="Cancel (Esc)" keyHint="Esc">Cancel</SheetButton>
           <SheetButton
             primary
             disabled={busy || !canStart}
             onClick={() => void start()}
             aria-keyshortcuts={isMacPlatform() ? 'Meta+Enter' : 'Control+Enter'}
             title={`Start (${startKey})`}
+            keyHint={busy ? undefined : startKey}
           >
             {busy ? 'Starting…' : consent.needed ? 'Accept and start' : 'Start'}
-            {/* The key on the button it presses (owner, 2026-10-09: "the button
-              * is there but the shortcut is unclear"). Hidden from the
-              * accessible name, which aria-keyshortcuts carries instead. */}
-            {!busy && <kbd aria-hidden="true" className="mono ml-2 text-[11px] font-normal opacity-70">{startKey}</kbd>}
           </SheetButton>
         </>
       }

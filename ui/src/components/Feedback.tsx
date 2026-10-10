@@ -47,6 +47,7 @@ import { captureSupported, shell } from '@/lib/shell'
 import { DROP_PATHS_EVENT } from '@/lib/xtermInput'
 import { FeedbackIcon } from './AppIcons'
 import { CloseButton, DialogBackdrop } from './Dialog'
+import { KeyChip } from './Sheet'
 
 const TIP = 'Report a bug, suggest an idea, or ask a question'
 
@@ -264,18 +265,18 @@ function FeedbackDialog({ screen, onClose }: { screen: string; onClose: () => vo
         onDragOver={step ? undefined : onDragOver}
         onDragLeave={(e) => { if (e.currentTarget === e.target) setDragging(false) }}
         onDrop={step ? undefined : onDrop}
-        className={`w-full max-w-[560px] border bg-panel rounded-[var(--radius-panel)] shadow-lg ${
+        className={`w-full max-w-[680px] border bg-panel rounded-[var(--radius-panel)] shadow-lg ${
           dragging ? 'border-accent' : 'border-border-strong'
         }`}
       >
-        <div className="pl-4 pr-2 py-1.5 border-b border-border flex items-center">
-          <span className="text-[15px] font-medium">{step ? 'Attach your screenshots' : 'Send feedback'}</span>
+        <div className="pl-5 pr-2.5 py-2.5 border-b border-border flex items-center">
+          <span className="text-[17px] font-medium">{step ? 'Attach your screenshots' : 'Send feedback'}</span>
           <CloseButton onClick={onClose} className="ml-auto" />
         </div>
 
         {step ? (
-          <div className="p-4 grid gap-3">
-            <p className="text-[13px] leading-relaxed" role="status">
+          <div className="p-5 grid gap-4">
+            <p className="text-[14.5px] leading-relaxed" role="status">
               {stepLine(step.i, shots.length, step.copied, pasteKey, !!step.saved)}
             </p>
             <div className="flex gap-2">
@@ -284,7 +285,7 @@ function FeedbackDialog({ screen, onClose }: { screen: string; onClose: () => vo
                   key={s.id}
                   src={s.url}
                   alt={`Screenshot ${i + 1}`}
-                  className={`h-14 w-20 rounded-[5px] border object-cover ${
+                  className={`h-16 w-24 rounded-[5px] border object-cover ${
                     i === step.i ? 'border-accent ring-1 ring-accent' : 'border-border opacity-60'
                   }`}
                 />
@@ -295,7 +296,7 @@ function FeedbackDialog({ screen, onClose }: { screen: string; onClose: () => vo
                 <button
                   type="button"
                   onClick={() => copyAt(nextShot(step.i, shots.length))}
-                  className="rounded-[6px] border border-border-strong px-3 py-1 text-[12.5px] text-fg hover:border-accent/60 hover:text-accent"
+                  className="rounded-[6px] border border-border-strong px-3 py-1 text-[14px] text-fg hover:border-accent/60 hover:text-accent"
                 >
                   Copy next ({nextShot(step.i, shots.length) + 1} of {shots.length})
                 </button>
@@ -304,7 +305,7 @@ function FeedbackDialog({ screen, onClose }: { screen: string; onClose: () => vo
                 <button
                   type="button"
                   onClick={saveAll}
-                  className="rounded-[6px] border border-border-strong px-3 py-1 text-[12.5px] text-fg hover:border-accent/60 hover:text-accent"
+                  className="rounded-[6px] border border-border-strong px-3 py-1 text-[14px] text-fg hover:border-accent/60 hover:text-accent"
                 >
                   {step.saved ? 'Saved — save again' : shots.length > 1 ? 'Save screenshots' : 'Save screenshot'}
                 </button>
@@ -312,19 +313,19 @@ function FeedbackDialog({ screen, onClose }: { screen: string; onClose: () => vo
               <button
                 type="button"
                 onClick={onClose}
-                className="ml-auto rounded-[6px] bg-accent px-3.5 py-1 text-[12.5px] font-medium text-panel hover:brightness-110"
+                className="ml-auto rounded-[6px] bg-accent px-3.5 py-1 text-[14px] font-medium text-panel hover:brightness-110"
               >
                 Done
               </button>
             </div>
-            <p className="text-[11px] text-fg-faint leading-relaxed">
+            <p className="text-[13px] text-fg-faint leading-relaxed">
               The issue is open in your browser. GitHub uploads what you paste
               there; Caprock sends nothing.
             </p>
           </div>
         ) : (
           <form
-            className="p-4 grid gap-3"
+            className="p-5 grid gap-4"
             onSubmit={(e) => { e.preventDefault(); send() }}
             onKeyDown={(e) => {
               if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); send() }
@@ -338,7 +339,7 @@ function FeedbackDialog({ screen, onClose }: { screen: string; onClose: () => vo
                   role="radio"
                   aria-checked={k.id === kind}
                   onClick={() => setKind(k.id)}
-                  className={`px-3 py-1 rounded-[5px] text-[12.5px] ${
+                  className={`px-3 py-1 rounded-[5px] text-[14px] ${
                     k.id === kind ? 'bg-accent text-panel font-medium' : 'text-fg-muted hover:text-fg'
                   }`}
                 >
@@ -348,7 +349,7 @@ function FeedbackDialog({ screen, onClose }: { screen: string; onClose: () => vo
             </div>
 
             <label className="grid gap-1">
-              <span className="text-[11px] text-fg-muted">Title</span>
+              <span className="text-[13px] font-medium text-fg-muted">Title</span>
               {/* Autofocused: the fewer deliberate actions between "I noticed
                 * something" and typing it, the more reports get written.
                 * Prose, so the sans face: `.input` sets mono outside any
@@ -359,19 +360,19 @@ function FeedbackDialog({ screen, onClose }: { screen: string; onClose: () => vo
                 onChange={(e) => setTitleText(e.target.value)}
                 placeholder={active.title}
                 maxLength={256}
-                className="input w-full text-[14px] py-1.5"
+                className="input w-full text-[15.5px] py-1.5"
                 style={{ fontFamily: 'var(--font-sans)' }}
               />
             </label>
 
             <label className="grid gap-1">
-              <span className="text-[11px] text-fg-muted">Description <span className="text-fg-faint">— optional</span></span>
+              <span className="text-[13px] font-medium text-fg-muted">Description <span className="text-fg-faint">— optional</span></span>
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 placeholder={active.hint}
                 rows={4}
-                className="input w-full resize-y text-[13.5px] leading-relaxed"
+                className="input w-full resize-y text-[15px] leading-relaxed"
                 style={{ fontFamily: 'var(--font-sans)' }}
               />
             </label>
@@ -380,13 +381,13 @@ function FeedbackDialog({ screen, onClose }: { screen: string; onClose: () => vo
               <div className="flex flex-wrap items-center gap-2">
                 {shots.map((s, i) => (
                   <div key={s.id} className="relative">
-                    <img src={s.url} alt={`Screenshot ${i + 1}`} className="h-14 w-20 rounded-[5px] border border-border object-cover" />
+                    <img src={s.url} alt={`Screenshot ${i + 1}`} className="h-16 w-24 rounded-[5px] border border-border object-cover" />
                     <button
                       type="button"
                       aria-label={`Remove screenshot ${i + 1}`}
                       title="Remove"
                       onClick={() => remove(s.id)}
-                      className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-border-strong bg-panel text-[12px] leading-none text-fg-muted hover:text-fg"
+                      className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-border-strong bg-panel text-[13.5px] leading-none text-fg-muted hover:text-fg"
                     >
                       ×
                     </button>
@@ -396,9 +397,9 @@ function FeedbackDialog({ screen, onClose }: { screen: string; onClose: () => vo
                   <button
                     type="button"
                     onClick={() => picker.current?.click()}
-                    className={`flex h-14 items-center gap-1.5 rounded-[5px] border border-dashed px-3 text-[12px] ${
+                    className={`flex h-16 items-center gap-1.5 rounded-[5px] border border-dashed px-3 text-[13.5px] ${
                       dragging ? 'border-accent text-accent' : 'border-border-strong text-fg-muted hover:text-fg hover:border-fg-muted'
-                    } ${shots.length === 0 ? 'flex-1 justify-center' : 'w-20 justify-center'}`}
+                    } ${shots.length === 0 ? 'flex-1 justify-center' : 'w-24 justify-center'}`}
                   >
                     {shots.length === 0
                       ? <>Add screenshots — paste ({pasteKey}), drop, or <span className="underline underline-offset-2">choose</span></>
@@ -410,7 +411,7 @@ function FeedbackDialog({ screen, onClose }: { screen: string; onClose: () => vo
                     type="button"
                     onClick={() => void capture()}
                     title="Attach a picture of this window — the app only, not your screen"
-                    className="flex h-14 shrink-0 items-center justify-center rounded-[5px] border border-dashed border-border-strong px-3 text-[12px] text-fg-muted hover:text-fg hover:border-fg-muted"
+                    className="flex h-16 shrink-0 items-center justify-center rounded-[5px] border border-dashed border-border-strong px-3 text-[13.5px] text-fg-muted hover:text-fg hover:border-fg-muted"
                   >
                     Capture window
                   </button>
@@ -428,10 +429,10 @@ function FeedbackDialog({ screen, onClose }: { screen: string; onClose: () => vo
                   }}
                 />
               </div>
-              {note && <p className="text-[11.5px] text-warn" role="status">{note}</p>}
+              {note && <p className="text-[13px] text-warn" role="status">{note}</p>}
             </div>
 
-            <div className="text-[11.5px] text-fg-muted">
+            <div className="text-[13px] text-fg-muted">
               <div className="flex items-center gap-2">
                 <label className="inline-flex items-center gap-1.5">
                   <input type="checkbox" checked={withDiag} onChange={(e) => setWithDiag(e.target.checked)} className="accent-[var(--color-accent)]" />
@@ -447,23 +448,25 @@ function FeedbackDialog({ screen, onClose }: { screen: string; onClose: () => vo
                 </button>
               </div>
               {showDiag && (
-                <ul className="mt-1.5 ml-5 grid gap-0.5 text-[11px] text-fg-faint num">
+                <ul className="mt-1.5 ml-5 grid gap-0.5 text-[13px] text-fg-faint num">
                   {ctx.map((c) => <li key={c}>{c}</li>)}
                 </ul>
               )}
             </div>
 
             <div className="flex items-center gap-3 border-t border-border pt-3">
-              <span className="text-[11px] text-fg-faint leading-snug">
+              <span className="text-[13px] text-fg-muted leading-snug">
                 Opens a prefilled issue in your browser. Nothing is sent from here.
               </span>
               <button
                 type="submit"
                 disabled={!ready}
                 title={isMac ? '⌘↩' : 'Ctrl+↵'}
-                className="ml-auto shrink-0 rounded-[6px] bg-accent px-3.5 py-1.5 text-[12.5px] font-medium text-panel hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-keyshortcuts={isMac ? 'Meta+Enter' : 'Control+Enter'}
+                className="ml-auto inline-flex h-[34px] shrink-0 items-center gap-2 rounded-[7px] bg-accent px-4 text-[14px] font-medium text-panel hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Create issue
+                <KeyChip primary>{isMac ? '⌘↩' : 'Ctrl+↵'}</KeyChip>
               </button>
             </div>
           </form>

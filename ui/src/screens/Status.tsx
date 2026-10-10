@@ -35,6 +35,7 @@ import { isAppMode, isTauri } from '@/lib/appmode'
 import { TerminalSettings } from '@/components/TerminalSettings'
 import { EditorSetting } from '@/components/EditorSetting'
 import { DefaultFolderSetting } from '@/components/DefaultFolderSetting'
+import { CustomAgentsSetting } from '@/components/CustomAgentsSetting'
 import { SpawnModeSetting } from '@/components/SpawnModeSetting'
 import { GitHubSettings } from '@/components/GitHubSettings'
 import { WindowStopSetting } from '@/components/WindowStopSetting'
@@ -95,6 +96,7 @@ export function StatusScreen() {
           <TerminalSettings />
           {owner && <EditorSetting />}
           {owner && <DefaultFolderSetting />}
+          {owner && <CustomAgentsSection />}
           {owner && isTauri() && <DesktopNotifications />}
           {owner && isTauri() && <GlobalHotkey />}
           <GitHubSettings />
@@ -113,6 +115,7 @@ export function StatusScreen() {
           {owner && <SpawnModeSetting />}
           {owner && <EditorSetting />}
           {owner && <DefaultFolderSetting />}
+          {owner && <CustomAgentsSection />}
           <GitHubSettings />
           {owner && isTauri() && <GlobalHotkey />}
         </>
@@ -161,6 +164,16 @@ function WindowStopSection() {
   return (
     <Locked feature="window" title="Pause Caprock's sessions before the plan limit">
       <WindowStopSetting />
+    </Locked>
+  )
+}
+
+/** Custom agents (Premium, ADR-046): live with a licence, behind glass
+ *  without one, in the place they will be. */
+function CustomAgentsSection() {
+  return (
+    <Locked feature="agents" title="Add your own coding agents">
+      <CustomAgentsSetting />
     </Locked>
   )
 }

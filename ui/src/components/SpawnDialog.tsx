@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { CloseButton, DialogBackdrop } from './Dialog'
 import { DirPicker } from './DirPicker'
-import { AgentPicker, useAgentChoice, useSpawnableAgents, type SpawnAgent } from './AgentPicker'
-import { api, errText, isPairedDevice } from '@/lib/api'
+import { AgentPicker, useAgentCatalog, useAgentChoice, useSpawnableAgents, type BuiltinAgent, type SpawnAgent } from './AgentPicker'
+import { api, errText, isPairedDevice, type CatalogEntry } from '@/lib/api'
 import { useApi } from '@/lib/useApi'
 import { navigate } from '@/lib/router'
 import { modeWords, useInitialMode } from '@/lib/permissionMode'
@@ -148,6 +148,7 @@ export const DEFAULT_MODELS: Record<SpawnAgent, string> = {
   gemini: GEMINI_MODELS[0]![0],
   codex: '',
   opencode: '',
+  grok: '',
 }
 
 export function SpawnDialog({
@@ -178,13 +179,15 @@ export function SpawnDialog({
   const [agent, setAgent] = useAgentChoice(agents)
   const [cwd, setCwd] = useState(initialCwd)
   const [models, setModels] = useState<Record<SpawnAgent, string>>(DEFAULT_MODELS)
-  const model = models[agent]
+  const model = models[agent] ?? ''
   const setModel = (v: string) => setModels((m) => ({ ...m, [agent]: v }))
   // Opens on the Settings preference when one is set (New sessions).
   const [mode, setMode, rememberMode] = useInitialMode(DEFAULT_MODE)
-  // Codex keeps its own model catalog on disk; the daemon reads it so the
-  // list is the one Codex itself offers this account, not one written here.
-  const codexModels = useApi(() => (agent === 'codex' ? api.agentModels('codex') : Promise.resolve(undefined)), [agent], { live: false })
+  // Codex, OpenCode and Grok keep their own model lists on disk; the daemon
+  // reads them (GET /v1/agents/catalog) so the list is the one each agent
+  // itself offers this account, not one written here.
+  const { entries } = useAgentCatalog()
+  const entry = entries.find((e) => e.id === agent)
   // Which OpenCode is installed decides what a mode becomes in it.
   const status = useApi(() => api.status(), [], { live: false })
   const notes = modeNotes(agent, status.data?.opencode_version)
@@ -264,7 +267,7 @@ export function SpawnDialog({
                   agent={agent}
                   value={model}
                   onChange={setModel}
-                  codex={codexModels.data}
+                  entry={entry}
                 />
               </Field>
               {/* Every agent covers the same ground with its own words, and
@@ -330,19 +333,21 @@ export function SpawnDialog({
 }
 
 /** The model control for one agent. Claude Code and Gemini get a checked list;
- *  Codex its own catalog, with its configured default first; OpenCode a field,
- *  because its models are whatever providers the user set up, written
- *  provider/model. Empty means "what your own config says". */
+ *  every other agent the list its own files hold (`GET /v1/agents/catalog`:
+ *  Codex's catalog, the models of the providers connected to OpenCode, Grok's
+ *  cached list, a custom agent's own), with its configured default first; a
+ *  field to type in when there is no list. Empty means "what your own config
+ *  says". */
 export function ModelField({
   agent,
   value,
   onChange,
-  codex,
+  entry,
 }: {
   agent: SpawnAgent
   value: string
   onChange: (v: string) => void
-  codex?: { default?: string; models: { id: string; label: string }[] }
+  entry?: CatalogEntry
 }) {
   if (agent === 'claude' || agent === 'gemini') {
     return (
@@ -351,26 +356,42 @@ export function ModelField({
       </select>
     )
   }
-  if (agent === 'codex') {
-    const listed = codex?.models ?? []
+  const options = listedModels(agent, entry)
+  if (options.length > 1) {
     return (
       <select className="input" value={value} onChange={(e) => onChange(e.target.value)}>
         {/* Short enough for the New agent sheet's half-width column: the
           * longer "· your Codex default" was cut off there (owner, 2026-10-09). */}
-        <option value="">{codex?.default ? `${codex.default} (default)` : 'Codex default'}</option>
-        {listed.filter((m) => m.id !== codex?.default).map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+        {options.map(([v, label]) => <option key={v || 'default'} value={v}>{label}</option>)}
+        {value && !options.some(([v]) => v === value) && <option value={value}>{value}</option>}
       </select>
     )
   }
   return (
     <input
       className="input"
-      placeholder="your OpenCode default"
+      placeholder={`your ${shortAgentName(agent, entry)} default`}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       spellCheck={false}
     />
   )
+}
+
+/** An agent's name, short: "Codex", "OpenCode", a custom agent's own. */
+export function shortAgentName(agent: SpawnAgent, entry?: CatalogEntry): string {
+  return entry?.label ?? { claude: 'Claude', codex: 'Codex', opencode: 'OpenCode', gemini: 'Gemini', grok: 'Grok' }[agent as BuiltinAgent] ?? agent.replace(/^custom:/, '')
+}
+
+/** The models an agent's own files list, its default first, as [value, label];
+ *  "" is the agent's own default. Only the default when nothing is listed. */
+export function listedModels(agent: SpawnAgent, entry?: CatalogEntry): [value: string, label: string][] {
+  const def = entry?.default
+  const listed = entry?.models ?? []
+  return [
+    ['', def ? `${def} (default)` : `${shortAgentName(agent, entry)} default`],
+    ...listed.filter((m) => m.id !== def).map((m): [string, string] => [m.id, m.label]),
+  ]
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {

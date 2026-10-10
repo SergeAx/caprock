@@ -73,6 +73,18 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-10 — unreleased: project search, agents that say what they lack, Grok, custom agents
+
+New agent's Project field and Add a project search projects, recent folders
+and the repositories under the default folder (`GET /v1/browse/repos`).
+The agent pickers read `GET /v1/agents/catalog` (ADR-046): every agent,
+installed or not, with its models and the fix for what is missing, typed
+into a shell tab rather than run. OpenCode lists its connected providers'
+models or says none is connected. Grok Build is a sixth agent, started but
+not observed (23-grok.md). Custom agents are Premium, gated on the server.
+Not built: reading Grok's sessions (no sourced prices), resuming Grok or a
+custom agent from the session screen.
+
 ### 2026-10-10 — 0.98.1: voice mode can use the microphone on macOS
 
 The app and its daemon are signed with the audio-input entitlement and the

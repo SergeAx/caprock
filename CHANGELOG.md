@@ -7,6 +7,43 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Added
+
+- **Find a project by typing a few letters.** New agent's Project field is
+  now a search that opens with the cursor in it: type any part of a name
+  ("capr") and pick from the projects you added, the folders you worked in
+  recently and the git repositories under your default folder (two levels
+  deep). The matched letters are bold; ↑↓ and Enter pick, Esc closes the
+  list. The current project is first, so Enter, Enter still starts at once.
+  Picking a repository that is not a project yet adds it and selects it.
+- **Add a project suggests as you type.** Typing in the Folder field lists
+  the same matches live; *no such folder* appears only when nothing matches,
+  and then with the nearest names (*Did you mean ~/dev/caprock-web?*), one
+  click from being filled in.
+- **Grok.** xAI's Grok Build CLI (`grok`) starts from New agent and Quick
+  chat like the other agents, with its own models, permission modes and
+  your project's instructions. Caprock keeps its sessions in your list but
+  does not read their turns or cost yet.
+- **Agents that are not set up say how to set them up.** New agent lists
+  the agents that are not installed after the others, never picked for you;
+  choose one to see its official install command, with *Install in a shell
+  tab* (the command is typed into a new shell, not run), Copy and its docs.
+  Quick chat names them under its list.
+- **Custom agents (Premium).** Settings → *Custom agents* adds any terminal
+  coding agent by name, command and arguments, with `{prompt}` and `{model}`
+  where the first message and the model go. It appears in New agent and
+  Quick chat and opens in a tab.
+
+### Fixed
+
+- **OpenCode no longer offers an empty model list.** It lists the models of
+  the providers you connected (a key in your shell, `opencode auth login`, or
+  its config); with none, it says so and offers *Connect a provider*.
+- **Gemini CLI and Codex installed with npm under nvm, Volta or a custom
+  prefix are found** even when the login shell's PATH does not carry them.
+  Gemini CLI was never a paid feature: when its binary is not found it is
+  now listed with its install command instead of being hidden.
+
 ## [0.98.1] - 2026-10-10
 
 ### Fixed

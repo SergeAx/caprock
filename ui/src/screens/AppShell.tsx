@@ -429,6 +429,26 @@ export function AppShell() {
     }
   }, [sessionsById, refresh])
 
+  /**
+   * An agent's install or sign-in (ADR-046): a shell tab in the home folder —
+   * or the current project, when the daemon did not say where home is — with
+   * the command typed at the prompt and not run. The user reads it and
+   * presses Enter.
+   */
+  const setupAgent = useCallback(async (command: string, home?: string) => {
+    const p = projectsById.get(activeProjectId)
+    const cwd = home || p?.root
+    if (!cwd) { setToast(`Run this in a terminal: ${command}`); return }
+    try {
+      const shell = await projectsApi.startShell({ cwd, cols: 120, rows: 32, type: command })
+      openTab({ kind: 'shell', sessionId: shell.id }, p?.id ?? activeProjectId, 'setup')
+      refresh()
+    } catch (e) {
+      setToast(`Could not open a shell: ${errText(e)}. Run this in a terminal: ${command}`)
+    }
+  }, [projectsById, activeProjectId, openTab, refresh])
+  const onSetupAgent = useCallback((command: string, home?: string) => { void setupAgent(command, home) }, [setupAgent])
+
   const onNewAgent = useCallback((projectId?: string, cwd?: string) => setSheet({ kind: 'agent', projectId: projectId ?? activeProjectId, cwd }), [activeProjectId])
   const onNewShell = useCallback((projectId?: string, cwd?: string) => { void newShell(projectId, cwd) }, [newShell])
   const onAddProject = useCallback(() => setSheet({ kind: 'project' }), [])
@@ -1017,6 +1037,8 @@ export function AppShell() {
           prompt={sheet.prompt}
           worktree={sheet.worktree}
           onClose={() => setSheet(null)}
+          onSetup={onSetupAgent}
+          onProjectAdded={() => refresh()}
           onStarted={(id, projectId, title) => { openTab({ kind: 'session', sessionId: id }, projectId, title); data.refresh() }}
         />
       )}
@@ -1024,12 +1046,14 @@ export function AppShell() {
         <QuickChatSheet
           agents={spawnable}
           onClose={closeSheet}
+          onSetup={onSetupAgent}
           onStart={(c) => { setSheet(null); void startQuickChat(c) }}
         />
       )}
       {sheet?.kind === 'project' && (
         <AddProjectSheet
           source={data.source}
+          projects={model.projects.map((n) => n.project)}
           ops={data.ops}
           onClose={closeSheet}
           onAdded={onProjectAdded}

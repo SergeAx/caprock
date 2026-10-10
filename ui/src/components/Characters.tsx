@@ -145,6 +145,9 @@ export function agentName(agent: string): string {
     case 'opencode': return 'OpenCode'
     case 'gemini': return 'Gemini CLI'
     case 'deepseek': return 'DeepSeek'
-    default: return agent
+    case 'grok': return 'Grok'
+    // A custom agent's session carries its id (ADR-046); its name lives in
+    // the config, so the id stands in where only the session is at hand.
+    default: return agent.replace(/^custom:/, '')
   }
 }

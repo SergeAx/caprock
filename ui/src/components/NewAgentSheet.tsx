@@ -5,7 +5,11 @@
  * dashboard's dialog and the phone use; the tab opens on success.
  *
  * Filled entirely from the keyboard (owner, 2026-10-07): focus opens on the
- * first message; Tab and ⇧Tab walk Project, Where, Agent, Model, Permissions,
+ * Project search (owner, 2026-10-10: a native select had no search), with the
+ * current project first, so Enter keeps it and a second Enter starts; typing
+ * finds a project, a recent folder or a repository under the default folder,
+ * and picking one that is not a project yet adds it (ProjectSearch.tsx).
+ * Tab and ⇧Tab walk Project, Where, Agent, Model, Permissions,
  * First message, Cancel, Start in that order; ↑ and ↓ change a select in
  * place; ⌘↩ starts from anywhere in the sheet, the buttons included; Esc
  * cancels. The keys are named in the footer and on Start itself.
@@ -18,11 +22,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, errText } from '@/lib/api'
 import { useApi } from '@/lib/useApi'
-import { AgentPicker, spawnableAgents, useAgentChoice } from './AgentPicker'
+import { AgentPicker, isCustomAgent, startable, useAgentCatalog, useAgentChoice } from './AgentPicker'
+import { AgentObservedNote, AgentSetupNote } from './AgentSetup'
 import { DEFAULT_MODE, DEFAULT_MODELS, GEMINI_MAPPED, ModelField, modeNotes, modeOptions } from './SpawnDialog'
 import { useInitialMode } from '@/lib/permissionMode'
 import type { SpawnAgent } from './AgentPicker'
-import type { Project } from '@/lib/projects'
+import { projectsApi, type Project } from '@/lib/projects'
+import { ProjectCombobox } from './ProjectSearch'
+import type { Candidate } from '@/lib/projectSearch'
 import { ProjectInstructions } from './ProjectInstructions'
 import { Sheet, SheetButton, SheetField } from './Sheet'
 import { stepSelect } from '@/lib/selectKeys'
@@ -48,6 +55,8 @@ export function NewAgentSheet({
   prompt: initialPrompt = '',
   worktree: initialWorktree,
   onClose,
+  onSetup,
+  onProjectAdded,
   onStarted,
 }: {
   projects: Project[]
@@ -59,14 +68,31 @@ export function NewAgentSheet({
   /** A new worktree's name, proposed: the sheet opens on "New worktree…" with it filled in. */
   worktree?: string
   onClose: () => void
+  /** Opens a shell tab in `home` with an agent's install or sign-in typed, not run (ADR-046). */
+  onSetup?: (command: string, home?: string) => void
+  /** A repository picked in the search was added as a project. */
+  onProjectAdded?: (projectId: string) => void
   onStarted: (sessionId: string, projectId: string, title: string) => void
 }) {
+  // Which OpenCode is installed decides what a mode becomes in it.
   const status = useApi(() => api.status(), [], { live: false })
-  const agents = useMemo(() => spawnableAgents(status.data), [status.data])
-  const checking = !status.data && !status.error
+  // Every agent Caprock knows, installed or not (ADR-046): the ones that can
+  // start are the choices, and the rest are listed after them so the way to
+  // set one up is a pick away.
+  const catalog = useAgentCatalog()
+  const agents = useMemo(() => startable(catalog.entries), [catalog.entries])
+  const checking = !catalog.loaded
   const [agent, setAgent] = useAgentChoice(agents)
+  const entry = catalog.entries.find((e) => e.id === agent)
+  const canStart = entry ? entry.installed && !entry.locked : agents.includes(agent)
+  const custom = isCustomAgent(agent)
   const [pid, setPid] = useState(projectId ?? projects[0]?.id ?? '')
-  const project = projects.find((p) => p.id === pid)
+  // Projects added from the search while the sheet is open, until the
+  // caller's list catches up.
+  const [added, setAdded] = useState<Project[]>([])
+  const [adding, setAdding] = useState(false)
+  const allProjects = useMemo(() => [...projects, ...added.filter((a) => !projects.some((p) => p.id === a.id))], [projects, added])
+  const project = allProjects.find((p) => p.id === pid)
   const worktrees = useMemo(() => (project?.worktrees ?? []).filter((w) => w.path !== project?.root), [project])
   const [where, setWhere] = useState(initialWorktree ? NEW_WORKTREE : initialCwd && initialCwd !== project?.root ? initialCwd : '')
   const [newBranch, setNewBranch] = useState(initialWorktree ?? '')
@@ -79,7 +105,6 @@ export function NewAgentSheet({
   // The name is optional: left empty, it comes from the first message.
   const worktreeName = newBranch.trim() || defaultWorktreeName(prompt)
   const nameBad = !!newBranch.trim() && !WORKTREE_NAME.test(newBranch.trim())
-  const codexModels = useApi(() => (agent === 'codex' ? api.agentModels('codex') : Promise.resolve(undefined)), [agent], { live: false })
 
   // ⌘↩ from anywhere in the sheet — a select, the footer's buttons — not only
   // from the fields' grid. A ref keeps the listener on the latest state.
@@ -104,8 +129,10 @@ export function NewAgentSheet({
       if (consent.needed) await consent.accept()
       const req: Parameters<typeof api.spawn>[0] = { cwd: where && where !== NEW_WORKTREE ? where : project.root }
       if (agent !== 'claude') req.agent = agent
-      if (models[agent]?.trim()) req.model = models[agent].trim()
-      if (mode) req.permission_mode = mode
+      const model = models[agent]?.trim()
+      if (model) req.model = model
+      // A custom agent's flags are its own; Caprock maps no mode onto them.
+      if (mode && !custom) req.permission_mode = mode
       if (where === NEW_WORKTREE) req.worktree = worktreeName
       if (prompt.trim()) req.prompt = prompt.trim()
       const { session_id } = await api.spawn(req)
@@ -119,7 +146,27 @@ export function NewAgentSheet({
     }
   }
 
-  startRef.current = () => { if (!busy && agents.length > 0) void start() }
+  // A pick from the project search: a project is chosen; a recent folder or a
+  // repository under the default folder is added first, then chosen.
+  const pickProject = async (c: Candidate) => {
+    setError('')
+    if (c.projectId) { setPid(c.projectId); setWhere(''); return }
+    setAdding(true)
+    try {
+      const res = await projectsApi.add({ path: c.path })
+      if (!('project' in res)) return
+      setAdded((cur) => [...cur, res.project])
+      setPid(res.project.id)
+      setWhere('')
+      onProjectAdded?.(res.project.id)
+    } catch (e) {
+      setError(`Could not add ${c.name}: ${errText(e)}`)
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  startRef.current = () => { if (!busy && !adding && canStart) void start() }
   const startKey = isMacPlatform() ? '⌘↩' : 'Ctrl+↵'
 
   return (
@@ -139,7 +186,7 @@ export function NewAgentSheet({
           <SheetButton onClick={onClose}>Cancel</SheetButton>
           <SheetButton
             primary
-            disabled={busy || agents.length === 0}
+            disabled={busy || !canStart}
             onClick={() => void start()}
             aria-keyshortcuts={isMacPlatform() ? 'Meta+Enter' : 'Control+Enter'}
             title={`Start (${startKey})`}
@@ -155,18 +202,17 @@ export function NewAgentSheet({
     >
       {checking ? (
         <div className="h-[320px]" />
-      ) : agents.length === 0 ? (
+      ) : catalog.entries.length === 0 ? (
         <p className="px-5 py-5 text-[13px] text-fg-muted">
-          No agent Caprock can start was found on this machine — not <span className="mono">claude</span>, <span className="mono">codex</span>, <span className="mono">opencode</span> or <span className="mono">gemini</span>.
+          No agent Caprock can start was found on this machine — not <span className="mono">claude</span>, <span className="mono">codex</span>, <span className="mono">opencode</span>, <span className="mono">gemini</span> or <span className="mono">grok</span>.
         </p>
       ) : (
         <div className="grid gap-4 px-5 py-4" onKeyDown={(e) => { stepSelect(e) }}>
           <div className="grid grid-cols-2 gap-3">
-            <SheetField label="Project">
-              <select className="input" value={pid} onChange={(e) => { setPid(e.target.value); setWhere('') }}>
-                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </SheetField>
+            <div className="grid min-w-0 gap-1.5">
+              <span className="text-[12px] font-medium text-fg-muted">Project</span>
+              <ProjectCombobox projects={allProjects} value={pid} busy={adding} autoFocus onPick={(c) => void pickProject(c)} onSubmit={() => startRef.current()} />
+            </div>
             <SheetField label="Where">
               <select className="input" title={WHERE_TOOLTIP} value={where} onChange={(e) => setWhere(e.target.value)}>
                 <option value="">{project?.branch ? `This folder · ${project.branch}` : 'This folder'}</option>
@@ -190,12 +236,19 @@ export function NewAgentSheet({
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
-            {agents.length > 1 ? <AgentPicker value={agent} agents={agents} onChange={setAgent} /> : <div />}
-            <SheetField label="Model">
-              <ModelField agent={agent} value={models[agent]} onChange={(v) => setModels((m) => ({ ...m, [agent]: v }))} codex={codexModels.data} />
-            </SheetField>
+            {catalog.entries.length > 1 ? <AgentPicker value={agent} agents={agents} entries={catalog.entries} onChange={setAgent} /> : <div />}
+            {canStart && (
+              <SheetField label="Model">
+                <ModelField agent={agent} value={models[agent] ?? ''} onChange={(v) => setModels((m) => ({ ...m, [agent]: v }))} entry={entry} />
+              </SheetField>
+            )}
           </div>
-          <SheetField label="Permissions" hint="kept for the next agent">
+          {entry?.setup && <AgentSetupNote entry={entry} onSetup={onSetup && ((cmd) => { onSetup(cmd, catalog.home); onClose() })} />}
+          {entry?.locked && (
+            <p role="note" className="text-[12.5px] text-fg-muted">Custom agents are a Premium feature; add a licence key in Settings → Plan &amp; licence to start {entry.label}.</p>
+          )}
+          {canStart && <AgentObservedNote entry={entry} />}
+          {canStart && !custom && <SheetField label="Permissions" hint="kept for the next agent">
             <select className="input" value={mode} onChange={(e) => setMode(e.target.value)}>
               {modeOptions(mode).map(([v, label]) => (
                 <option key={v} value={v}>
@@ -203,13 +256,12 @@ export function NewAgentSheet({
                 </option>
               ))}
             </select>
-          </SheetField>
+          </SheetField>}
           {consent.needed && <BypassConsentNote />}
-          {project && (agent === 'claude' || agent === 'codex') && <ProjectInstructions key={project.id} project={project} />}
-          <SheetField label="First message" hint="optional">
+          {project && (agent === 'claude' || agent === 'codex' || agent === 'grok') && <ProjectInstructions key={project.id} project={project} />}
+          <SheetField label="First message" hint={entry && !entry.prompt ? "not sent: this agent's arguments have no {prompt}" : 'optional'}>
             <textarea
               className="input min-h-[84px] resize-y font-[family-name:var(--font-sans)] text-[13px] leading-relaxed"
-              autoFocus
               placeholder="What should it do?"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}

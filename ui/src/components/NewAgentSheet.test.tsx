@@ -11,6 +11,7 @@ const spawn = vi.fn(async (_req: unknown) => ({ session_id: 'new-1', cwd: '/w/ap
 const acceptBypass = vi.fn(async () => ({ accepted: true }))
 const status = { accepted: undefined as boolean | undefined, opencode: undefined as string | undefined }
 const saved: unknown[] = []
+const catalogExtra = vi.hoisted(() => ({ agents: [] as unknown[] }))
 vi.mock('@/lib/api', async (orig) => {
   const actual = await orig<typeof import('@/lib/api')>()
   return {
@@ -18,12 +19,28 @@ vi.mock('@/lib/api', async (orig) => {
     api: {
       ...actual.api,
       status: async () => ({ version: 'v0.0.0', claude_available: true, claude_bypass_accepted: status.accepted, opencode_available: status.opencode !== undefined, opencode_version: status.opencode || undefined }),
+      agentCatalog: async () => ({
+        licensed: false,
+        home: '/h',
+        agents: [
+          { id: 'claude', label: 'Claude Code', installed: true, ready: true, models: [], observed: true, prompt: true },
+          ...(status.opencode !== undefined ? [{ id: 'opencode', label: 'OpenCode', installed: true, ready: true, models: [], observed: true, prompt: true }] : []),
+          ...catalogExtra.agents,
+        ],
+      }),
       settings: async () => ({}),
       saveSettings: async (s: unknown) => { saved.push(s); return s },
       spawn: (req: unknown) => spawn(req),
       acceptBypass: () => acceptBypass(),
+      recentDirs: async () => [],
+      localRepos: async () => ({ root: '/w', home: '/h', scanned_at: 0, repos: [{ name: 'caprock-web', path: '/w/caprock-web' }] }),
     },
   }
+})
+const addProject = vi.fn(async (req: { path: string }) => ({ project: { id: '9', root: req.path, name: 'caprock-web', kind: 'repo' }, created: true }))
+vi.mock('@/lib/projects', async (orig) => {
+  const actual = await orig<typeof import('@/lib/projects')>()
+  return { ...actual, projectsApi: { ...actual.projectsApi, add: (req: { path: string }) => addProject(req) } }
 })
 
 import { NewAgentSheet } from './NewAgentSheet'
@@ -64,9 +81,6 @@ describe('the New agent sheet on the keyboard', () => {
     // At the top it stays.
     fireEvent.keyDown(model, { key: 'ArrowUp' })
     expect(model.value).toBe('claude-fable-5-1')
-    const project = screen.getByLabelText<HTMLSelectElement>('Project')
-    fireEvent.keyDown(project, { key: 'ArrowDown' })
-    expect(project.value).toBe('2')
   })
 
   it('starts with ⌘↩ from a select and from the footer, with what was chosen', async () => {
@@ -86,23 +100,25 @@ describe('the New agent sheet on the keyboard', () => {
     await waitFor(() => expect(spawn).toHaveBeenCalledOnce())
   })
 
-  it('cancels with Esc', async () => {
+  it('cancels with Esc: the first closes the project list it opens on, the second the sheet', async () => {
     const { onClose } = open()
     await screen.findByLabelText('Model')
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    expect(onClose).not.toHaveBeenCalled()
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
     expect(onClose).toHaveBeenCalled()
     expect(spawn).not.toHaveBeenCalled()
   })
 
-  it('opens on the first message, and its fields come in the stated Tab order', async () => {
+  it('opens on the project search, and its fields come in the stated Tab order', async () => {
     open()
     await screen.findByLabelText('Model')
-    expect(document.activeElement).toBe(screen.getByPlaceholderText('What should it do?'))
+    expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Project' }))
     const order = Array.from(document.querySelectorAll<HTMLElement>('select, textarea, input, button'))
       .filter((el) => !el.hasAttribute('disabled'))
       // A button's name without its key badge, which is aria-hidden.
       .map((el) => el.getAttribute('aria-label') || (el.closest('label')?.querySelector('span')?.firstChild?.textContent ?? el.firstChild?.textContent ?? '').trim())
-    // The sheet's × comes first, in its header; the first message still has the caret.
+    // The sheet's × comes first, in its header; the project search has the caret.
     expect(order).toEqual(['Close', 'Project', 'Where', 'Model', 'Permissions', 'Add', 'First message', 'Cancel', 'Start'])
   })
 })
@@ -285,6 +301,7 @@ describe('focus stays where the person put it', () => {
       const props = () => ({ projects: projects.map((p) => ({ ...p })), projectId: '1', onClose: () => {}, onStarted: () => {} })
       const { rerender } = render(<NewAgentSheet {...props()} />)
       const message = await screen.findByPlaceholderText<HTMLTextAreaElement>('What should it do?')
+      message.focus()
       expect(document.activeElement).toBe(message)
       fireEvent.change(message, { target: { value: 'Fix the' } })
       // A poll tick: same data, new identities, as AppShell passes them.
@@ -334,5 +351,75 @@ describe('the New agent sheet with OpenCode', () => {
     await pickOpenCode()
     await waitFor(async () => expect(await labels()).toContain("Bypass · approves all it doesn't deny"))
     expect(await labels()).toContain("Plan · OpenCode's plan agent")
+  })
+})
+
+/** The Project field is a search (owner, 2026-10-10: a native select had none). */
+describe('the project search', () => {
+  it('keeps the current project on Enter, and a second Enter starts', async () => {
+    open()
+    const search = await screen.findByRole('combobox', { name: 'Project' })
+    expect(document.activeElement).toBe(search)
+    await screen.findByRole('option', { name: /app/ })
+    fireEvent.keyDown(search, { key: 'Enter' })
+    expect(screen.queryByRole('listbox')).toBeNull()
+    fireEvent.keyDown(search, { key: 'Enter' })
+    await waitFor(() => expect(spawn).toHaveBeenCalledOnce())
+    expect(spawn.mock.calls[0]![0]).toMatchObject({ cwd: '/w/app' })
+  })
+
+  it('finds another project by a few letters, and Esc closes the list before the sheet', async () => {
+    const { onClose } = open()
+    const search = await screen.findByRole('combobox', { name: 'Project' })
+    fireEvent.change(search, { target: { value: 'si' } })
+    expect(screen.getAllByRole('option')[0]!.textContent).toContain('site')
+    fireEvent.keyDown(search, { key: 'Escape' })
+    expect(onClose).not.toHaveBeenCalled()
+    fireEvent.change(search, { target: { value: 'si' } })
+    fireEvent.keyDown(search, { key: 'Enter' })
+    expect((search as HTMLInputElement).value).toBe('site')
+    fireEvent.keyDown(search, { key: 'Enter', metaKey: true })
+    await waitFor(() => expect(spawn).toHaveBeenCalledOnce())
+    expect(spawn.mock.calls[0]![0]).toMatchObject({ cwd: '/w/site' })
+  })
+
+  it('adds a repository under the default folder when it is picked, and starts there', async () => {
+    addProject.mockClear()
+    open()
+    const search = await screen.findByRole('combobox', { name: 'Project' })
+    fireEvent.change(search, { target: { value: 'cpw' } })
+    const row = await screen.findByRole('option', { name: /caprock-web/ })
+    expect(row.textContent).toContain('repo · add')
+    fireEvent.keyDown(search, { key: 'Enter' })
+    await waitFor(() => expect(addProject).toHaveBeenCalledWith({ path: '/w/caprock-web' }))
+    await waitFor(() => expect((search as HTMLInputElement).value).toBe('caprock-web'))
+    fireEvent.keyDown(search, { key: 'Enter' })
+    await waitFor(() => expect(spawn).toHaveBeenCalledOnce())
+    expect(spawn.mock.calls[0]![0]).toMatchObject({ cwd: '/w/caprock-web' })
+  })
+})
+
+/** ADR-046: an agent that is not installed is listed, never the default, and
+ *  picking it shows how to install it instead of a model list. */
+describe('an agent that is not installed', () => {
+  it('is listed after the rest, and picking it offers the install in a shell tab', async () => {
+    catalogExtra.agents = [{ id: 'grok', label: 'Grok', installed: false, ready: false, models: [], observed: false, prompt: true, setup: { reason: 'not_installed', text: 'Grok is not installed on this machine.', command: 'curl -fsSL https://x.ai/cli/install.sh | bash', docs: 'https://docs.x.ai/build/overview' } }]
+    try {
+      const onSetup = vi.fn()
+      const onClose = vi.fn()
+      render(<NewAgentSheet projects={projects} projectId="1" onClose={onClose} onSetup={onSetup} onStarted={() => {}} />)
+      const picker = await screen.findByLabelText<HTMLSelectElement>('Agent')
+      expect(picker.value).toBe('claude')
+      expect(Array.from(picker.options).map((o) => o.textContent)).toEqual(['Claude Code', 'Grok · not installed'])
+      fireEvent.change(picker, { target: { value: 'grok' } })
+      expect(screen.getByText('Grok is not installed on this machine.')).toBeInTheDocument()
+      expect(screen.queryByLabelText('Model')).toBeNull()
+      expect(screen.getByRole('button', { name: /^Start/ })).toBeDisabled()
+      fireEvent.click(screen.getByRole('button', { name: 'Install in a shell tab' }))
+      expect(onSetup).toHaveBeenCalledWith('curl -fsSL https://x.ai/cli/install.sh | bash', '/h')
+      expect(onClose).toHaveBeenCalled()
+    } finally {
+      catalogExtra.agents = []
+    }
   })
 })

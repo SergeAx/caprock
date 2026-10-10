@@ -335,10 +335,18 @@ and each flag exercised by starting the TUI with it:
 - **`--port <p>`** — the TUI runs its own server, and Caprock picks a free
   loopback port for it so it can learn the session id (below). `--hostname`
   defaults to `127.0.0.1` and is left alone.
-- **`-m provider/model`** — OpenCode's own syntax. The dialog takes it as typed;
-  empty sends nothing and the user's config decides. No list is offered:
-  `opencode models` fetches the catalog over the network, and the providers a
-  user has set up are theirs.
+- **`-m provider/model`** — OpenCode's own syntax. Empty sends nothing and
+  the user's config decides. Until 2026-10-10 no list was offered, because
+  `opencode models` fetches the catalog over the network; the picker then
+  showed *OpenCode default* alone, even with no provider connected (the
+  owner: "OpenCode there is empty"). Since ADR-046 the list is read from
+  OpenCode's own files, nothing run: the providers connected by a credential
+  (`auth.json`), the config's `provider`, or a catalog `env` variable set in
+  the login shell — the three sources `opencode providers list` shows — and
+  their models from the models.dev catalog OpenCode cached
+  (`~/.cache/opencode/models.json`). With none connected the picker says so
+  and offers `opencode auth login` (`auth` is `providers`' alias in 1.15.10)
+  typed into a shell tab.
 - **Permissions.** `plan` → `--agent plan`, OpenCode's built-in plan agent
   (`opencode agent list`: `edit` denied except plan files). `acceptEdits` →
   `OPENCODE_PERMISSION={"bash":"ask"}` in the child's environment — verified

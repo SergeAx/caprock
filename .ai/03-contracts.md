@@ -149,8 +149,8 @@ machine must carry a device token** ([ADR-029](08-decisions.md)).
   `devices.json` (absent = viewer, which every file written before roles
   reads as) and listed in `GET /v1/pair/state`. A controller may additionally
   make exactly the requests in `controllerRoutes` (`internal/api/lanauth.go`):
-  `POST /v1/agents`, `GET /v1/agents/models`, `GET /v1/recent-dirs`,
-  `GET /v1/browse` and `GET /v1/browse/stat` (rooted inside home, see below), `GET /v1/sessions/{id}/relay`, `GET /v1/agents/{id}/term`,
+  `POST /v1/agents`, `GET /v1/agents/models`, `GET /v1/agents/catalog`, `GET /v1/recent-dirs`,
+  `GET /v1/browse`, `GET /v1/browse/stat` and `GET /v1/browse/repos` (rooted inside home, see below), `GET /v1/sessions/{id}/relay`, `GET /v1/agents/{id}/term`,
   `POST /v1/agents/{id}/input`, `POST /v1/agents/{id}/signal`,
   `POST /v1/agents/{id}/permission`,
   `POST /v1/paste`, `POST /v1/tasks/{id}/approve` and `/reject`, and — to
@@ -841,6 +841,9 @@ machine, never from a forge's API (rule 4):
 ```
 POST   /v1/agents                    {cwd?, chat?, create?, worktree?, agent?, model?, permission_mode?, resume?, fork?, command?, args?} → {session_id, cwd}
 GET    /v1/agents/models?agent=      {agent, default?, models:[{id,label}]}
+GET    /v1/agents/catalog            → {agents: [CatalogEntry], licensed, home?}
+GET    /v1/agents/custom             → {agents: [CustomAgent], licensed}
+PUT    /v1/agents/custom             {agents: [CustomAgent]} → {agents, licensed}; 402 without an active licence
 POST   /v1/agents/{id}/input         {data}            → 204   (owned PTYs only)
 POST   /v1/agents/{id}/signal        {action: pause|resume|kill} → 204 (owned PTYs only)
 GET    /v1/agents/{id}/permission    → {permission: {id, tool, detail, always?, since, queued?, agent_id?, agent_type?, waiting?} | null}; the oldest prompt an owned session waits on, queued = how many more are outstanding, waiting = all of them when two or more
@@ -875,8 +878,9 @@ still on disk never brings it back. The cached aggregates are dropped, so the
 next read of any total is without it. `caprock sessions rm [ids…]
 [--cwd-prefix dir] [--yes]` calls it; without `--yes` it is a dry run.
 
-**`agent`** is `claude` (default), `codex`, `opencode` or `gemini`; any other
-value is a 400. `permission_mode` is always in Claude Code's words and each
+**`agent`** is `claude` (default), `codex`, `opencode`, `gemini`, `grok`
+(2026-10-10, [23-grok.md](23-grok.md)) or a custom agent, `custom:<id>`
+(below); any other value is a 400. `permission_mode` is always in Claude Code's words and each
 agent's argv builder translates or drops it (`internal/agents/argv.go`; the
 per-agent flags are in [19-codex.md](19-codex.md) and
 [16-opencode.md](16-opencode.md)). With `resume`, the agent is the stored
@@ -952,14 +956,63 @@ is sent anywhere by this call. Not open to paired devices.
 **`GET /v1/agents/models?agent=`** — the models an agent's own CLI lists. For
 `codex`: the `visibility: "list"` entries of `$CODEX_HOME/models_cache.json` in
 `priority` order, and `default` from the top-level `model` in `config.toml`.
-`claude`, `gemini` and `opencode` answer an empty list; an unknown agent is a
-400. No network I/O. Not open to paired devices (they cannot start sessions).
+`claude`, `gemini`, `opencode` and `grok` answer an empty list; an unknown
+agent is a 400. No network I/O. Kept for older pages; the pickers read the
+catalog below.
 
-**`/v1/status`** carries `codex_available` and `opencode_available` beside
-`claude_available` and `gemini_available`: the binary found on the daemon's
-PATH, the login shell's (once resolved — never waited for), or the installers'
-directories (`~/.local/bin`, `~/bin`, `/opt/homebrew/bin`, `/usr/local/bin`,
-`~/.opencode/bin`). `opencode_version` (`"2.0.26"`, omitted while unknown) is
+**`GET /v1/agents/catalog`** — every agent the pickers offer, installed or not
+([ADR-046](08-decisions.md)), in their order: Claude Code, Codex, OpenCode,
+Gemini CLI, Grok, then the custom agents. A `CatalogEntry` is `{id, label,
+installed, ready, default?, models: [{id, label}], typed_model?, observed,
+custom?, locked?, prompt, setup?: {reason, text, command?, docs?}}`:
+`installed` is the binary found (the rule under `/v1/status` below); `ready`
+is installed with nothing Caprock can see missing; `models` are what the
+agent's own files list — Codex's `models_cache.json` (as above), the models
+of the providers connected to OpenCode (`provider/model` ids, at most 300,
+from `<cache>/opencode/models.json`; a provider is connected by a credential
+in `<data>/opencode/auth.json`, an entry in its config's `provider`, or one of
+its catalog `env` variables set in the login shell; `default` is the config's
+`model`; JSONC accepted), Grok's `models_cache.json` (hidden ones left out), a
+custom agent's own list — and empty for Claude Code and Gemini CLI, whose
+checked lists the page keeps. `observed` is false for Grok and custom agents
+(Caprock does not read their sessions). `prompt` is false for a custom agent
+whose arguments have no `{prompt}`. `setup.reason` is `not_installed` (with
+the official install command and docs page), `no_provider` (OpenCode, `opencode
+auth login`) or `signin` (Grok without `auth.json` or `XAI_API_KEY`, `grok
+login`; a hint — the session still starts). `locked` marks a custom agent the
+licence no longer covers. `licensed` is the licence state; `home` the folder a
+setup shell opens in. Reads files and the login environment only: nothing is
+run and nothing goes over the network. Open to a controller phone (read-only,
+like the model list).
+
+**Custom agents** (Premium, ADR-046). A `CustomAgent` is `{id, name,
+command, args?, models?}`, stored as `custom_agents` in `config.json`.
+`PUT /v1/agents/custom` replaces the list: `402` without an active licence,
+`403` from any paired device, `400` with the reason when a name or command is
+missing, the command holds a space but no path separator (arguments belong in
+`args`), a field holds a line break or control character or is over 512
+bytes, two ids collide, or there are more than 20 agents, 32 arguments or 50
+models. `id` is made from the name when absent (`aider-local`), lowercase
+letters, digits and dashes, at most 32; one that names a built-in agent gets
+`-custom`. `args` is a template: `{prompt}` is the first message and
+`{model}` the model; an argument whose placeholder has no value is left out,
+and so is the flag right before it when the argument was the placeholder
+alone. A spawn with `agent: "custom:<id>"` is refused without an active
+licence, for an id not in the config, for a command not found (resolved like
+an agent's binary), and from any paired device; otherwise the daemon starts
+the configured command with the filled arguments — the request never carries
+the command — and drops `model`, `permission_mode` and `fork`, which it cannot
+map. A custom session is recorded with `agent = "custom:<id>"`; resume is not
+offered. `GET /v1/agents/custom` lists the stored agents whatever the licence
+says, so a renewed licence restores them.
+
+**`/v1/status`** carries `codex_available`, `opencode_available` and
+`grok_available` beside `claude_available` and `gemini_available`: the binary
+found on the daemon's PATH, the login shell's (once resolved — never waited
+for), or the installers' directories (`~/.local/bin`, `~/bin`,
+`/opt/homebrew/bin`, `/usr/local/bin`, `~/.opencode/bin`, `~/.grok/bin`, and
+for an npm-installed CLI `~/.npm-global/bin`, `~/.volta/bin`, `~/.bun/bin` and
+each nvm Node version's `bin`, newest first). `opencode_version` (`"2.0.26"`, omitted while unknown) is
 what that binary's `--version` answered, asked in the background and cached
 per file; OpenCode 1 and 2 are started with different flags, and the New agent
 sheet words the permission modes by it ([16-opencode.md](16-opencode.md)).
@@ -1187,9 +1240,13 @@ GET    /v1/shells?project=<id>             → {shells: [Shell]}; every running 
   trimmed, at most 16 KiB, no NUL. A Claude Code session Caprock starts in a
   folder inside the project (`projects.ProjectFor`, the longest root) gets
   `--append-system-prompt <text>`, a Codex one
-  `-c developer_instructions="<text>"` (quoted as TOML), on a start and a
-  resume; OpenCode and Gemini ignore it. `defaults` is replaced whole by a PATCH, so a client sends the
+  `-c developer_instructions="<text>"` (quoted as TOML), a Grok one
+  `--rules <text>`, on a start and a resume; OpenCode and Gemini ignore it. `defaults` is replaced whole by a PATCH, so a client sends the
   other keys back with it (`instructionsPatch`).
+- **`type`** on `POST /v1/shells` (ADR-046) is one line typed at the new
+  shell's prompt once the shell has drawn it and gone quiet, never followed by
+  Enter: an agent's install or sign-in command that the user reads and runs.
+  Anything from the first line break on is dropped; ignored with `replaces`.
 - **`replaces`** on `POST /v1/shells` names the session whose program exited
   and whose tab the shell takes over. Every window showing that tab asks; the
   first starts the shell and the rest get the same one while it runs. The map
@@ -2211,6 +2268,7 @@ No DDL change was needed for either fix here, only honest use of the existing co
   - **The notice.** A `notify` frame of kind `window` (§ Notify frame), and `GET /v1/window-stop`: `{pct, licensed, fresh_for_s, windows:[{window, used_percentage, resets_at, observed_at, fresh, stale?}], paused:[{session_id, project, title?, window, resume_at, paused_at}], last?:{kind, at, window?, used_percentage?, threshold_pct?, resume_at?, sessions}}` — `paused` lists only sessions still owned and still paused; `stale` says why a figure will not be acted on. Now shows a `window-stop` row naming the paused sessions and the reset in place of the plan-limit row, and on an install without a licence the plan-limit row offers the feature (`PremiumModal` feature `window`). Settings → *Pause at the plan limit* is the one control, behind `Locked` without a licence.
 - **`GET /v1/browse` lists directories for the folder picker, and is the one endpoint that reads the filesystem on a web page's behalf.** Starting a session required typing an absolute path from memory into a dashboard already showing the reader's repositories. Four rules make this a picker rather than a filesystem-read API: **only directories and only names** (no contents, no sizes); **rooted at `settings.browse_root`** (default `$HOME`), with **symlinks resolved before the containment check** so a link inside the root pointing out of it cannot smuggle a caller past the boundary; **dotfile directories are never listed** — `.ssh` and `.aws` are precisely what a prober wants, while `.git` is reported as a *property* of its parent (`repo: true`) rather than somewhere to descend into; and **"outside the root" and "does not exist" return the identical 404**, so the endpoint cannot be used as an existence oracle for paths the caller may not see. Listings are capped at 500 entries with `X-Caprock-Truncated` set rather than silently cut. Repositories sort first because a repository is what is being looked for. `GET /v1/recent-dirs` is the other half and touches no filesystem beyond an existence check: it lists directories from the `sessions` table, newest first, grouped by repository root where one is known, and omits any that no longer exist — a picker offering a dead path spawns a session that fails. It also omits the filesystem root, the home directory itself and the temp directory itself (`store.NotAProject`): on the owner's Mac a background `claude` opened in "/" every ten minutes and held the top of the list. Since 2026-10-09 it also leaves out anything under a temp directory (`/tmp`, `/private/tmp`, `/var/folders`, `os.TempDir()`), under Caprock's data directory (quick chats live in its `chats/`) and under a `.claude/worktrees/` folder, reading up to 40 directories to fill its 8.
 - **`GET /v1/browse/stat?path=` says what a typed path is**, for the Add project sheet's line under its folder field ("exists — not empty, clone will fail", "will be created", "already in Caprock"). → `{path, exists, is_dir, empty, parent_exists, guarded?, project_id?, project_name?}`: `path` absolute, a leading `~` expanded, cleaned; `empty` counts hidden files (git refuses a folder holding a `.DS_Store`); `parent_exists` says one level can be made there; `project_id` is the listed project adding the path would return (its root, or the repository it lies in). Held to the browse rules: the same root (a device's rooted inside home), the nearest existing part of the path resolved through symlinks before the containment check, and the browse `404` for a relative path or anything outside the root, whether or not it exists there. A path in a place macOS guards (`tcc.Guarded`: Documents, Music, a volume…) is answered `{path, guarded: true}` without being read. A controller may ask it, as it may browse.
+- **`GET /v1/browse/repos` lists the git repositories under the default folder**, for the project search in New agent and Add a project (2026-10-10). → `{root, home?, scanned_at, truncated?, repos: [{name, path}]}`: `root` is `settings.default_folder` (`~` expanded) when it resolves inside the browse root, otherwise the browse root itself (a device's is rooted inside home); `home` lets the page write `~/dev/x`. A repository is a directory holding `.git`, one or two levels below `root`; one is never descended into, and hidden directories, `node_modules` and places macOS guards (`tcc.Guarded`) are skipped — a guarded `root` answers an empty list without reading it. Names and paths only, as `/v1/browse`. At most 1000 repositories from at most 4000 directories opened (`truncated: true` past either). The answer is cached per root for 60 s and a stale one is served while a background rescan runs, so only a sheet's first open on a daemon waits for a scan. The page searches the answer itself; it never walks the disk.
 - **The weekly report states what changed, not what happened.** It is sold on the promise of the repository that cost 3× its usual week and of last week against the one before it, per repository and model — so it must ship as a comparison against the preceding period, not as a digest of the current one. This is not a presentation choice: five readers were shown a digest-shaped description of it and every one of them concluded they would be paying for delivery of figures the free dashboard already shows (FB-027). A digest is a notification; what moved is the thing a week of data can say and a live screen cannot.
 - **`/v1/history` and the wide ranges of `/v1/stats/summary` are cached, with single-flight and stale-while-revalidate** (`internal/api/answercache.go`). Both answer from aggregates over the whole events table — on the owner's 1 GB, 333k-event database `/v1/history?range=all` is ~1.5s and `/v1/stats/summary?range=all` ~1.0s through the Go driver, and 4.7s and 1.5s under a live dashboard (2026-10-04) — and they are asked for in bursts: **five components on the main screen request history on their own timers**, and the share dialog asks for its period's summary (or all-time history) beside the glance. Requests for the same key that arrive while one is in flight wait for it and share its result. A settled answer is served as it is for its TTL (`historyTTL` 3s, `summaryTTL` 10s); past that it is **still served at once and one background refresh replaces it**, so nobody waits on a whole-table scan once a key has been computed, and what is shown is at most one refresh behind. Past `answerMaxStale` (30 min) an answer is too old to present as current and the caller waits for a fresh one. The daemon computes history for all time and the 7d, 30d and all-time summaries in the background as it starts (`Server.Warm`), so the first screen after a restart finds them ready. **Today's summary is not cached** — it is ~40ms and is the figure people watch move — and neither are the burn rate, throttles and plan windows beside any range, which are read live on every request. Keys carry the range's resolved start as well as its label, so `today`, `7d` and `30d` become new keys at midnight rather than serving yesterday's answer; `?range=` and `?range=today` still share one entry. **Errors are never cached**, and a failed refresh keeps the stale answer. Computations run on a context detached from their first caller: browsers abandon requests routinely, and a caller hanging up must not take the answer away from the callers waiting behind it. Writes do not invalidate — ingest commits several times a second while anyone works, so an invalidated cache would be empty exactly when the screen is busiest. Measured on a copy of the owner's database with a writer committing every 200ms and the main screen's eleven requests fired at once: the slowest went from 3.6s to 0.09s (2026-10-04). `/v1/status` reads its stored-event count the same way, recounted in the background at most every 30 s: a `COUNT(*)` over 333k events is 600ms on a cold connection.
 - **Dated prices (migration-free, `pricing.json`).** A model may have more than one row. A superseded price keeps its own row carrying `until` — the last date it applied, inclusive, UTC — and the current price is the row with no `until`; rows for one id are ordered oldest-first. A turn is priced by `LookupAt`/`PriceAt` at **its own timestamp**, so a rate that has since lapsed still prices the turns that ran under it. Without this, the only way to record a price change is to overwrite the figure, which silently restates history at a price nobody was charged — an invented number (rule 6) about our own past. Sonnet 5 was the first case (introductory $2/$10 through 2026-08-30, $3/$15 announced from 2026-08-31) until the rise was cancelled; no row is dated today. A row whose `until` will not parse is treated as not applying, so an unparseable date falls through to the current price rather than pricing a turn at an expired one. Exactly one row per model id may omit `until`, and a test enforces it.

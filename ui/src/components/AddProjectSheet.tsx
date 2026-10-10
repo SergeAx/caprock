@@ -13,7 +13,7 @@
  * a folder browser; and the keys are on the buttons: ⌘↩ adds, Esc cancels,
  * ⌘1/⌘2/⌘3 the modes, ⌘B Browse ⇄ Recent (Ctrl off macOS).
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { INSTRUCTIONS_HINT } from './ProjectInstructions'
 import { api, errText, type BrowseStat, type Settings } from '@/lib/api'
 import { useApi } from '@/lib/useApi'
@@ -23,6 +23,10 @@ import { DirPicker, type PickerTab } from './DirPicker'
 import { RepoPicker } from './RepoPicker'
 import { folderName, instructionsPatch, newOpId, NotSupportedError, projectsApi, type AddProjectRequest, type LocalProject, type OpFrame, type ProjectSource } from '@/lib/projects'
 import { Sheet, SheetButton, SheetField } from './Sheet'
+import { CandidateList, useProjectCandidates } from './ProjectSearch'
+import { useEscapeToClose } from './Dialog'
+import { closest, queryOf, rankCandidates, tildePath, type Candidate } from '@/lib/projectSearch'
+import type { Project } from '@/lib/projects'
 
 type Mode = 'folder' | 'new' | 'clone'
 
@@ -85,6 +89,7 @@ export function defaultCandidate(mode: Mode, path: string): string {
 
 export function AddProjectSheet({
   source,
+  projects = [],
   defaultParent,
   ops = [],
   onClose,
@@ -92,6 +97,8 @@ export function AddProjectSheet({
   onAddLocal,
 }: {
   source: ProjectSource
+  /** The projects already added, for the search under the Folder field. */
+  projects?: readonly Project[]
   /** Where the sheet starts, in place of the default folder setting. */
   defaultParent?: string
   /** Clone progress from the `op` live frames. */
@@ -155,7 +162,30 @@ export function AddProjectSheet({
     }, 250)
     return () => { live = false; clearTimeout(t) }
   }, [mode, path])
-  const note = statWorthy(mode, path) ? targetNote(mode, stat) : null
+  // The search under the Folder field (owner, 2026-10-10): the last segment
+  // typed filters projects, recent folders and the repositories under the
+  // default folder. "no such folder" is said only when nothing matches, and
+  // then with the nearest names.
+  const { candidates, home } = useProjectCandidates(projects)
+  const query = mode === 'folder' ? queryOf(path) : ''
+  const typedAbs = path.trim().replace(/[\\/]+$/, '')
+  const matches = useMemo(() => {
+    if (!query) return []
+    const ranked = rankCandidates(query, candidates, 6, home)
+    // The folder already in the field is picked, not a match to offer.
+    return ranked.some((c) => tildePath(c.path, home) === typedAbs || c.path === typedAbs) ? [] : ranked
+  }, [query, candidates, home, typedAbs])
+  const [active, setActive] = useState(-1)
+  useEffect(() => { setActive(-1) }, [query])
+  // Esc lets go of a highlighted match before it closes the sheet.
+  useEscapeToClose(() => setActive(-1), active >= 0)
+  const suggestions = useMemo<Candidate[]>(() => (matches.length === 0 && query ? closest(query, candidates, 2) : []), [matches.length, query, candidates])
+  const pickMatch = (c: Candidate) => { editPath(tildePath(c.path, home)); setActive(-1); field.current?.focus() }
+  const rawNote = statWorthy(mode, path) ? targetNote(mode, stat) : null
+  const noSuchFolder = mode === 'folder' && !!stat && !stat.guarded && !stat.exists
+  const note = noSuchFolder && matches.length > 0
+    ? { text: `${matches.length === 1 ? 'one match' : `${matches.length} matches`} below · ↓ to pick`, tone: 'muted' as const }
+    : rawNote
 
   useEffect(() => {
     if (!op || op.state === 'running') return
@@ -185,7 +215,7 @@ export function AddProjectSheet({
   }
 
   const candidate = defaultCandidate(mode, path)
-  const showSetDefault = !!candidate && candidate !== base.replace(/[\\/]+$/, '') && source !== 'derived'
+  const showSetDefault = !!candidate && candidate !== base.replace(/[\\/]+$/, '') && source !== 'derived' && !(mode === 'folder' && stat && !stat.exists)
   const setAsDefault = async () => {
     try {
       await api.saveSettings({ default_folder: candidate } as Settings)
@@ -310,7 +340,19 @@ export function AddProjectSheet({
               placeholder={mode === 'clone' ? cloneDest('project', base) : `${withSlash(base)}${mode === 'new' ? 'new-project' : 'project'}`}
               value={path}
               onChange={(e) => editPath(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) void submit() }}
+              aria-controls="add-project-matches"
+              aria-activedescendant={active >= 0 ? `add-project-matches-${active}` : undefined}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing) return
+                if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && matches.length > 0) {
+                  e.preventDefault()
+                  setActive((i) => Math.max(-1, Math.min(matches.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1))))
+                } else if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
+                  e.preventDefault()
+                  if (active >= 0 && matches[active]) pickMatch(matches[active]!)
+                  else void submit()
+                }
+              }}
             />
           </SheetField>
           <div className="flex min-h-[18px] min-w-0 items-center gap-2 text-[12px]">
@@ -321,12 +363,29 @@ export function AddProjectSheet({
             >
               {note?.text ?? ''}
             </span>
+            {noSuchFolder && matches.length === 0 && suggestions.length > 0 && (
+              <span className="min-w-0 shrink truncate text-fg-muted">
+                Did you mean{' '}
+                {suggestions.map((c, i) => (
+                  <span key={c.path}>
+                    {i > 0 && ', '}
+                    <button type="button" className="mono text-accent hover:underline" onClick={() => pickMatch(c)}>{tildePath(c.path, home)}</button>
+                  </span>
+                ))}
+                ?
+              </span>
+            )}
             {showSetDefault && (
               <button type="button" onClick={() => void setAsDefault()} className="min-w-0 shrink truncate text-fg-faint hover:text-fg" title={`New projects, clones and Browse start in ${candidate}`}>
                 Set <span className="mono">{candidate}</span> as default
               </button>
             )}
           </div>
+          {matches.length > 0 && (
+            <div className="rounded-[8px] border border-[var(--app-hairline)] p-1">
+              <CandidateList id="add-project-matches" label="Matching folders" items={matches} active={active} home={home} onPick={pickMatch} onHover={setActive} />
+            </div>
+          )}
           {/* Picking a folder in clone mode picks where it goes: the
             * repository's own folder is made inside it. Outside the field's
             * label, so a click in the list stays in the list. */}

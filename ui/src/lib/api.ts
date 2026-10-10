@@ -807,6 +807,8 @@ export interface Status {
    *  installers put them. Absent on daemons older than this feature. */
   codex_available?: boolean
   opencode_available?: boolean
+  /** xAI's Grok Build CLI (ADR-046). Absent on older daemons. */
+  grok_available?: boolean
   /** The version of the OpenCode a new session would start ("2.0.26"),
    *  absent while the daemon has not asked it. OpenCode 1 and 2 take
    *  different flags, so a mode can become something different in each. */
@@ -883,12 +885,44 @@ export interface BrowseStat { path: string; exists: boolean; is_dir: boolean; em
 /** A directory Caprock has already seen sessions run in. */
 export interface RecentDir { dir: string; name: string; sessions: number; last_event_at: number }
 
+/** `GET /v1/browse/repos`: what the daemon found under the default folder. */
+export interface LocalRepos { root: string; home?: string; scanned_at: number; truncated?: boolean; repos: { name: string; path: string }[] }
+
+/** One agent in the pickers (`GET /v1/agents/catalog`, ADR-046). */
+export interface CatalogEntry {
+  /** "claude", "grok", "custom:aider". */
+  id: string
+  label: string
+  installed: boolean
+  /** Installed, and nothing Caprock can see is missing. */
+  ready: boolean
+  /** The model its own config names. */
+  default?: string
+  /** The models its own files list; empty for Claude Code and Gemini CLI, whose lists the page keeps. */
+  models: { id: string; label: string }[]
+  /** A model may be typed (OpenCode's provider/model). */
+  typed_model?: boolean
+  /** Caprock reads its sessions' turns and cost. */
+  observed: boolean
+  custom?: boolean
+  /** A custom agent the licence no longer covers. */
+  locked?: boolean
+  /** A first message reaches it (a custom agent's args may have no {prompt}). */
+  prompt: boolean
+  setup?: { reason: 'not_installed' | 'no_provider' | 'signin'; text: string; command?: string; docs?: string }
+}
+
+export interface AgentCatalog { agents: CatalogEntry[]; licensed: boolean; home?: string }
+
+/** A coding agent the user added by command (Settings → Agents, Premium). */
+export interface CustomAgent { id?: string; name: string; command: string; args?: string[]; models?: string[] }
+
 export interface SpawnRequest {
-  /** Which coding agent to launch: "claude" (default), "codex", "opencode" or
-   *  "gemini". They take different flags, so the daemon builds the argv per
-   *  agent. A resume is continued in the agent that ran the session,
-   *  whatever this says. */
-  agent?: 'claude' | 'codex' | 'opencode' | 'gemini'
+  /** Which coding agent to launch: "claude" (default), "codex", "opencode",
+   *  "gemini", "grok" or a custom one ("custom:<id>"). They take different
+   *  flags, so the daemon builds the argv per agent. A resume is continued in
+   *  the agent that ran the session, whatever this says. */
+  agent?: string
   cwd?: string; chat?: boolean; create?: boolean; worktree?: string
   model?: string; permission_mode?: string; args?: string[]
   /** Continue an existing conversation instead of starting a new one. Caprock
@@ -1137,6 +1171,8 @@ export const api = {
   /** Whether a path exists, is a folder, is empty, is already a project. */
   browseStat: (path: string) => get<BrowseStat>(`/v1/browse/stat?path=${encodeURIComponent(path)}`),
   recentDirs: () => get<RecentDir[]>('/v1/recent-dirs'),
+  /** GET /v1/browse/repos: the git repositories under the default folder, two levels deep (the project search). */
+  localRepos: () => get<LocalRepos>('/v1/browse/repos'),
   history: (range: 'today' | '7d' | '30d' | 'all' = 'all') => get<History>(`/v1/history?range=${range}`),
   /** `start` is the first local day (YYYY-MM-DD); omitted, the seven days ending today. */
   /** All time; with a range, that range's agents and bill (the share card's agent mix). */
@@ -1174,6 +1210,11 @@ export const api = {
    *  configured default. Empty for the other agents. */
   /** The proposed brief for carrying a session on in a new one (a relay). */
   relayBrief: (id: string) => get<RelayBrief>(`/v1/sessions/${encodeURIComponent(id)}/relay`),
+  /** GET /v1/agents/catalog: every agent here, installed or not, with its models and what it is missing. */
+  agentCatalog: () => get<AgentCatalog>('/v1/agents/catalog'),
+  customAgents: () => get<{ agents: CustomAgent[]; licensed: boolean }>('/v1/agents/custom'),
+  /** PUT /v1/agents/custom: replaces the list; 402 without an active licence. */
+  saveCustomAgents: (agents: CustomAgent[]) => post<{ agents: CustomAgent[]; licensed: boolean }>('/v1/agents/custom', { agents }, 'PUT'),
   agentModels: (agent: string) =>
     get<{ agent: string; default?: string; models: { id: string; label: string }[] }>(`/v1/agents/models?agent=${encodeURIComponent(agent)}`),
   signal: (id: string, action: 'pause' | 'resume' | 'kill') => post<void>(`/v1/agents/${encodeURIComponent(id)}/signal`, { action }),

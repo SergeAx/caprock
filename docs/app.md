@@ -118,8 +118,25 @@ others. Installing it: [install-app.md](install-app.md).
   sidebar. ⌥⌘N starts it at once with the agent and model you used last.
   Clicking *Quick chat* (the sidebar, the + menu, or *Quick chat with…* in
   the palette) first shows the agents installed here — Claude Code, Codex,
-  Gemini CLI, OpenCode — and their models: click a model to start on it, or
-  press Enter for the highlighted one.
+  OpenCode, Gemini CLI, Grok and your custom agents — and their models: click
+  a model to start on it, or press Enter for the highlighted one. OpenCode
+  lists the models of the providers you connected; with none connected it
+  says so, and *Connect a provider* opens a shell tab with `opencode auth
+  login` typed for you to run. The agents that are not installed are named
+  underneath, each one click from its install command.
+- **Agents that are not set up.** In *New agent*, an agent that is not
+  installed is listed after the others, marked *not installed*, and never
+  picked for you. Choose it and the sheet shows the official install command
+  with *Install in a shell tab*: a new shell tab opens with the command typed
+  at the prompt, not run — read it and press Enter. Copy and the agent's docs
+  are beside it. Grok (xAI's `grok`) is started like the others, but Caprock
+  does not read its turns or cost, and says so.
+- **Custom agents** (Premium). Settings → *Custom agents* adds any terminal
+  coding agent by name, command and arguments, one per line, with `{prompt}`
+  where the first message goes and `{model}` where the model goes, plus the
+  models to offer. It then appears in New agent and Quick chat and opens in a
+  tab. Caprock keeps its sessions in your list but does not read their cost.
+  Without a licence key the section is shown with the upgrade button.
 - **The tab strip.** The tab in front has an amber top edge; the others are
   shaded tabs of their own. The amber + opens a menu: New agent, Quick
   chat, New shell, Open file, Add project, each with its key.
@@ -136,7 +153,10 @@ others. Installing it: [install-app.md](install-app.md).
   one in Settings → Projects or with *Set as default* beside the field — and
   a line under it says what is there as you type: *will be created*, *exists,
   empty — will clone here*, *exists — not empty, clone will fail*, *already in
-  Caprock*. *Browse* walks folders (double-click or Enter to go in, *Choose*
+  Caprock*. Typing a name lists the projects, recent folders and repositories
+  under the default folder that match it (↓ and Enter pick one); *no such
+  folder* appears only when nothing matches, with the nearest names offered
+  (*Did you mean ~/dev/caprock-web?*). *Browse* walks folders (double-click or Enter to go in, *Choose*
   to pick); *Recent* leaves out temp and scratch folders. Paste a repository
   URL and the destination fills in as `git clone` would name it — the
   default folder plus the repository's name; folders that do not exist yet
@@ -308,7 +328,12 @@ the session, not in the page. If a sheet is open with text in it, the page
 does not reload under you; *Reload — Caprock was updated* appears in the
 status strip (in a browser, in the header) instead, for when you are done.
 
-The *New agent* sheet needs no mouse. It opens on the first message; Tab and
+The *New agent* sheet needs no mouse. It opens on the Project search, with
+the current project first: Enter keeps it and a second Enter starts. Type any
+part of a name and the list narrows to your projects, the folders you worked
+in recently and the repositories under your default folder, two levels deep;
+↑ ↓ and Enter pick, Esc closes the list (a second Esc the sheet). A folder or
+repository that is not a project yet is added when you pick it. Tab and
 ⇧Tab walk Project, Where, Agent, Model, Permissions, First message, Cancel
 and Start; ↑ and ↓ change a choice in place (Space still opens the list);
 ⌘↩ (Ctrl+Enter off macOS) starts from anywhere in the sheet, the selects

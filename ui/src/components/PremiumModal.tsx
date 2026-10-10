@@ -39,7 +39,7 @@ import { useApi } from '@/lib/useApi'
 import { AgentCharacter } from './Characters'
 import { Benefit, Icon, MiniCard, UpsellDialog } from './UpsellDialog'
 
-export type PaidFeature = 'cap' | 'window' | 'report' | 'gemini' | 'drill'
+export type PaidFeature = 'cap' | 'window' | 'report' | 'gemini' | 'drill' | 'agents'
 
 /**
  * `body` says what the feature is in one sentence; `points` say why you would
@@ -90,6 +90,17 @@ const FEATURES: Record<
       { icon: 'stop', text: 'Failure rate per group, against the tool’s own' },
       { icon: 'pie', text: 'A trend per group, and hints drawn only from those counts' },
     ],
+  },
+  // ADR-046: any terminal coding agent, started like the built-in ones.
+  agents: {
+    title: 'Your own agents, started like the built-in ones',
+    body: 'Add any terminal coding agent by its command. It appears in New agent and Quick chat and opens in a Caprock tab.',
+    points: [
+      { icon: 'arrow', text: 'Where the first message and the model go, written once as arguments' },
+      { icon: 'stack', text: 'Its models in the same picker as Claude Code’s and Codex’s' },
+      { icon: 'shield', text: 'Each argument stays one argument — nothing passes through a shell' },
+    ],
+    setup: 'Caprock starts it and keeps the session in your list; it reads turns and cost only for the agents it already knows.',
   },
   report: {
     title: 'A weekly report, sent where you are',
@@ -197,6 +208,16 @@ function Picture({ feature }: { feature: PaidFeature }) {
           <span className="font-semibold"><code className="font-mono">git diff</code> returned 41% of all Bash output</span>
           <span className="text-fg-muted"> — every byte of it read back by the model.</span>
         </p>
+      </MiniCard>
+    )
+  }
+  if (feature === 'agents') {
+    return (
+      <MiniCard label="Example: a custom agent named Aider, started with its model and first message filled in">
+        <p className="wk-eyebrow" style={{ fontSize: 11 }}>Settings · custom agent</p>
+        <p className="mt-1.5 text-[15px] font-semibold leading-snug text-fg">Aider</p>
+        <p className="mt-1 font-mono text-[12px] text-fg-muted">aider --model <span className="text-accent">{'{model}'}</span> --message <span className="text-accent">{'{prompt}'}</span></p>
+        <p className="mt-2.5 text-[12.5px] leading-snug text-fg-muted">In New agent: <span className="text-fg">Agent · Aider</span>, its models listed, started in a tab.</p>
       </MiniCard>
     )
   }

@@ -73,6 +73,12 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-11 — 0.101.2: running projects stay open, Settings you can find
+
+Every project where something runs or waits stays open in the sidebar with
+its sessions listed. Settings is a named row with a gear, Dashboard and
+Settings are outlined, and the palette has *Connect Telegram*.
+
 ### 2026-10-11 — 0.101.1: Telegram in three steps, Claude Code by default, shares drawn
 
 Settings → Telegram leads with three step cards, *Open @BotFather* and one

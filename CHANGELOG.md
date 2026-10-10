@@ -7,6 +7,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+## [0.101.2] - 2026-10-11
+
 ### Changed
 
 - **Every project where something runs stays open in the sidebar.** Its

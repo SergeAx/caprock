@@ -58,8 +58,8 @@ describe('Pairing panel', () => {
 
     render(<Pairing />)
     expect(await screen.findByText('Off')).toBeTruthy()
-    expect(screen.getByText(/are on the same Wi-Fi/)).toBeTruthy()
-    expect(screen.getByText(/Not on the same Wi-Fi\?/)).toBeTruthy()
+    expect(screen.getByText(/on one network/)).toBeTruthy()
+    expect(screen.getByText(/Not on this Wi-Fi\?/)).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Show a code' }))
     await waitFor(() => expect(screen.getByRole('img', { name: /QR code/ })).toBeTruthy())
@@ -127,15 +127,15 @@ describe('Pairing panel', () => {
   it('says what happens without Tailscale: Wi-Fi only, nothing relayed', async () => {
     stubState([{ enabled: true, url: 'http://192.168.1.10:22776', devices: [], addresses: [{ url: 'http://192.168.1.10:22776', kind: 'lan' }] }])
     render(<Pairing />)
-    expect(await screen.findByText(/cannot reach Caprock at all; nothing is relayed/)).toBeTruthy()
+    expect(await screen.findByText(/cannot reach Caprock otherwise; nothing is relayed/)).toBeTruthy()
     expect(screen.queryByRole('radio')).toBeNull()
   })
 
   it('names Tailscale as the requirement when the address is a tunnel', async () => {
     stubState([{ enabled: true, url: 'http://100.101.102.103:22776', tunnelled: true, devices: [] }])
     render(<Pairing />)
-    expect(await screen.findByText(/Tailscale is on, on your phone/)).toBeTruthy()
-    expect(screen.queryByText(/Not on the same Wi-Fi\?/)).toBeNull()
+    expect(await screen.findByText(/Tailscale on your phone and/)).toBeTruthy()
+    expect(screen.queryByText(/Not on this Wi-Fi\?/)).toBeNull()
   })
 })
 
@@ -191,5 +191,16 @@ describe('Paired devices list', () => {
     expect(await screen.findByText('#ab12')).toBeTruthy()
     expect(screen.getByText('#ef34')).toBeTruthy()
     expect(screen.getAllByText(/paired 4 Oct/)).toHaveLength(2)
+  })
+})
+
+describe('phone access after a restart', () => {
+  it('leads with Turn on when phones are paired but access is off', async () => {
+    vi.spyOn(api, 'pairState').mockResolvedValue({ enabled: false, devices: [{ id: 'd1', name: 'iPhone', role: 'controller', created_at: 1, last_seen_at: 1 }] } as unknown as PairState)
+    const setLAN = vi.spyOn(api, 'setLAN').mockResolvedValue({ enabled: true, url: 'http://192.168.1.10:22776' })
+    render(<Pairing />)
+    expect(await screen.findByText('Phone access is off')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on' }))
+    await waitFor(() => expect(setLAN).toHaveBeenCalledWith(true))
   })
 })

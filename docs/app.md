@@ -295,25 +295,26 @@ others. Installing it: [install-app.md](install-app.md).
 
 On macOS:
 
-| Keys        | Does                                    |
-| ----------- | --------------------------------------- |
-| ⌘T          | New shell in the folder of the tab      |
-| ⇧⌘N         | New agent session                       |
-| ⌥⌘N         | Quick chat, on the last agent and model |
-| ⌘O          | Add a project (folder, new, clone)      |
-| ⌘1–8, ⌘9    | A tab by position; the last tab         |
-| ⌃Tab, ⇧⌘[ ] | Next and previous tab                   |
-| ⌘W          | Close the tab (the session keeps going) |
-| ⌘E, ⇧⌘E     | Split: a new shell beside, below        |
-| ⌘[ ]        | Previous and next pane                  |
-| ⌘J          | Next session waiting on you             |
-| ⌘F          | Find in the terminal or the file        |
-| ⌘K          | Command palette                         |
-| ⌘,          | Settings                                |
-| ⌘I          | Agent cockpit (the inspector)           |
-| ⌘\          | Hide or show the sidebar                |
-| ⇧⌘D         | Dashboard tab, and back                 |
-| ⌘R          | Reload the window (View → Reload)       |
+| Keys        | Does                                     |
+| ----------- | ---------------------------------------- |
+| ⌘T          | New shell in the folder of the tab       |
+| ⇧⌘N         | New agent session                        |
+| ⌥⌘N         | Quick chat, on the last agent and model  |
+| ⌘O          | Add a project (folder, new, clone)       |
+| ⌘1–8, ⌘9    | A tab by position; the last tab          |
+| ⌃Tab, ⇧⌘[ ] | Next and previous tab                    |
+| ⌘W          | Close the tab (the session keeps going)  |
+| ⌘E, ⇧⌘E     | Split: a new shell beside, below         |
+| ⌘[ ]        | Previous and next pane                   |
+| ⌘J          | Next session waiting on you              |
+| ⌘F          | Find in the terminal or the file         |
+| ⌘K          | Command palette                          |
+| ⌘,          | Settings                                 |
+| ⌘+ ⌘− ⌘0    | Interface size: bigger, smaller, default |
+| ⌘I          | Agent cockpit (the inspector)            |
+| ⌘\          | Hide or show the sidebar                 |
+| ⇧⌘D         | Dashboard tab, and back                  |
+| ⌘R          | Reload the window (View → Reload)        |
 
 On Windows and Linux each is Ctrl+Shift with the same letter (Quick chat is
 Ctrl+Alt+Shift+N); Ctrl+Shift+C
@@ -321,6 +322,12 @@ and Ctrl+Shift+V stay the terminal's copy and paste. Reload is F5 there:
 Ctrl+R stays the shell's history search, and F5 in a focused terminal goes
 to the program running in it. The terminal's own keys (Ctrl+C, Ctrl+W,
 Option as Meta) always reach the terminal.
+
+The interface size lives in Settings → Appearance (100, 110, 125 or 140%),
+and the app opens at 110%. It zooms the whole window natively, terminal
+included, so text stays sharp and clicks land where they should. In a
+browser the browser's own zoom does the same job, so the setting is the
+app's alone.
 
 ### After an update
 

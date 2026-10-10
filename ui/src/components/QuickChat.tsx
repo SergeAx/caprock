@@ -145,12 +145,11 @@ export function QuickChatSheet({
       onClose={onClose}
       footer={
         <>
-          <p className="mr-auto min-w-0 truncate text-[11.5px] text-fg-faint">
+          <p className="mr-auto min-w-0 truncate text-[12.5px] text-fg-muted">
             <span className="mono">←→</span> agent · <span className="mono">↑↓</span> model · <span className="mono">{isMac ? '⌥⌘N' : 'Ctrl+Alt+Shift+N'}</span> skips this
           </p>
-          <SheetButton primary disabled={agents.length === 0 || !!setupFor} onClick={() => start()} aria-keyshortcuts="Enter" title="Start (↩)">
+          <SheetButton primary disabled={agents.length === 0 || !!setupFor} onClick={() => start()} aria-keyshortcuts="Enter" title="Start (↩)" keyHint="↩">
             Start
-            <kbd aria-hidden="true" className="mono ml-2 text-[11px] font-normal opacity-70">↩</kbd>
           </SheetButton>
         </>
       }

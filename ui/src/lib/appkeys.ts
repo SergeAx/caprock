@@ -34,6 +34,7 @@ export type AppCommand =
   | { kind: 'next-waiting' }
   | { kind: 'find' }
   | { kind: 'settings' }
+  | { kind: 'zoom'; step: 1 | -1 | 0 }
 
 /** The subset of a KeyboardEvent the map reads. */
 export interface KeyLike {
@@ -52,6 +53,8 @@ function baseKey(e: KeyLike): string {
   if (e.code === 'BracketLeft') return '['
   if (e.code === 'BracketRight') return ']'
   if (e.code === 'Backslash') return '\\'
+  if (e.code === 'Equal' || e.code === 'NumpadAdd') return '='
+  if (e.code === 'Minus' || e.code === 'NumpadSubtract') return '-'
   return e.key.length === 1 ? e.key.toLowerCase() : e.key
 }
 
@@ -68,6 +71,8 @@ export function matchAppShortcut(e: KeyLike, isMac: boolean): AppCommand | null 
   const k = baseKey(e)
   if (isMac) {
     if (!e.metaKey || e.ctrlKey) return null
+    // ⌘+ is ⌘= with or without Shift, as in every browser.
+    if (k === '=') return { kind: 'zoom', step: 1 }
     if (e.shiftKey) {
       switch (k) {
         case 'n': return { kind: 'new-agent' }
@@ -113,6 +118,9 @@ function plain(k: string): AppCommand | null {
     case 'e': return { kind: 'split', direction: 'row' }
     case 'j': return { kind: 'next-waiting' }
     case 'f': return { kind: 'find' }
+    case '=': return { kind: 'zoom', step: 1 }
+    case '-': return { kind: 'zoom', step: -1 }
+    case '0': return { kind: 'zoom', step: 0 }
     default:
       if (/^[1-9]$/.test(k)) return { kind: 'tab', index: Number(k) - 1 }
       return null
@@ -137,7 +145,8 @@ function offMac(k: string): string {
   if (/[↩↵]/.test(k)) return `${k.includes('⌘') ? 'Ctrl+' : ''}${k.includes('⇧') ? 'Shift+' : ''}Enter`
   if (k.startsWith('⌃')) return `Ctrl+${k.slice(1)}`
   if (!k.includes('⌘')) return k
-  const key = k.replace(/[⇧⌘⌥⌃]/g, '')
+  // Ctrl+Shift+= is the key that reads + with Shift held.
+  const key = k.replace(/[⇧⌘⌥⌃]/g, '').replace('+', '=')
   if (k.includes('⌥')) return `Ctrl+Alt+Shift+${key}`
   if (k === '⌘R') return 'F5'
   if (!k.includes('⇧') && /^(\[|\]|\[ \])$/.test(key)) return ''
@@ -181,5 +190,6 @@ export const SHORTCUTS: [keys: string, does: string][] = [
   ['⌘\\', 'Hide or show the sidebar'],
   ['⇧⌘D', 'Dashboard'],
   ['⌘,', 'Settings'],
+  ['⌘+, ⌘−, ⌘0', 'Interface size: bigger, smaller, back to the default'],
   ['⌘R', 'Reload the window'],
 ]

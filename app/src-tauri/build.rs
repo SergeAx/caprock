@@ -24,6 +24,7 @@ fn main() {
             "clipboard_image",
             "capture_webview",
             "read_dropped_image",
+            "set_zoom",
         ]),
     ))
     .expect("tauri build");

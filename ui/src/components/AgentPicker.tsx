@@ -175,7 +175,7 @@ export function AgentPicker({
   if (options.length < 2) return null
   return (
     <label className="grid min-w-0 gap-1">
-      <span className="text-[11px] text-fg-muted">Agent</span>
+      <span className="text-[13px] font-medium text-fg-muted">Agent</span>
       <select className={className} value={value} onChange={(e) => onChange(e.target.value as SpawnAgent)}>
         {options.map((a) => (
           <option key={a.key} value={a.key}>

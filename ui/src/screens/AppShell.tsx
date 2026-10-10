@@ -11,6 +11,7 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { api, ApiError, errText, type SessionSummary } from '@/lib/api'
 import { APP_ROUTE, isMacPlatform, isTauri, isWorkspaceHash } from '@/lib/appmode'
+import { stepUiScale } from '@/lib/uiscale'
 import { FIND_EVENT, keys, matchAppShortcut, type AppCommand } from '@/lib/appkeys'
 import { parseHash } from '@/lib/router'
 import { NotSupportedError, projectsApi, type Project } from '@/lib/projects'
@@ -581,6 +582,7 @@ export function AppShell() {
       case 'next-waiting': jumpToWaiting(); break
       case 'find': if (workspaceShown) window.dispatchEvent(new Event(FIND_EVENT)); break
       case 'settings': onSettings(); break
+      case 'zoom': stepUiScale(c.step); break
     }
   }, [onNewShell, onNewAgent, onQuickChat, onAddProject, workspaceShown, detach, onPalette, showWorkspace, onDashboard, splitShell, jumpToWaiting, current, focusedSession?.cwd, onSettings])
 
@@ -598,6 +600,8 @@ export function AppShell() {
       if (e.type !== 'keydown' || e.repeat && !/^[1-9]$/.test(e.key)) return
       const c = matchAppShortcut(e, isMac)
       if (!c) return
+      // In a browser ⌘+ and ⌘− are the browser's own zoom.
+      if (c.kind === 'zoom' && !isTauri()) return
       // A sheet owns the keyboard, except to close itself or switch to the palette.
       if (sheet && c.kind !== 'palette') return
       e.preventDefault()

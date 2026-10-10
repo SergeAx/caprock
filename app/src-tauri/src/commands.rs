@@ -113,3 +113,16 @@ pub async fn app_update_install<R: Runtime>(app: AppHandle<R>) -> Result<crate::
 pub fn app_update_asked(updates: tauri::State<'_, crate::updater::Updates>) -> Result<(), String> {
     updates.mark_asked().map_err(|e| e.to_string())
 }
+
+/// Scale the page as the browser's own zoom does (⌘+ / ⌘- in the app), so
+/// the terminal re-measures its cells rather than being stretched by CSS.
+/// Clamped to what the Appearance setting offers.
+#[tauri::command]
+pub fn set_zoom<R: Runtime>(scale: f64, webview: Webview<R>) -> Result<(), String> {
+    if !scale.is_finite() {
+        return Err("not a scale".into());
+    }
+    webview
+        .set_zoom(scale.clamp(0.8, 1.6))
+        .map_err(|e| e.to_string())
+}

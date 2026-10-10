@@ -239,7 +239,7 @@ function SeveralPrompts({ card, sessionId, prompts, canControl, busy, onDismiss,
 /** The key that presses a button, drawn on it; not part of its name. */
 function Key({ children }: { children: string }) {
   return (
-    <kbd aria-hidden className="ml-1.5 rounded-[3px] border border-current/40 px-1 font-sans text-[11px] font-normal opacity-70">
+    <kbd aria-hidden className="ml-1.5 rounded-[3px] border border-current/40 px-1.5 font-sans text-[12px] font-medium opacity-90">
       {children}
     </kbd>
   )

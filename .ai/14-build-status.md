@@ -73,6 +73,20 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-10 — unreleased: the Telegram bridge
+
+The alerts' bot became two-way (ADR-047, `internal/telegram`): a guided setup
+(token checked with `getMe`, chat paired with a one-time code), `getUpdates`
+long polling only while something needs answering, a paced outbox (1 msg/s,
+429 back-off, bursts joined), and every message headed with the agent,
+project and session. Free: alerts, Mute, Open on phone, `/mute`. Premium plus
+a switch: replies typed into sessions Caprock started, `/sessions`, `/new`,
+`/stop`, Approve/Deny through the card's own answer path, and a conversing
+session's reply sent the moment its turn ends. Tested against a fake Bot API
+(`telegramtest`): pairing, other chats ignored, reply routing, the rule-7
+refusal, licence gating, 429s, the token kept out of logs and responses.
+Not verified against the real Telegram API in CI (no test ever calls it).
+
 ### 2026-10-10 — unreleased: project search, agents that say what they lack, Grok, custom agents
 
 New agent's Project field and Add a project search projects, recent folders

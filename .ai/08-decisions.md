@@ -1658,6 +1658,13 @@ until a bot is set up. This replaces the list under "What leaves the machine"
 and the "sending anything beyond project, status, agent and link" in *Rules
 out*; the rules of when an alert fires are unchanged.
 
+*Amended 2026-10-10 by [ADR-047](#adr-047--the-owner-talks-to-his-agents-through-his-own-telegram-bot-integrations-he-turns-on-may-leave-the-machine):*
+the first line is now whose the message is — the agent's mark and name, the
+project and the session's title — and what happened moves to the second
+(*✅ Finished*, *⏳ Needs approval*). Each alert carries *Mute this session*
+and, with phone access on, *Open on phone*; both free. The chat is paired
+with a one-time code instead of a typed chat id.
+
 ---
 
 ## ADR-037 — A session can be removed, for good, from the machine
@@ -2405,3 +2412,117 @@ custom agents as a shell string; letting a request carry a custom command.
 **Revisit if** Grok's session files are priced (a Grok entry in
 `pricing.json` with a source), which would make Grok observed like Codex; or
 OpenCode moves its credentials out of `auth.json`.
+
+---
+
+## ADR-047 — The owner talks to his agents through his own Telegram bot; integrations he turns on may leave the machine
+
+**Date:** 2026-10-10 · **Status:** accepted (owner, 2026-10-10)
+
+*Builds on [ADR-024](#adr-024--the-weekly-report-holds-a-bot-token-and-only-reports-what-a-baseline-supports)
+(the stored bot token), [ADR-036](#adr-036--a-phone-hears-that-a-session-needs-it-through-the-owners-own-telegram-bot)
+(the free alerts) and [ADR-035](#adr-035--a-permission-prompt-is-answered-with-a-button-found-by-its-hook)
+(answering a prompt). Amends rule 4's wording.*
+
+The owner wants to chat with his agents from Telegram instead of opening the
+phone app (translated): every message must say which agent it came from —
+agent, project and session — and replying should reach that session. He
+expects people to buy Caprock for it, and wants it on the site.
+
+**The decision.** The bot the alerts already use becomes two-way. Each user
+creates their own bot with `@BotFather`; there is no Caprock server. The
+daemon reads what the one paired chat sends with `getUpdates` long polling, so
+nothing on the machine listens and a laptop on mobile data is reached the same
+way as one on the office Wi-Fi — the reachability ADR-034 cannot give without
+a relay. Every message the bot sends opens with a header naming the agent
+(with a coloured mark), the project and the session's title — *🟠 Claude Code
+· caprock · Fix the cache test* — and the status moves to the second line.
+
+**Setup is guided, and the chat is paired, not typed.** Settings → Telegram:
+paste the token, Caprock checks it with `getMe` and keeps it only when
+Telegram knows it, then shows a six-digit code and a `t.me/<bot>?start=<code>`
+link. The first **private** chat to send the code within ten minutes becomes
+the only chat the bot listens to; a group is refused, five wrong codes end the
+pairing, and every message from any other chat is dropped without an answer.
+This replaces the chat-id field (open `getUpdates` in a browser, copy
+`chat.id`). A chat id typed in before keeps working, for the alerts and the
+weekly report, and is shown as set by hand.
+
+**The token.** Stored where ADR-024 put it: `config.json`, `0600` in a `0700`
+data directory, write-only over HTTP. The screen shows `••••••` and its last
+four characters with the bot's `@name`. It never appears in a log line, an
+error or a response — a transport error carries the request URL, which carries
+the token, so the URL is dropped before an error leaves the client. What the
+bridge learns as it runs (the bot's name, the paired chat's name, the update
+offset, which message was about which session, mutes) is `telegram.json` in
+the same directory, also `0600`. **Keychain and Credential Manager later:**
+once the app is Developer-ID signed, the token moves to the OS store; with
+ad-hoc signing every update would ask for access again.
+
+**Free and Premium.** Alerts stay free, as ADR-036 decided, and gain two
+buttons that need no licence: *Mute this session* and *Open on phone* (when
+phone access is on). Talking back is Premium, checked on the server with the
+offline licence of ADR-022 — it reaches the network and controls sessions, the
+class ADR-023 gated in the daemon — **and** a switch, *Let my paired chat talk
+to sessions*, off until turned on even with a licence, because it is control
+of the machine from outside it. Premium covers: a reply to a session's message
+types into it and presses Enter; `/sessions`, `/new <project> <message>`,
+`/stop <n>`; Approve and Deny under a question. Without a licence (or with
+the switch off) the chat hears one short line saying so, at most once a day,
+and never "coming soon" (rule 11).
+
+**Rule 7 below the bridge.** A reply is typed only into a session Caprock
+started and is running; for any other the answer is *I can only watch this
+one*, and the daemon's typing path refuses it again whatever the bridge asks.
+`/stop` is the same. A session waiting on a permission prompt is not typed
+into: text in a menu would answer it.
+
+**Approve and Deny are the card's answer, not a second one.** They call
+`AnswerPermission`, which reads the menu off the session's screen and presses
+the matching option's key — the path fixed in 0.78.2 after a card typed `2`
+into a Yes/No menu and rejected calls the owner meant to approve. They appear
+only when the prompt is the only one outstanding (ADR-035, amended
+2026-10-09), and are replaced by the outcome once pressed.
+
+**A conversation answers at once.** The alert waits a minute after a Stop so
+that someone at the keyboard is not paged. A session the owner typed into from
+Telegram, or started there, is answered there for an hour: its questions go
+at once, every time, and its reply the moment its turn ends — the whole reply
+up to 3,000 characters, inline code and bold kept, each fenced code block a
+one-line note (*[go, 12 lines]*) unless *Send code blocks in replies* is on.
+The rules' own alerts skip that session meanwhile.
+
+**`/new` and Bypass.** `/new` starts Claude Code in a listed project (exact
+name, else the only one it starts, else the only one containing it) in the
+owner's default mode. When that is Bypass, the bot asks first (*Start in
+Bypass* / *Ask first instead* / *Cancel*), and the one-time consent of ADR-041
+still applies.
+
+**Telegram's limits.** One message a second to the chat; a 429's
+`retry_after` is waited out (up to ten seconds in the call, the queue held for
+longer ones); more than three plain messages waiting are joined into one; an
+alert not out within thirty seconds is dropped rather than sent late, as
+ADR-036 never retries.
+
+**Rule 4, reworded.** It said the release check was the single exception.
+That stopped being true with Gemini (ADR-023), the weekly report (ADR-024),
+the alerts (ADR-036) and GitHub (ADR-039), each argued in its own ADR. The rule
+now says what all of them share: loopback listeners only, no telemetry,
+nothing ever sent to Caprock, and the only outbound calls are the release
+check and **integrations the user turns on — off by default, revocable, to a
+destination the user chose, and saying where they are switched on what they
+send**. `CLAUDE.md`, `.ai/00-index.md` and `.ai/06-engineering-rules.md` carry
+the same wording. What Telegram is sent: the alert text ADR-036 describes,
+the replies above, the session list, and nothing while no bot is set up or
+nothing needs answering — no update is read then either.
+
+**Rules out:** a relay or server of ours; a webhook (an inbound port);
+answering any chat but the paired one; pairing a group; typing into a session
+Caprock did not start; a digit typed blind into a menu; sending code unless
+the owner switches it on; logging or returning the token.
+
+**Revisit if** the app is Developer-ID signed (move the token to the OS key
+store); a user asks for a second chat (a family or team group needs per-person
+rules, which this one-chat design does not have); Telegram changes what a bot
+may read; or Codex and OpenCode report turns and prompts, which would make
+their replies flow here with no change to the bridge.

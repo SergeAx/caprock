@@ -118,6 +118,14 @@ type Config struct {
 	// finished alert. On unless switched off, like the two above; Telegram
 	// reads it, which the Settings line says.
 	AlertReply *bool `json:"alert_reply,omitempty"`
+	// TelegramChat lets the paired Telegram chat talk back (ADR-047): a reply
+	// types into a session Caprock started, /sessions, /new and /stop work,
+	// and Approve and Deny appear under a question. Premium, and off until
+	// switched on even with a licence: it is control from outside the
+	// machine. TelegramCode sends a reply's code blocks to that chat instead
+	// of a one-line note; off unless switched on.
+	TelegramChat *bool `json:"telegram_chat,omitempty"`
+	TelegramCode *bool `json:"telegram_code,omitempty"`
 	// NotifyApproval and NotifyFinished switch the desktop app's OS
 	// notifications (WP-09), apart from Telegram's: a notification stays on
 	// the machine. Approval is on unless switched off — a blocked agent is
@@ -455,6 +463,13 @@ func (c Config) NotifyApprovalOn() bool {
 func (c Config) NotifyFinishedOn() bool {
 	return c.NotifyFinished != nil && *c.NotifyFinished
 }
+
+// TelegramChatOn reports whether the two-way Telegram chat is switched on.
+// It works only with an active licence as well, which the bridge checks.
+func (c Config) TelegramChatOn() bool { return c.TelegramChat != nil && *c.TelegramChat }
+
+// TelegramCodeOn reports whether replies sent to Telegram keep their code.
+func (c Config) TelegramCodeOn() bool { return c.TelegramCode != nil && *c.TelegramCode }
 
 // AlertReplyOn reports whether a finished alert carries the first line of the
 // final reply. On unless switched off.

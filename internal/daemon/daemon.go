@@ -55,6 +55,7 @@ import (
 	"github.com/dspv/caprock/internal/rollup"
 	"github.com/dspv/caprock/internal/sessionlink"
 	"github.com/dspv/caprock/internal/store"
+	"github.com/dspv/caprock/internal/telegram"
 	"github.com/dspv/caprock/internal/termbuf"
 	"github.com/dspv/caprock/internal/update"
 	"github.com/dspv/caprock/internal/userenv"
@@ -137,8 +138,13 @@ type Daemon struct {
 	report reportState
 	// phone holds the phone alerts' last outcome, for the settings screen.
 	phone phoneAlertState
-	det   *loop.Detector
-	tail  *ingest.Tailer
+	// tg is the Telegram bridge (ADR-047); nil in tests that build a daemon
+	// by hand, which then send alerts the old way.
+	tg *telegram.Bridge
+	// talk keeps a conversation's messages from being sent twice.
+	talk conversation
+	det  *loop.Detector
+	tail *ingest.Tailer
 	// ingMu guards ocIn and cxIn, which can start after startup: a machine
 	// with Codex or OpenCode installed but never yet run has nothing to read
 	// until a session Caprock starts writes the first file.
@@ -389,6 +395,7 @@ func (d *Daemon) run(ctx context.Context) error {
 	go d.observeLoops(ctx, sub)
 	// Phone alerts (ADR-036), subscribed before any producer starts so the
 	// first Stop is not missed.
+	d.tg = d.newTelegram()
 	go d.alertLoop(ctx, d.bus.Subscribe(1024))
 
 	// Owned-session manager (Phase 1).
@@ -503,7 +510,7 @@ func (d *Daemon) run(ctx context.Context) error {
 	}
 
 	d.api = api.New(api.Deps{
-		Store: d.store, Bus: d.bus, Table: d.table, Log: d.log, Hook: hh, Version: d.opt.Version, Reporter: d, Alerts: d,
+		Store: d.store, Bus: d.bus, Table: d.table, Log: d.log, Hook: hh, Version: d.opt.Version, Reporter: d, Alerts: d, Telegram: d.tg,
 		Status: d.status, InstallHooks: d.installHooks, BypassAccepted: bypassAccepted, AcceptBypass: acceptBypass, Storage: d.storageReport, WindowStop: d.windowStopStatus,
 		RateLimitsRecorded: func(ctx context.Context) {
 			if d.winStop != nil {
@@ -535,6 +542,9 @@ func (d *Daemon) run(ctx context.Context) error {
 	d.mu.Lock()
 	d.srv, d.port = srv, port
 	d.mu.Unlock()
+	// The Telegram bridge calls the agent manager and the API, so it starts
+	// once both exist (ADR-047).
+	go d.tg.Run(ctx)
 
 	// Ingest.
 	if !d.opt.DisableIngest {
@@ -1394,6 +1404,8 @@ func (a *settingsAdapter) Get() api.Settings {
 		AlertApproval:    c.AlertApprovalOn(),
 		AlertFinished:    c.AlertFinishedOn(),
 		AlertReply:       c.AlertReplyOn(),
+		TelegramChat:     c.TelegramChatOn(),
+		TelegramCode:     c.TelegramCodeOn(),
 		NotifyApproval:   c.NotifyApprovalOn(),
 		NotifyFinished:   c.NotifyFinishedOn(),
 		Prompts:          maps.Clone(c.Prompts),
@@ -1441,6 +1453,9 @@ func (a *settingsAdapter) Set(in api.Settings) error {
 	a.d.opt.Config.AlertApproval = &approval
 	a.d.opt.Config.AlertFinished = &finished
 	a.d.opt.Config.AlertReply = &reply
+	tgChat, tgCode := in.TelegramChat, in.TelegramCode
+	a.d.opt.Config.TelegramChat = &tgChat
+	a.d.opt.Config.TelegramCode = &tgCode
 	notifyApproval, notifyFinished := in.NotifyApproval, in.NotifyFinished
 	a.d.opt.Config.NotifyApproval = &notifyApproval
 	a.d.opt.Config.NotifyFinished = &notifyFinished
@@ -1449,6 +1464,10 @@ func (a *settingsAdapter) Set(in api.Settings) error {
 	a.d.cfgMu.Unlock()
 	if capChanged && a.d.cap != nil {
 		a.d.cap.Reset()
+	}
+	if a.d.tg != nil {
+		// A switch turned or a bot cleared: start or stop reading updates.
+		defer a.d.tg.Wake()
 	}
 	if windowChanged && a.d.winStop != nil {
 		// The next tick or status-line sample checks against the new share.

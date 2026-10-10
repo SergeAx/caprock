@@ -780,7 +780,7 @@ func (b *Bridge) sessions(ctx context.Context) {
 
 // reply types a reply into the session its message is about.
 func (b *Bridge) reply(ctx context.Context, m *Message, text string) {
-	ref, ok := b.Store.Lookup(m.ReplyTo.MessageID)
+	ref, ok := b.lookup(ctx, m.ReplyTo.MessageID)
 	if !ok || ref.SessionID == "" {
 		if b.gate(m) {
 			b.say(m, "I don't know which session that message was about. Send /sessions to pick one.")
@@ -951,7 +951,7 @@ func (b *Bridge) handleCallback(ctx context.Context, q *CallbackQuery) {
 		return
 	}
 	msgID := q.Message.MessageID
-	ref, _ := b.Store.Lookup(msgID)
+	ref, _ := b.lookup(ctx, msgID)
 	premium := func() bool {
 		if b.Host.Licensed() && b.Host.ChatOn() {
 			return true
@@ -1069,6 +1069,20 @@ func (b *Bridge) handleCallback(ctx context.Context, q *CallbackQuery) {
 		}, Ref{SessionID: s.ID, Kind: "reply"}, nil)
 	default:
 		toast("")
+	}
+}
+
+// lookup finds what a message is about, waiting a moment when it is not
+// known yet: a message's id is learnt when Telegram answers the send, and an
+// update about it can be read before that answer is.
+func (b *Bridge) lookup(ctx context.Context, messageID int64) (Ref, bool) {
+	for i := 0; ; i++ {
+		if ref, ok := b.Store.Lookup(messageID); ok || i == 20 {
+			return ref, ok
+		}
+		if !sleep(ctx, 50*time.Millisecond) {
+			return Ref{}, false
+		}
 	}
 }
 

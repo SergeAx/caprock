@@ -77,7 +77,7 @@ func TestTelegramBridgeEndToEnd(t *testing.T) {
 		deadline := time.Now().Add(20 * time.Second)
 		for !cond() {
 			if time.Now().After(deadline) {
-				t.Fatalf("timed out waiting for %s\nsent: %+v\ndaemon log:\n%s", what, bot.Sent(), d.log())
+				t.Fatalf("timed out waiting for %s\nsent: %+v\ntoasts: %q\ncalls: %v\ndaemon log:\n%s", what, bot.Sent(), bot.Answers(), bot.Calls(), d.log())
 			}
 			time.Sleep(50 * time.Millisecond)
 		}

@@ -14,8 +14,9 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   opens any of them and picking one never folds another. Projects with
   nothing running still fold.
 - **Settings is a row you can find.** The sidebar's bottom now has
-  *Settings ⌘,* by name, with *phone, Telegram* beside it, instead of a
-  bare sliders icon; the palette gains *Connect Telegram*.
+  *Settings ⌘,* by name, with a gear and *phone, Telegram* beside it,
+  instead of a bare sliders icon, and Dashboard and Settings are outlined
+  so they read as buttons; the palette gains *Connect Telegram*.
 
 ## [0.101.1] - 2026-10-11
 

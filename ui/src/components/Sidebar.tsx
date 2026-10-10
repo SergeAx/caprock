@@ -327,7 +327,7 @@ export function Sidebar(props: SidebarProps) {
         )}
       </div>
 
-      <div className="shrink-0 border-t border-[var(--app-hairline)] px-2 py-2">
+      <div className="grid shrink-0 gap-1.5 border-t border-[var(--app-hairline)] px-2 py-2">
         {/* Feedback on a labelled row of its own: on screen whatever tab is in
           * front, where the header's button is only on the dashboard. As a bare
           * icon beside Settings and the theme switch it read as a volume
@@ -339,7 +339,7 @@ export function Sidebar(props: SidebarProps) {
             data-nav-row
             aria-current={props.dashboardActive ? 'true' : undefined}
             onClick={props.onDashboard}
-            className="app-row flex h-[30px] min-w-0 flex-1 items-center gap-2 rounded-[7px] px-2 text-left text-[13px] text-fg"
+            className="app-row flex h-[32px] min-w-0 flex-1 items-center gap-2 rounded-[8px] border border-[var(--app-hairline-strong)] px-2 text-left text-[13px] text-fg"
           >
             <DashboardIcon size={15} className="text-fg-muted" />
             <span className="flex-1">Dashboard</span>
@@ -356,7 +356,7 @@ export function Sidebar(props: SidebarProps) {
               type="button"
               data-nav-row
               onClick={props.onSettings}
-              className="app-row flex h-[30px] min-w-0 flex-1 items-center gap-2 rounded-[7px] px-2 text-left text-[13px] text-fg"
+              className="app-row flex h-[32px] min-w-0 flex-1 items-center gap-2 rounded-[8px] border border-[var(--app-hairline-strong)] px-2 text-left text-[13px] text-fg"
             >
               <SettingsIcon size={15} className="text-fg-muted" />
               <span className="flex-1">Settings</span>

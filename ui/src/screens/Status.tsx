@@ -27,6 +27,7 @@ import { PlanOptions, usePlan } from '@/components/PlanPicker'
 import { LicenseField } from '@/components/LicenseField'
 import { Pairing } from '@/components/Pairing'
 import { PhoneAlerts } from '@/components/PhoneAlerts'
+import { TelegramChat } from '@/components/TelegramChat'
 import { DesktopNotifications } from '@/components/DesktopNotifications'
 import { StoragePanel } from '@/components/Storage'
 import { Choice, Details, Section, Toggle } from '@/components/SettingsParts'
@@ -93,6 +94,7 @@ export function StatusScreen() {
           {/* The phone high up: eighth of eleven, people asked where it was. */}
           {owner && <Pairing />}
           {owner && <PhoneAlerts />}
+          {owner && <TelegramChatSection />}
           <TerminalSettings />
           {owner && <EditorSetting />}
           {owner && <DefaultFolderSetting />}
@@ -109,6 +111,7 @@ export function StatusScreen() {
           {owner && <Pairing />}
           {owner && isTauri() && <DesktopNotifications />}
           {owner && <PhoneAlerts />}
+          {owner && <TelegramChatSection />}
           {owner && <PlanSection />}
           {owner && <WindowStopSection />}
           <AppearanceSection />
@@ -164,6 +167,16 @@ function WindowStopSection() {
   return (
     <Locked feature="window" title="Pause Caprock's sessions before the plan limit">
       <WindowStopSetting />
+    </Locked>
+  )
+}
+
+/** Talking to the agents from Telegram (Premium, ADR-047): live with a
+ *  licence, behind glass without one, under the free alerts it builds on. */
+function TelegramChatSection() {
+  return (
+    <Locked feature="telegram" title="Talk to your agents from Telegram">
+      <TelegramChat />
     </Locked>
   )
 }

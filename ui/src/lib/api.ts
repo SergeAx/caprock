@@ -562,6 +562,24 @@ export interface AssistantNote {
 /** One arm of the handoff comparison: sessions, how many reached a first edit, and the medians to get there. */
 export interface HandoffGroup { sessions: number; reached: number; median_min: number; median_calls: number }
 
+/** GET /v1/telegram: the bridge to the owner's own bot (ADR-047). */
+export interface TelegramStatus {
+  bot_set: boolean
+  /** Bullets and the token's last four characters; the token never comes back. */
+  token_masked?: string
+  bot_username?: string
+  chat_set: boolean
+  /** The paired chat's name; absent for a chat id typed by hand before pairing. */
+  chat_name?: string
+  manual_chat?: boolean
+  pairing?: { code: string; link?: string; expires_ms: number }
+  /** Reading updates now (pairing, buttons, two-way chat). */
+  polling: boolean
+  last_error?: string
+  mute_all?: boolean
+  muted?: number
+}
+
 export interface Settings {
   /** Whether Claude is told what the last session left in the same folder. */
   memory?: boolean
@@ -599,6 +617,11 @@ export interface Settings {
   alert_finished?: boolean
   /** The first line of the final reply in a finished alert; on unless turned off. */
   alert_reply?: boolean
+  /** Two-way Telegram chat (Premium, ADR-047): replies, /sessions, /new,
+   *  /stop, Approve and Deny. Off unless turned on, and inert without a licence. */
+  telegram_chat?: boolean
+  /** Replies sent to Telegram keep their code blocks; off unless turned on. */
+  telegram_code?: boolean
   /** The desktop app's OS notifications, apart from Telegram's (WP-09):
    *  approval on unless turned off, finished off unless turned on. */
   notify_approval?: boolean
@@ -1135,6 +1158,15 @@ export const api = {
    *  indistinguishable from a quiet week. */
   testReport: () => post<{ sent: string }>('/v1/report/test', {}),
   testAlert: () => post<{ sent: string }>('/v1/alerts/test', {}),
+  /** The Telegram bridge (ADR-047): bot, paired chat, a pairing in progress. Never the token. */
+  telegram: () => get<TelegramStatus>('/v1/telegram'),
+  /** Checks a token with Telegram (getMe) and stores it only when Telegram knows it. */
+  telegramToken: (token: string) => post<TelegramStatus>('/v1/telegram/token', { token }, 'PUT'),
+  /** A new one-time code; the first private chat that sends it becomes the bot's only chat. */
+  telegramPair: () => post<TelegramStatus>('/v1/telegram/pair', {}),
+  telegramCancelPair: () => post<TelegramStatus>('/v1/telegram/pair', {}, 'DELETE'),
+  /** Forget the bot, the chat and what was learned about them. */
+  telegramDisconnect: () => post<TelegramStatus>('/v1/telegram', {}, 'DELETE'),
   /** Runs `caprock hooks install` in the daemon; answers with what is registered after. */
   installHooks: () => post<{ hooks: HooksStatus; backup?: string }>('/v1/hooks/install', {}),
   /** The user accepted Caprock's copy of Claude Code's bypass warning (ADR-041). */

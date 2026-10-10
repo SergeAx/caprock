@@ -8,7 +8,7 @@
  * ("chat not found", "bot was blocked by the user") because both are things
  * only the reader can fix.
  *
- * The bot itself — a write-only token (ADR-024) and a chat id — is
+ * The bot itself — a write-only token (ADR-024) and a paired chat (ADR-047) — is
  * TelegramBotFields, shared with the free phone alerts in Settings (ADR-036).
  */
 import { useState } from 'react'
@@ -73,7 +73,7 @@ export function WeeklyReport() {
           <button
             onClick={() => void sendNow()}
             disabled={testing || !configured}
-            title={configured ? 'Send this week\'s report now' : 'Save a bot token and chat id first'}
+            title={configured ? 'Send this week\'s report now' : 'Set up and pair a bot first'}
             className="border border-border px-3 py-1 rounded-sm hover:border-fg-faint disabled:opacity-50"
           >
             {testing ? 'sending…' : 'Send one now'}

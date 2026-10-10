@@ -7,6 +7,13 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Changed
+
+- **The phone section reads at a glance.** Three large steps — same Wi-Fi,
+  scan the code, let it work — and one large *Show a code* button whose text
+  is readable in the dark theme; the rest is folded under *Then: …*. After a
+  restart, with phones paired, the section leads with *Phone access is off*
+  and a large *Turn on*.
 ### Added
 
 - **Start an agent from a fresh main.** New agent's *Where* leads with *New

@@ -219,54 +219,63 @@ export function Pairing() {
   const machine = thisMachine()
   const addresses = addressesOf(s)
   const hasTailscale = addresses.some((a) => a.kind !== 'lan')
+  const tunnelOnly = s.enabled && addresses.length > 0 && !addresses.some((a) => a.kind === 'lan')
 
   return (
     <Section id={PHONE_SECTION} title="Open Caprock on your phone" aside={<StatusPill status={status} />}>
       <div className="grid gap-4">
+        {/* Big and in three words a step: the owner could not read the old
+          * five-sentence list (2026-10-10, "make it super large and clear"). */}
+        {!showingCode && (
+          <p className="text-[15px] leading-snug text-fg-muted">
+            The same Caprock on your phone: read what agents wrote, type into a session, approve, stop.
+          </p>
+        )}
+        {!showingCode && !s.enabled && s.devices.length > 0 && (
+          <div className="flex flex-wrap items-center gap-4 rounded-[12px] border border-warn/50 bg-warn/10 px-4 py-3.5">
+            <div className="min-w-0 flex-1">
+              <div className="text-[17px] font-medium text-fg">Phone access is off</div>
+              <div className="text-[13px] text-fg-muted">It switches off whenever Caprock restarts. Your phones stay paired.</div>
+            </div>
+            <button onClick={() => turn(true)} disabled={busy} className="h-11 rounded-[10px] bg-accent px-6 text-[15px] font-semibold text-panel hover:brightness-110 disabled:opacity-50">
+              {busy ? 'One moment…' : 'Turn on'}
+            </button>
+          </div>
+        )}
         {showingCode ? (
           <CodeView addresses={addresses} code={code} secondsLeft={secondsLeft} onNew={showCode} onCancel={cancelCode} busy={busy} />
         ) : (
           <>
-            <ol className="grid gap-2">
-              <Step n={1}>
-                {s.enabled && addresses.length > 0 && addresses.every((a) => a.kind !== 'lan')
-                  ? <>Tailscale is on, on your phone and {machine}.</>
-                  : s.enabled && hasTailscale
-                    ? <>Your phone and {machine} are on the same Wi-Fi — or Tailscale is on, on both.</>
-                    : <>Your phone and {machine} are on the same Wi-Fi.</>}
-              </Step>
-              <Step n={2}>
-                Press <span className="text-fg font-medium">Show a code</span> and point your phone&apos;s camera at it.
-              </Step>
-              <Step n={3}>
-                Your phone appears below, able to look. To work from it, press{' '}
-                <span className="text-fg font-medium">Let it control sessions</span> beside it — only for your own phone.
-              </Step>
-              <Step n={4}>
-                Keep it one tap away: on an iPhone, Share → <span className="text-fg">Add to Home Screen</span>, then
-                show another code and type its six digits there once; on Android, Chrome&apos;s menu →{' '}
-                <span className="text-fg">Add to Home screen</span>.
-              </Step>
-              <Step n={5}>
-                To carry on a session, open it on the phone from <span className="text-fg">Now</span> and type in its{' '}
-                <span className="text-fg">Chat</span>; answer approvals and stop it there too. After Caprock restarts,
-                turn phone access on here again — paired phones stay paired.
-              </Step>
+            <ol className="grid gap-3 sm:grid-cols-3">
+              {tunnelOnly ? (
+                <BigStep n={1} title="Tailscale on both">Tailscale on your phone and {machine}; then it works anywhere.</BigStep>
+              ) : (
+                <BigStep n={1} title={hasTailscale ? 'Same Wi-Fi or Tailscale' : 'Same Wi-Fi'}>Your phone and {machine} on one network.</BigStep>
+              )}
+              <BigStep n={2} title="Scan the code">
+                Press <b className="font-medium text-fg">Show a code</b>, point the phone&apos;s camera at it.
+              </BigStep>
+              <BigStep n={3} title="Let it work">
+                Press <b className="font-medium text-fg">Let it control sessions</b> next to your phone below.
+              </BigStep>
             </ol>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <button
                 onClick={showCode}
                 disabled={busy}
-                className="rounded-md bg-accent px-4 py-2 text-[14px] font-medium text-accent-fg disabled:opacity-50"
+                className="h-11 rounded-[10px] bg-accent px-6 text-[15px] font-semibold text-panel hover:brightness-110 disabled:opacity-50"
               >
                 {busy ? 'One moment…' : s.devices.length > 0 ? 'Show a code for another phone' : 'Show a code'}
               </button>
-              {!s.enabled && s.devices.length > 0 && (
-                <button onClick={() => turn(true)} disabled={busy} className="text-[12px] text-accent hover:underline disabled:opacity-50">
-                  Turn on for paired phones only
-                </button>
-              )}
             </div>
+            <details className="group rounded-[10px] border border-border px-4 py-2.5 text-[14px]">
+              <summary className="cursor-pointer select-none font-medium text-fg">Then: home screen, carrying on a session, other networks</summary>
+              <ul className="mt-2 grid gap-2 text-fg-muted">
+                <li><b className="font-medium text-fg">Home screen.</b> iPhone: Share → Add to Home Screen, open it from there and type a new code once. Android: Chrome menu → Add to Home screen.</li>
+                <li><b className="font-medium text-fg">Carry on a session.</b> On the phone: Now → the session → Chat, and type. Approve and stop from there too.</li>
+                {!hasTailscale && <li><b className="font-medium text-fg">Not on this Wi-Fi?</b> Install <a href="https://tailscale.com/download" target="_blank" rel="noreferrer" className="text-accent">Tailscale</a> on both, then it works anywhere, even on mobile data. A phone off this Wi-Fi cannot reach Caprock otherwise; nothing is relayed through us.</li>}
+              </ul>
+            </details>
           </>
         )}
 
@@ -283,22 +292,7 @@ export function Pairing() {
         <Devices devices={s.devices} now={now} onRemove={remove} onRole={setRole} />
 
         <div className="grid gap-1 border-t border-border pt-3 text-[12px] leading-relaxed text-fg-muted">
-          <p>
-            Only phones you pair get in, and they can look but not change anything — unless you let one control sessions below. It switches off when Caprock restarts.
-          </p>
-          {s.enabled && hasTailscale ? (
-            <p>
-              This {machine.replace('this ', '')} is on Tailscale, so it works from anywhere your phone has Tailscale too — even on mobile data:
-              pick <span className="text-fg">Tailscale</span> above the code. Each address pairs on its own, because the phone keeps its sign-in per address.
-            </p>
-          ) : (
-            <p>
-              Not on the same Wi-Fi? Install{' '}
-              <a href="https://tailscale.com/download" target="_blank" rel="noreferrer" className="text-accent">Tailscale</a>{' '}
-              on both — then it works from anywhere. Without it, a phone off this Wi-Fi cannot reach Caprock at all; nothing is relayed.
-              {s.enabled && ' Installed it just now? Turn off below, then show a code again.'}
-            </p>
-          )}
+          <p>Only phones you pair get in, and they only look until you let one control sessions.</p>
           {s.enabled && !showingCode && (
             <div className="flex flex-wrap items-center gap-x-3 pt-1">
               {addresses.length > 0 && (
@@ -330,16 +324,16 @@ function StatusPill({ status }: { status: PhoneStatus }) {
   )
 }
 
-function Step({ n, children }: { n: number; children: React.ReactNode }) {
+function BigStep({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
-    <li className="flex items-baseline gap-2.5">
-      <span className="num inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border-strong text-[11px] text-fg-muted">
-        {n}
-      </span>
-      <span className="text-fg">{children}</span>
+    <li className="grid content-start gap-1 rounded-[12px] border border-border bg-panel-2/50 px-4 py-3.5">
+      <span className="num text-[26px] font-semibold leading-none text-accent">{n}</span>
+      <span className="mt-1 text-[16px] font-medium text-fg">{title}</span>
+      <span className="text-[13px] leading-snug text-fg-muted">{children}</span>
     </li>
   )
 }
+
 
 function CodeView({
   addresses,

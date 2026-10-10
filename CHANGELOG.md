@@ -7,6 +7,15 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Changed
+
+- **Working from your phone is spelled out where you set it up.** The phone
+  section of Settings sits right under Appearance, and its steps now run to
+  the end: pair, press *Let it control sessions* to work rather than watch,
+  add it to the home screen (an iPhone pairs once more there), carry on a
+  session from its Chat, and turn phone access on again after a restart. The
+  command palette has *Open Caprock on your phone*, which opens that section.
+
 ### Fixed
 
 - **Feedback no longer looks like a volume control.** Its icon is a speech

@@ -40,7 +40,7 @@ describe('TelegramBotFields', () => {
     tg.state = { bot_set: false, chat_set: false, polling: false }
     render(<TelegramBotFields onSaved={() => {}} />)
     fireEvent.change(await screen.findByLabelText('Bot token'), { target: { value: '1:bad' } })
-    fireEvent.click(screen.getByText('Check and save'))
+    fireEvent.click(screen.getByText('Connect'))
     await waitFor(() => expect(screen.getByText(/does not recognise this token/)).toBeInTheDocument())
     expect(tg.tokens).toEqual(['1:bad'])
   })
@@ -52,7 +52,7 @@ describe('TelegramBotFields', () => {
     const saved = vi.fn()
     render(<TelegramBotFields onSaved={saved} />)
     fireEvent.change(await screen.findByLabelText('Bot token'), { target: { value: ' 123:ok ' } })
-    fireEvent.click(screen.getByText('Check and save'))
+    fireEvent.click(screen.getByText('Connect'))
     expect(await screen.findByLabelText('Pairing code')).toHaveTextContent('482913')
     expect(screen.getByText('Open @my_bot and send it').closest('a')).toHaveAttribute('href', 'https://t.me/my_bot?start=482913')
     expect(screen.getByText('/start 482913')).toBeInTheDocument()

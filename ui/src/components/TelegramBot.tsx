@@ -17,6 +17,8 @@ import { useEffect, useRef, useState } from 'react'
 import { api, errText, type Settings, type TelegramStatus } from '@/lib/api'
 import { useApi } from '@/lib/useApi'
 import { useNow } from '@/lib/useNow'
+import { openExternal } from '@/lib/nudges'
+import { BigStep } from './Pairing'
 
 export function TelegramBotFields({ onSaved }: { s?: Settings; onSaved: () => void }) {
   const tg = useApi(() => api.telegram(), [], { live: false })
@@ -85,22 +87,35 @@ export function TelegramBotFields({ onSaved }: { s?: Settings; onSaved: () => vo
   const bot = state.bot_username ? `@${state.bot_username}` : 'your bot'
 
   if (!state.bot_set || editing) {
+    // Three large steps, as the phone section has (owner, 2026-10-11: the
+    // instructions must be inside the app, where the setup is done).
     return (
-      <div className="grid gap-2">
-        <p className="text-fg">
-          <span className="mono text-fg-muted">1</span> · Make a bot
-        </p>
-        <p className="text-[12px] leading-relaxed text-fg-muted">
-          In Telegram, message <span className="mono">@BotFather</span>, send <span className="mono">/newbot</span>, pick a
-          name, and paste the token it gives you. Your own bot, so messages go straight from this computer to Telegram —
-          never through anybody's server.
-        </p>
+      <div className="grid gap-4">
+        <ol className="grid gap-3 sm:grid-cols-3">
+          <BigStep n={1} title="Make a bot">
+            In Telegram, open <span className="mono text-fg">@BotFather</span>, send <span className="mono text-fg">/newbot</span>{' '}
+            and pick any name.
+          </BigStep>
+          <BigStep n={2} title="Paste its token">
+            BotFather replies with a token like <span className="mono text-fg">123456:ABC…</span>. Paste it below.
+          </BigStep>
+          <BigStep n={3} title="Send it a code">
+            Caprock shows six digits. Send them to your bot, one tap from here.
+          </BigStep>
+        </ol>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => openExternal('https://t.me/BotFather')}
+            className="h-11 rounded-[10px] border border-[var(--app-hairline-strong)] px-5 text-[15px] font-medium text-fg hover:border-accent hover:text-accent"
+          >
+            Open @BotFather
+          </button>
           <input
-            className="input min-w-0 flex-1"
+            className="input h-11 min-w-[220px] flex-1 text-[14px]"
             type="password"
             aria-label="Bot token"
-            placeholder="123456:ABC-DEF…"
+            placeholder="Paste the bot token"
             value={token}
             onChange={(e) => setToken(e.target.value)}
             onKeyDown={(e) => {
@@ -110,19 +125,19 @@ export function TelegramBotFields({ onSaved }: { s?: Settings; onSaved: () => vo
           <button
             onClick={() => void saveToken()}
             disabled={busy || !token.trim()}
-            className="rounded-sm border border-accent bg-accent/15 px-3 py-1 text-accent hover:bg-accent/25 disabled:opacity-50"
+            className="h-11 rounded-[10px] bg-accent px-6 text-[15px] font-semibold text-panel hover:brightness-110 disabled:opacity-50"
           >
-            {busy ? 'checking…' : 'Check and save'}
+            {busy ? 'Checking…' : 'Connect'}
           </button>
           {editing && (
-            <button onClick={() => setEditing(false)} className="text-[12px] text-fg-muted hover:text-fg">
+            <button onClick={() => setEditing(false)} className="text-[13px] text-fg-muted hover:text-fg">
               Cancel
             </button>
           )}
         </div>
-        <p className="text-[11px] text-fg-faint">
-          Caprock asks Telegram whether the token is real before keeping it, stores it on this computer only, and never
-          shows it again.
+        <p className="text-[12.5px] text-fg-muted">
+          Your own bot: messages go from this computer straight to Telegram, never through a server of ours. The token is
+          checked with Telegram, kept on this computer only and never shown again.
         </p>
         {err}
       </div>
@@ -144,15 +159,14 @@ export function TelegramBotFields({ onSaved }: { s?: Settings; onSaved: () => vo
     return (
       <div className="grid gap-2">
         {botLine}
-        <p className="text-fg">
-          <span className="mono text-fg-muted">2</span> · Pair your chat
+        <p className="text-[16px] font-medium text-fg">
+          <span className="num mr-2 text-accent">3</span>Send {bot} this code
         </p>
-        <p className="text-[12px] leading-relaxed text-fg-muted">
-          Open {bot} in Telegram and send it this code. The first private chat that sends it becomes the only one the bot
-          listens to.
+        <p className="text-[13px] leading-relaxed text-fg-muted">
+          The first private chat that sends it becomes the only one the bot listens to.
         </p>
         <p className="flex flex-wrap items-center gap-3">
-          <span className="mono text-[26px] font-semibold tracking-[0.18em] text-fg" aria-label="Pairing code">
+          <span className="mono text-[36px] font-semibold tracking-[0.18em] text-fg" aria-label="Pairing code">
             {pairing.code}
           </span>
           {pairing.link && (
@@ -160,13 +174,13 @@ export function TelegramBotFields({ onSaved }: { s?: Settings; onSaved: () => vo
               href={pairing.link}
               target="_blank"
               rel="noreferrer"
-              className="rounded-sm border border-accent bg-accent/15 px-3 py-1 text-[12px] text-accent hover:bg-accent/25"
+              className="inline-flex h-11 items-center rounded-[10px] bg-accent px-6 text-[15px] font-semibold text-panel hover:brightness-110"
             >
               Open {bot} and send it
             </a>
           )}
         </p>
-        <p className="text-[11px] text-fg-faint">
+        <p className="text-[12.5px] text-fg-muted">
           Or type <span className="mono">/start {pairing.code}</span> to {bot}. Waiting… {left > 0 ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} left` : 'expired'}
           {' · '}
           <button onClick={() => void run(() => api.telegramCancelPair())} className="text-fg-muted hover:text-fg">
@@ -183,13 +197,13 @@ export function TelegramBotFields({ onSaved }: { s?: Settings; onSaved: () => vo
     <div className="grid gap-2">
       {botLine}
       {state.chat_set ? (
-        <p className="text-[12px] text-fg-muted">
+        <p className="text-[13px] text-fg-muted">
           {state.manual_chat ? (
             <>Sends to a chat id typed in by hand. Pair again to have the chat named here.</>
           ) : (
             <>
-              Paired with <span className="text-fg">{state.chat_name || 'your chat'}</span>. Messages from any other chat are
-              ignored.
+              <span className="text-ok">✓</span> Connected to <span className="text-fg">{state.chat_name || 'your chat'}</span>. Messages
+              from any other chat are ignored.
             </>
           )}
         </p>

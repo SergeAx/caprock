@@ -7,6 +7,14 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Changed
+
+- **Telegram set up from three large steps.** Settings → *Telegram* now
+  leads with *Make a bot*, *Paste its token* and *Send it a code*, an *Open
+  @BotFather* button and one *Connect* button; the alert switches appear
+  once the bot is connected, with a note if every alert is off. What a
+  message says is folded away.
+
 ## [0.101.0] - 2026-10-11
 
 ### Changed

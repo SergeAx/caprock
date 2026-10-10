@@ -59,50 +59,63 @@ export function PhoneAlerts() {
       title="Telegram"
       aside={<span className="text-[12px] text-fg-muted">{configured ? 'via your Telegram bot' : 'needs a Telegram bot'}</span>}
     >
-      <p className="text-[12px] leading-relaxed text-fg-muted">
-        A Telegram message when a session needs you, from any terminal. Each one opens with whose it is — the agent, the
-        project and the session's title — then its folder and branch, with a link when your phone can open this dashboard.
-        A dialog adds the tool and the command or file it asks about; a finished run adds its time, cost, tool calls and
-        changed files. Telegram can read every message; tool output is never sent, and code only if you switch it on
-        below. Free.
+      <p className="text-[13px] leading-relaxed text-fg-muted">
+        A Telegram message when a session needs you or has finished, from any terminal, with buttons to mute it or open it
+        on your phone. Free.
       </p>
-      <Toggle
-        checked={s.alert_approval === true}
-        onChange={(on) => toggle('alert_approval', on)}
-        label="When a session is waiting for approval"
-        hint="At once, once per question. A burst of questions in one session is one message."
-      />
-      <Toggle
-        checked={s.alert_finished === true}
-        onChange={(on) => toggle('alert_finished', on)}
-        label="When a session has finished"
-        hint="After a minute with nothing new, so replying straight away sends nothing."
-      />
-      <Toggle
-        checked={s.alert_reply !== false}
-        onChange={(on) => toggle('alert_reply', on)}
-        label="Include the last reply's first line"
-        hint="Up to 120 characters of what the agent said last, in the finished message."
-      />
+      {!configured && <div className="grid gap-3">{bot}</div>}
+      {configured && (
+        <Details summary="What a message says">
+          <p className="text-[12.5px] leading-relaxed text-fg-muted">
+            Each one opens with whose it is — the agent, the project and the session's title — then its folder and branch,
+            with a link when your phone can open this dashboard. A dialog adds the tool and the command or file it asks
+            about; a finished run adds its time, cost, tool calls and changed files. Telegram can read every message; tool
+            output is never sent, and code only if you switch it on.
+          </p>
+        </Details>
+      )}
       {configured ? (
         <>
+          {s.alert_approval !== true && s.alert_finished !== true && (
+            <p className="rounded-[8px] border border-accent/50 bg-accent/10 px-3 py-2 text-[13px] text-fg">
+              The bot is connected. Turn on at least one alert below, or nothing is sent.
+            </p>
+          )}
+          <Toggle
+            checked={s.alert_approval === true}
+            onChange={(on) => toggle('alert_approval', on)}
+            label="When a session is waiting for approval"
+            hint="At once, once per question. A burst of questions in one session is one message."
+          />
+          <Toggle
+            checked={s.alert_finished === true}
+            onChange={(on) => toggle('alert_finished', on)}
+            label="When a session has finished"
+            hint="After a minute with nothing new, so replying straight away sends nothing."
+          />
+          <Toggle
+            checked={s.alert_reply !== false}
+            onChange={(on) => toggle('alert_reply', on)}
+            label="Include the last reply's first line"
+            hint="Up to 120 characters of what the agent said last, in the finished message."
+          />
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={() => void sendTest()}
               disabled={testing}
-              className="rounded-sm border border-border px-3 py-1 text-[12px] hover:border-fg-faint disabled:opacity-50"
+              className="h-9 rounded-[8px] border border-[var(--app-hairline-strong)] px-4 text-[13.5px] font-medium hover:border-accent hover:text-accent disabled:opacity-50"
             >
-              {testing ? 'sending…' : 'Send a test alert'}
+              {testing ? 'Sending…' : 'Send a test alert'}
             </button>
-            {sent && <span className="text-[11px] text-ok">sent — check Telegram</span>}
-            {error && <span className="text-[11px] text-danger">{error}</span>}
+            {sent && <span className="text-[12.5px] text-ok">sent — check Telegram</span>}
+            {error && <span className="text-[12.5px] text-danger">{error}</span>}
           </div>
           {!error && s.alert_last_error ? (
-            <p className="text-[11px] text-danger">Last alert failed: {s.alert_last_error}</p>
+            <p className="text-[12.5px] text-danger">Last alert failed: {s.alert_last_error}</p>
           ) : s.alert_last_sent_ms ? (
-            <p className="text-[11px] text-fg-faint">Last alert sent {fmtAgo(s.alert_last_sent_ms, now)}.</p>
+            <p className="text-[12.5px] text-fg-faint">Last alert sent {fmtAgo(s.alert_last_sent_ms, now)}.</p>
           ) : null}
-          <p className="text-[11px] text-fg-faint">
+          <p className="text-[12.5px] text-fg-faint">
             Each message has a <span className="text-fg-muted">Mute this session</span> button; <span className="mono">/mute all</span> in
             the chat silences everything until <span className="mono">/unmute</span>.
           </p>
@@ -110,9 +123,7 @@ export function PhoneAlerts() {
             <div className="grid gap-3 text-[12px]">{bot}</div>
           </Details>
         </>
-      ) : (
-        <div className="grid gap-3 border-t border-border pt-3 text-[12px]">{bot}</div>
-      )}
+      ) : null}
     </Section>
   )
 }

@@ -40,7 +40,7 @@ import type { TabLabel } from '@/lib/tablabels'
 import { closeTitle, closeWord } from '@/lib/closeShell'
 import { fmtUSD } from '@/lib/format'
 import { AgentGlyph } from './AgentMarks'
-import { CloseIcon, EyeIcon, FileIcon, MoreIcon, PlusIcon, StopIcon, TerminalIcon } from './AppIcons'
+import { CloseIcon, EyeIcon, EyeOffIcon, FileIcon, MoreIcon, PlusIcon, StopIcon, TerminalIcon } from './AppIcons'
 import { MenuBox, MenuItem, type MenuAt } from './RowMenu'
 import { StopConfirm, stopLabel, type StopWhat } from './StopConfirm'
 import { keys } from '@/lib/appkeys'
@@ -199,7 +199,7 @@ export const ProjectRow = memo(function ProjectRow({
           aria-haspopup={menu ? 'menu' : undefined}
           aria-keyshortcuts={menu ? 'Shift+F10' : undefined}
           className="app-row flex h-[30px] w-full min-w-0 items-center gap-2 rounded-[7px] pl-2.5 pr-2 text-left"
-          title={p.root || p.name}
+          title={isGroup ? 'Sessions in folders you have not added as a project. Add one with Add project.' : p.root || p.name}
         >
           <span className={`min-w-0 flex-1 truncate text-[13px] ${current ? 'font-semibold text-fg' : 'text-fg-muted'}`}>{p.name}</span>
           {node.live > 0 && (
@@ -222,6 +222,9 @@ export const ProjectRow = memo(function ProjectRow({
           <span className="absolute right-1 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 group-hover:flex group-focus-within:flex">
             <RowAction label={`New agent in ${p.name}`} onClick={() => onNewAgent(id)}><PlusIcon size={13} /></RowAction>
             <RowAction label={`New shell in ${p.name}`} onClick={() => onNewShell(id)}><TerminalIcon size={13} /></RowAction>
+            {!hidden && onHide && !isGroup && (
+              <RowAction label={`Hide ${p.name}: it moves under Hidden; what runs in it keeps running`} onClick={() => onHide(id, true)}><EyeOffIcon size={13} /></RowAction>
+            )}
             {menu && (
               <RowAction label={`More for ${p.name}: hide, close its tabs, remove`} popup onClick={(el) => openMenuFrom(el)}><MoreIcon size={14} /></RowAction>
             )}

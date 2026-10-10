@@ -122,7 +122,7 @@ export function buildSidebar({ projects, sessions, permissions, costs, openSessi
   const byDepth = [...nodes].sort((a, b) => b.project.root.length - a.project.root.length)
   const inbox: InboxItem[] = []
   const other: ProjectNode = {
-    project: { id: OTHER_FOLDERS_ID, root: '', name: 'Other folders', kind: 'folder' },
+    project: { id: OTHER_FOLDERS_ID, root: '', name: 'Outside projects', kind: 'folder' },
     costToday: 0, waiting: 0, looping: 0, live: 0, agents: 0, working: 0, lastActive: 0, worktrees: [],
   }
 
@@ -279,8 +279,12 @@ export function groupProjects(
     const id = n.project.id
     if (id === OTHER_FOLDERS_ID) { other = n; continue }
     const busy = n.live > 0 || n.waiting > 0 || !!tabbed?.has(id) || n.worktrees.some((w) => w.sessions.some((s) => s.open))
-    if (busy || id === activeProjectId) out.shown.push(n)
-    else if (hidden.has(id)) out.hidden.push(n)
+    // Hidden by hand wins over running (owner, 2026-10-11: "hide a project
+    // with one button"): its sessions keep running under Hidden, dot and
+    // count included. Only the current project, and one waiting on you,
+    // come back out.
+    if (hidden.has(id) && id !== activeProjectId && n.waiting === 0) out.hidden.push(n)
+    else if (busy || id === activeProjectId) out.shown.push(n)
     else if (!fold || n.project.pinned) out.shown.push(n)
     else out.more.push(n)
   }

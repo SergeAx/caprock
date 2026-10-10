@@ -13,6 +13,11 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   largest share in large type, a bar of the whole in the donuts' colours,
   and a bar under every row the width of its share; two blocks to a row
   unless the window is very wide.
+- **New agent starts on Claude Code, not on whatever ran last.** One Codex
+  session no longer makes every later New agent Codex. To start on another
+  agent, pick it and press *Make default* beside the Agent label.
+- **The keys on Start and Cancel are big enough to read**, in both themes:
+  a larger chip, and on Start a solid one in the button's inverse colours.
 - **Telegram set up from three large steps.** Settings → *Telegram* now
   leads with *Make a bot*, *Paste its token* and *Send it a code*, an *Open
   @BotFather* button and one *Connect* button; the alert switches appear

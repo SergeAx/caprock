@@ -3,7 +3,7 @@ import { CloseButton, DialogBackdrop } from './Dialog'
 import { api, errText, isPairedDevice } from '@/lib/api'
 import { useApi } from '@/lib/useApi'
 import { href, navigate } from '@/lib/router'
-import { SPAWN_AGENTS, rememberAgent, useSpawnableAgents, type SpawnAgent } from './AgentPicker'
+import { SPAWN_AGENTS, useSpawnableAgents, type SpawnAgent } from './AgentPicker'
 import { fmtAgo } from '@/lib/format'
 import { agentName } from './Projects'
 
@@ -78,7 +78,6 @@ export function RelayDialog({ sessionID, agent, onClose }: { sessionID: string; 
       const req: Parameters<typeof api.spawn>[0] = { relay_from: sessionID, prompt: text, cwd: b.cwd }
       if (agent !== 'claude') req.agent = agent
       const { session_id } = await api.spawn(req)
-      rememberAgent(agent)
       onClose()
       navigate({ name: 'session', id: session_id, tab: 'terminal' })
     } catch (e) {

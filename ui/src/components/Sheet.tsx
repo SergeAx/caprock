@@ -105,8 +105,8 @@ export function KeyChip({ primary, children }: { primary?: boolean; children: Re
     <kbd
       aria-hidden="true"
       data-key-chip
-      className={`mono rounded-[5px] border px-1.5 py-px text-[12.5px] font-semibold leading-[18px] ${
-        primary ? 'border-current/45 bg-black/10' : 'border-[var(--app-hairline-strong)] bg-[var(--app-row-hover)] text-fg'
+      className={`rounded-[5px] border px-2 py-px font-sans text-[15px] font-semibold leading-[20px] tracking-[0.04em] ${
+        primary ? 'border-transparent bg-panel text-accent' : 'border-fg/35 bg-fg/10 text-fg'
       }`}
     >
       {children}

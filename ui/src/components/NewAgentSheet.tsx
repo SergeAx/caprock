@@ -86,7 +86,7 @@ export function NewAgentSheet({
   const catalog = useAgentCatalog()
   const agents = useMemo(() => startable(catalog.entries), [catalog.entries])
   const checking = !catalog.loaded
-  const [agent, setAgent] = useAgentChoice(agents)
+  const [agent, setAgent, agentDefault] = useAgentChoice(agents)
   const entry = catalog.entries.find((e) => e.id === agent)
   const canStart = entry ? entry.installed && !entry.locked : agents.includes(agent)
   const custom = isCustomAgent(agent)
@@ -283,7 +283,7 @@ export function NewAgentSheet({
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
-            {catalog.entries.length > 1 ? <AgentPicker value={agent} agents={agents} entries={catalog.entries} onChange={setAgent} /> : <div />}
+            {catalog.entries.length > 1 ? <AgentPicker value={agent} agents={agents} entries={catalog.entries} onChange={setAgent} dflt={agentDefault} /> : <div />}
             {canStart && (
               <SheetField label="Model">
                 <ModelField agent={agent} value={models[agent] ?? ''} onChange={(v) => setModels((m) => ({ ...m, [agent]: v }))} entry={entry} />

@@ -267,16 +267,22 @@ describe('Codex and OpenCode', () => {
     }
   })
 
-  it('remembers the last agent chosen, for this viewer', () => {
+  it('starts on Claude Code, not on the last agent chosen', () => {
     const first = open()
     fireEvent.change(screen.getByLabelText<HTMLSelectElement>('Agent'), { target: { value: 'opencode' } })
     first.unmount()
     open()
+    expect(screen.getByLabelText<HTMLSelectElement>('Agent').value).toBe('claude')
+  })
+
+  it('starts on the default agent once one is set', () => {
+    localStorage.setItem('caprock.spawn.defaultAgent', 'opencode')
+    open()
     expect(screen.getByLabelText<HTMLSelectElement>('Agent').value).toBe('opencode')
   })
 
-  it('falls back when the remembered agent is gone from this machine', () => {
-    localStorage.setItem('caprock.spawn.agent', 'codex')
+  it('falls back when the default agent is gone from this machine', () => {
+    localStorage.setItem('caprock.spawn.defaultAgent', 'codex')
     render(<SpawnDialog available agents={['claude', 'gemini']} onClose={() => {}} initialCwd="/x" />)
     expect(screen.getByLabelText<HTMLSelectElement>('Agent').value).toBe('claude')
   })

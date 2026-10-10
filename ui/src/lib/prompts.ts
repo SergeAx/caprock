@@ -26,6 +26,7 @@ export type PromptKind =
   | 'premium-hint' | 'premium-banner' | 'premium-limit' | 'premium-cap'
   | 'teams-banner' | 'teams-nudge'
   | 'star-dismissed' | 'star-done'
+  | 'setup-later' | 'setup-phone-skip' | 'setup-telegram-skip'
 
 const KEY = 'caprock-prompts'
 const DAY = 24 * 60 * 60 * 1000
@@ -48,6 +49,11 @@ const PERIOD_MS: Record<PromptKind, number> = {
   'star-dismissed': 30 * DAY,
   // "I starred it" is final.
   'star-done': Number.POSITIVE_INFINITY,
+  // The setup strip: × on the strip is "later", a week; "Not needed" on one
+  // item is final for that item. Once both are connected or skipped it is gone.
+  'setup-later': 7 * DAY,
+  'setup-phone-skip': Number.POSITIVE_INFINITY,
+  'setup-telegram-skip': Number.POSITIVE_INFINITY,
 }
 
 type Store = Partial<Record<PromptKind, number>>

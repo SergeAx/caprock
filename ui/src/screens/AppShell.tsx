@@ -41,6 +41,7 @@ import { TabStrip, TerminalStack } from '@/components/TerminalTabs'
 import { Inspector } from '@/components/Inspector'
 import { StatusStrip } from '@/components/StatusStrip'
 import { StarStrip } from '@/components/StarStrip'
+import { SetupStrip } from '@/components/SetupStrip'
 import { ShareMoment } from '@/components/Nudges'
 import { ShareDialog } from '@/components/Share'
 import { usePromptSync } from '@/lib/nudges'
@@ -1022,6 +1023,7 @@ export function AppShell() {
       {/* With the sidebar open its Today strip carries the plan windows and the day's spend, so the strip leaves them out. */}
       {/* The GitHub star ask sits above the status strip, never over a
         * terminal; the share toast floats (lib/nudges.ts, one at a time). */}
+      <SetupStrip app />
       <StarStrip app />
       <ShareMoment />
       <StatusStrip summary={data.summary} pane={focused ? paneStatus[focused.sessionId] : undefined} session={focused?.kind === 'session' && workspaceShown ? focusedSession : undefined} version={version} figures={!prefs.sidebar} />

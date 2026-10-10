@@ -21,6 +21,11 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Added
 
+- **Take Caprock with you.** A slim strip above the status bar offers *Open
+  on your phone* and *Connect Telegram*, each opening its Settings section.
+  It ticks an item off by itself once a phone is paired or the bot has a
+  chat, *Not needed* drops an item for good, × hides it for a week, and
+  once both are done or skipped it never comes back.
 - **Interface size in the app.** Settings → Appearance sets 100, 110, 125
   or 140%, and ⌘+ / ⌘− / ⌘0 (Ctrl+Shift off macOS) step it. The window
   zooms natively, terminal included. The app now opens at 110%.

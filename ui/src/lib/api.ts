@@ -924,6 +924,9 @@ export interface SpawnRequest {
    *  the agent that ran the session, whatever this says. */
   agent?: string
   cwd?: string; chat?: boolean; create?: boolean; worktree?: string
+  /** The branch a new worktree starts from (HEAD when absent); with
+   *  worktree_pull it is fetched from its remote first. */
+  worktree_base?: string; worktree_pull?: boolean
   model?: string; permission_mode?: string; args?: string[]
   /** Continue an existing conversation instead of starting a new one. Caprock
    *  cannot type into a process it did not start, so picking a session up

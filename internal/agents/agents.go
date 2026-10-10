@@ -33,6 +33,10 @@ type SpawnRequest struct {
 	Chat           bool   `json:"chat,omitempty"`            // a quick chat: Caprock picks the directory, no repository needed
 	Create         bool   `json:"create,omitempty"`          // make Cwd if it does not exist (one level, under an existing parent)
 	Worktree       string `json:"worktree,omitempty"`        // git worktree name to create under the repo
+	// WorktreeBase is the branch a new worktree starts from (HEAD when empty);
+	// WorktreePull fetches it from its remote first.
+	WorktreeBase string `json:"worktree_base,omitempty"`
+	WorktreePull bool   `json:"worktree_pull,omitempty"`
 	Model          string `json:"model,omitempty"`           // --model
 	PermissionMode string `json:"permission_mode,omitempty"` // --permission-mode
 	Command        string `json:"command,omitempty"`         // default "claude"
@@ -429,7 +433,7 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Agent, error) {
 	cwd := req.Cwd
 	worktree := ""
 	if req.Worktree != "" {
-		wt, err := createWorktree(ctx, req.Cwd, req.Worktree)
+		wt, err := createWorktree(ctx, req.Cwd, req.Worktree, req.WorktreeBase, req.WorktreePull)
 		if err != nil {
 			return nil, err
 		}

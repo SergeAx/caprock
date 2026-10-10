@@ -13,7 +13,10 @@ import (
 
 // createWorktree runs `git worktree add` under repoDir and returns the new path.
 // The worktree lives at <repo>/.caprock-worktrees/<name>.
-func createWorktree(ctx context.Context, repoDir, name string) (string, error) {
+//
+// base, when set, is the branch the new one starts from (else HEAD); with pull
+// it is fetched from its remote first (startPoint).
+func createWorktree(ctx context.Context, repoDir, name, base string, pull bool) (string, error) {
 	if strings.ContainsAny(name, `/\:`) {
 		return "", errors.New("agents: worktree name must not contain path separators")
 	}
@@ -53,7 +56,15 @@ func createWorktree(ctx context.Context, repoDir, name string) (string, error) {
 	}
 	// -b (not -B) fails loudly rather than resetting, which is the behaviour we
 	// want even if the checks above are ever bypassed by a race.
-	if _, err := gitOut(ctx, repo, "worktree", "add", "-b", branch, dir); err != nil {
+	point, err := startPoint(ctx, repo, base, pull)
+	if err != nil {
+		return "", err
+	}
+	args := []string{"worktree", "add", "--no-track", "-b", branch, dir}
+	if point != "" {
+		args = append(args, point)
+	}
+	if _, err := gitOut(ctx, repo, args...); err != nil {
 		return "", err
 	}
 	return dir, nil

@@ -81,6 +81,11 @@ type Deps struct {
 	AcceptBypass   func() error
 	// Storage returns what the data directory holds for /v1/storage. nil ⇒ 501.
 	Storage func(ctx context.Context) any
+	// Resources returns the resource meter's figures for GET /v1/resources;
+	// ReapOrphans stops orphaned pty-hosts for POST /v1/resources/reap.
+	// nil ⇒ 501.
+	Resources   func(ctx context.Context) any
+	ReapOrphans func(ctx context.Context) (any, error)
 	// WindowStop returns the plan-window stop's state for GET
 	// /v1/window-stop: the share, whether a licence is active, the figures it
 	// acts on and how fresh they are, and the sessions it has paused. nil ⇒ 501.
@@ -448,6 +453,8 @@ func New(d Deps) *Server {
 	m.HandleFunc("GET /v1/recent-dirs", s.handleRecentDirs)
 	m.HandleFunc("GET /v1/status", s.handleStatus)
 	m.HandleFunc("GET /v1/storage", s.handleStorage)
+	m.HandleFunc("GET /v1/resources", s.handleResources)
+	m.HandleFunc("POST /v1/resources/reap", s.handleReapOrphans)
 	// What the paid plan costs, so the dashboard can say it without guessing
 	// and without an outbound call. Static — it is compiled in — but served
 	// rather than duplicated in the UI, so one edit in Go changes every place

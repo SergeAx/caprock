@@ -7,6 +7,39 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Added
+
+- **See what your sessions cost the machine.** While Caprock is open it
+  samples every live session's processes every 5 seconds: the status bar
+  shows the session's CPU and memory, the inspector lists its three busiest
+  processes, and a quiet flame marks the sidebar row and the tab of a session
+  that has used a full core or 2 GB for over a minute (`GET
+  /v1/resources`, a `resources` frame on `/v1/live`). Nothing is sampled
+  while no window is open.
+- **Settings → About shows Caprock itself**: the daemon, the app and the
+  terminal holders, with their memory and CPU, and how many holders are
+  orphans, with a button that stops them (`POST /v1/resources/reap`).
+- **`CAPROCK_PPROF=127.0.0.1:<port>`** serves Go's profiler on a separate
+  loopback listener, off unless set. See `.ai/10-infrastructure.md`.
+
+### Fixed
+
+- **Orphaned terminal holders are stopped.** A `caprock pty-host` of this
+  Caprock whose program has exited, or that nothing can reach any more and
+  holds only an idle shell, is stopped five minutes after Caprock starts and
+  hourly after that. Holders left by another data folder (a deleted demo or
+  test install) are stopped from Settings. One that runs an agent or a
+  command is never stopped. On the machine this was measured on, 15 holders
+  left by a deleted demo data folder held about 13 MB each.
+- **The daemon uses less CPU and memory.** A file write no longer re-checks
+  every transcript (only the written one; a 2-second sweep covers files
+  written in the last 10 minutes), the storage breakdown reads the events
+  table once instead of sorting it through temporary files, and SQLite's page
+  cache is 16 MiB per connection instead of 64. Measured on a copy of a
+  1.8 GB database with 1,264 transcripts, two terminals and a steady stream
+  of activity: CPU 3.8% → 3.1%, memory footprint 263 MB → 122 MB, the
+  storage measurement over 40 s → 6.7 s.
+
 ## [0.99.0] - 2026-10-10
 
 ### Added

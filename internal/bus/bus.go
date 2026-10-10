@@ -38,6 +38,9 @@ const (
 	// Telegram would say, as plain text, with the prompt's answers when there
 	// is one Caprock can give.
 	FrameNotify FrameType = "notify"
+	// FrameResources is the resource meter's sample (daemon.ResourceReport),
+	// every few seconds while a dashboard is connected.
+	FrameResources FrameType = "resources"
 )
 
 // Frame is what goes over /v1/live. Seq is set by Publish: one more than the

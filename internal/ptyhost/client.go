@@ -111,6 +111,14 @@ func (m *Manager) spawnHosted(ctx context.Context, spec ptyman.Spec) (ptyman.Ses
 	if err == nil {
 		defer logf.Close()
 	}
+	// The holder's own environment names its registry, so a daemon that finds
+	// it later can tell an orphan (its registry is gone) from another
+	// Caprock's session (orphans.go). The child's environment is spec.Env.
+	hostEnv := m.Env
+	if hostEnv == nil {
+		hostEnv = os.Environ()
+	}
+	hostEnv = append(append([]string(nil), hostEnv...), RegistryEnv+"="+dir)
 	var (
 		cmd    *exec.Cmd
 		stdin  io.WriteCloser
@@ -119,7 +127,7 @@ func (m *Manager) spawnHosted(ctx context.Context, spec ptyman.Spec) (ptyman.Ses
 	for _, attr := range detachAttempts() {
 		// Not CommandContext: the holder must outlive the request, and the daemon.
 		cmd = exec.Command(m.Exe, args...) //nolint:gosec // our own binary, fixed arguments
-		cmd.Env = m.Env
+		cmd.Env = hostEnv
 		// The system temp directory, not the data directory or wherever the
 		// daemon was started: on Windows a process's working directory cannot
 		// be deleted while it runs, and a holder runs as long as its session.

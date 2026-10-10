@@ -14,6 +14,7 @@ Checked against `go.dev/dl`, `proxy.golang.org`, and the npm registry on 2026-08
 | `github.com/coder/websocket`     | v1.8.15   | context-native WS                               |
 | `github.com/spf13/cobra`         | v1.10.2   | CLI subcommands                                 |
 | `github.com/aymanbagabas/go-pty` | v0.2.3    | T0 candidate; ConPTY on Windows                 |
+| `github.com/shirou/gopsutil/v4`  | v4.26.9   | process CPU and memory (resource meter)         |
 | Node.js                          | 22 LTS    | Vite 8 needs Node ≥22.12 (or ≥20.19)            |
 | React / react-dom                | 19.2.x    |                                                 |
 | Vite                             | 8.2.x     | `@vitejs/plugin-react` 6.x                      |
@@ -68,6 +69,29 @@ make test lint check     # before every push
 ```
 
 Data dir and `CAPROCK_DATA_DIR` override: [ADR-013](08-decisions.md#adr-013--data-dir-and-config-conventions). To develop against a throw-away data dir: `CAPROCK_DATA_DIR=$(mktemp -d) make dev`.
+
+### Profiling the daemon
+
+Release binaries are stripped, so `sample` and `footprint` on an installed
+daemon show addresses, not Go frames. Measure a local build instead, against a
+copy of a real database, with the opt-in profiling listener:
+
+```bash
+D=$(mktemp -d); mkdir -p $D/data $D/home
+sqlite3 "$HOME/Library/Application Support/caprock/caprock.db" ".backup '$D/data/caprock.db'"   # never cp a live database
+go build -o $D/caprock ./cmd/caprock
+env -i HOME=$D/home CAPROCK_DATA_DIR=$D/data CAPROCK_PPROF=127.0.0.1:6391 PATH=/usr/bin:/bin \
+  $D/caprock up --foreground --no-hooks --no-open --port 4391 --data-dir $D/data &
+go tool pprof -top $D/caprock "http://127.0.0.1:6391/debug/pprof/profile?seconds=60"
+go tool pprof -sample_index=inuse_space -top $D/caprock http://127.0.0.1:6391/debug/pprof/heap
+```
+
+`CAPROCK_PPROF` is off unless set, takes a loopback address only (anything
+else, `localhost` included, is refused and logged), and serves Go's
+`net/http/pprof` on a listener of its own — never on the API port, which a
+paired phone can reach. The Go heap is not the whole footprint: SQLite's page
+caches and sorter memory are allocated by the driver outside it, so compare
+`footprint <pid>` with the heap profile's `HeapInuse`.
 
 ## Release checklist
 

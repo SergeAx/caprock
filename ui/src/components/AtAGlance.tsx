@@ -17,7 +17,7 @@ import { useApi } from '@/lib/useApi'
 import { fmtTool, fmtUSD } from '@/lib/format'
 import { Panel } from '@/components/ui'
 import { AgentCharacter, agentName, characterFor, type Character } from '@/components/Characters'
-import { Donut, Ring, sharePct, topN, type Segment } from '@/components/Donut'
+import { colorOf, Donut, Ring, sharePct, topN, type Segment } from '@/components/Donut'
 
 const OPEN_KEY = 'caprock-glance-open'
 const VIEW_KEY = 'caprock-glance-view'
@@ -175,37 +175,91 @@ export function AtAGlancePanel() {
         </>
       )}
       {open && view === 'numbers' && (
-        <div className="grid gap-x-8 gap-y-4 px-3 py-3 md:grid-cols-2 xl:grid-cols-4">
-          <NumTable title="Where the money went" head={['model', 'cost', 'share']} rows={c.models.map((s) => [s.label, s.display, sharePct(s.value, c.modelTotal)])} />
-          {c.bill.length > 0 && <NumTable title="The bill by token type" head={['type', 'cost', 'share']} rows={c.bill.map((s) => [s.label, s.display, sharePct(s.value, c.billTotal)])} />}
-          <NumTable title="Most-used tools" head={['tool', 'calls', 'share']} rows={c.tools.map((s) => [s.label, s.display, sharePct(s.value, c.toolTotal)])} />
-          {rows.length > 0 && <NumTable title="Agents" head={['agent', 'turns', 'cost', 'share']} rows={rows.map((r) => [r.name, r.turns.toLocaleString('en-US'), fmtUSD(r.cost), sharePct(r.cost, agentTotal)])} />}
+        <div className="grid gap-x-10 gap-y-7 px-3 py-4 md:grid-cols-2 min-[1800px]:grid-cols-4">
+          <ShareBlock title="Where the money went" head={['model', 'cost']} of="of the cost" segments={c.models} total={c.modelTotal} />
+          {c.bill.length > 0 && <ShareBlock title="The bill by token type" head={['type', 'cost']} of="of the bill" segments={c.bill} total={c.billTotal} />}
+          <ShareBlock title="Most-used tools" head={['tool', 'calls']} of="of tool calls" segments={c.tools} total={c.toolTotal} />
+          {rows.length > 0 && (
+            <ShareBlock
+              title="Agents"
+              head={['agent', 'turns', 'cost']}
+              of="of the spend"
+              segments={rows.map((r) => ({ key: r.key, label: r.name, value: r.cost, display: fmtUSD(r.cost) }))}
+              extra={rows.map((r) => r.turns.toLocaleString('en-US'))}
+              total={agentTotal}
+            />
+          )}
         </div>
       )}
     </Panel>
   )
 }
 
-function NumTable({ title, head, rows }: { title: string; head: string[]; rows: string[][] }) {
+/**
+ * One block of the Numbers view, the figures with their shares drawn
+ * (owner, 2026-10-11: "show the percentages visually, beautifully and
+ * effectively"): the leading share large, a 100% bar of the whole in the
+ * donuts' colours, and under every row a bar of its share. Still a table, so
+ * it stays the charts' text alternative.
+ */
+function ShareBlock({ title, head, of, segments, total, extra }: {
+  title: string
+  head: string[]
+  of: string
+  segments: Segment[]
+  total: number
+  extra?: string[]
+}) {
+  const lead = segments[0]
+  const pct = (v: number) => (total > 0 ? (100 * v) / total : 0)
   return (
-    <table className="w-full text-[11px] border-collapse">
-      <caption className="text-left text-[10px] uppercase tracking-[0.12em] text-fg-faint pb-1.5">{title}</caption>
-      <thead>
-        <tr className="text-fg-faint">
-          {head.map((h, i) => <th key={h} scope="col" className={`font-normal pb-1 ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>)}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r[0]} className="border-t border-border">
-            {r.map((cell, i) => (
-              i === 0
-                ? <th key={i} scope="row" className="text-left font-normal text-fg-muted py-0.5 pr-2 truncate max-w-[160px]">{cell}</th>
-                : <td key={i} className="num text-right text-fg py-0.5 pl-2">{cell}</td>
-            ))}
-          </tr>
+    <div className="min-w-0">
+      <p className="text-[11px] uppercase tracking-[0.12em] text-fg-faint">{title}</p>
+      {lead && (
+        <p className="mt-1.5 flex items-baseline gap-2">
+          <span className="num text-[28px] font-semibold leading-none text-accent">{sharePct(lead.value, total)}</span>
+          <span className="min-w-0 truncate text-[13px] text-fg-muted">
+            <span className="text-fg">{lead.label}</span> {of}
+          </span>
+        </p>
+      )}
+      <div className="mt-2.5 flex h-2.5 w-full gap-px overflow-hidden rounded-full bg-panel-2" aria-hidden>
+        {segments.map((sg, i) => (
+          <span key={sg.key} style={{ width: `${pct(sg.value)}%`, background: colorOf(sg, i) }} className="h-full min-w-[2px] first:rounded-l-full last:rounded-r-full" />
         ))}
-      </tbody>
-    </table>
+      </div>
+      <table className="mt-3 w-full border-collapse text-[13px]">
+        <caption className="sr-only">{title}</caption>
+        <thead>
+          <tr className="text-[11px] text-fg-faint">
+            {[...head, 'share'].map((h, i) => <th key={h} scope="col" className={`pb-1 font-normal ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {segments.map((sg, i) => [
+            <tr key={sg.key} className="align-top">
+              <th scope="row" className="max-w-[220px] pt-1 pr-2 text-left font-normal text-fg">
+                <span className="flex items-center gap-2">
+                  <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ background: colorOf(sg, i) }} />
+                  <span className="truncate">{sg.label}</span>
+                </span>
+              </th>
+              {extra && <td className="num pt-1 pl-2 text-right text-fg-muted">{extra[i]}</td>}
+              <td className="num pt-1 pl-2 text-right text-fg">{sg.display}</td>
+              <td className="num pt-1 pl-2 text-right font-semibold text-fg">{sharePct(sg.value, total)}</td>
+            </tr>,
+            // The row's share as a bar the width of the whole row, so the
+            // rows compare against each other at a glance.
+            <tr key={`${sg.key}-bar`} aria-hidden>
+              <td colSpan={head.length + 1} className="pb-1.5 pl-[18px]">
+                <span className="block h-1 rounded-full bg-panel-2">
+                  <span className="block h-full rounded-full" style={{ width: `${Math.max(pct(sg.value), 0.8)}%`, background: colorOf(sg, i) }} />
+                </span>
+              </td>
+            </tr>,
+          ])}
+        </tbody>
+      </table>
+    </div>
   )
 }

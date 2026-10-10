@@ -9,6 +9,10 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Changed
 
+- **At a glance, Numbers, draws its shares.** Each block leads with its
+  largest share in large type, a bar of the whole in the donuts' colours,
+  and a bar under every row the width of its share; two blocks to a row
+  unless the window is very wide.
 - **Telegram set up from three large steps.** Settings → *Telegram* now
   leads with *Make a bot*, *Paste its token* and *Send it a code*, an *Open
   @BotFather* button and one *Connect* button; the alert switches appear

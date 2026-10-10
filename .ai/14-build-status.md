@@ -73,6 +73,12 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-11 — 0.101.3: hide a project in one click, Outside projects
+
+A project hides in one click from its hover actions, and Hidden now wins
+over running: only the current project or one waiting on you comes back
+out. Other folders reads Outside projects.
+
 ### 2026-10-11 — 0.101.2: running projects stay open, hide in one click, Settings you can find
 
 Every project where something runs or waits stays open in the sidebar with

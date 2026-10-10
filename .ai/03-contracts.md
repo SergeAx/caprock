@@ -549,6 +549,7 @@ GET  /v1/premium                       → what the paid plan costs and where to
 GET  /v1/window-stop                   → the plan-window stop's state (§ Pricing table, "The plan-window stop"); 501 when the daemon has no guard
 POST /v1/report/test                   → sends this week's report now → {sent:"ok"}; 502 with Telegram's error, 501 when reporting is unavailable
 POST /v1/alerts/test                   → sends a test phone alert now, no licence needed → {sent:"ok"}; 502 with Telegram's error or "no bot configured"
+GET/PUT/POST/DELETE /v1/telegram…      → the Telegram bridge's setup and pairing (§ Telegram bridge)
 POST /v1/shutdown                      → 200 (bearer-token gated; `caprock down`)
 POST /v1/statusline                    → 204 (bearer-token gated) {session_id, five_hour?, seven_day?} — records rate-limit windows, then runs the plan-window stop's check
 GET  /v1/statusline/{id}               → 200 (bearer-token gated) session counters for the status line; zeros for an unknown session
@@ -782,21 +783,101 @@ started. Nothing is sent until a bot token and chat id are set. The rules, in
   stays quiet. A failed send is logged and shown, never retried.
 
 The message is sent with `parse_mode: HTML`, every string from a session
-escaped (`&`, `<`, `>`). Its first line is the status and the session's name
-as Now shows it (`✅ Finished · <title>`, `⚠️ Stopped: <error> · <title>`,
-`⏳ Needs approval · <title>`, `❓ Needs your answer · <title>`); then the
-folder with home as `~`, the branch and a non-Claude agent; for a dialog the
-tool and its command, file, URL or question (100 characters); for a finished
+escaped (`&`, `<`, `>`). Its first line says whose it is: the agent's mark and
+name, the project and the session's name as Now shows it (`🟠 Claude Code ·
+caprock · Fix the cache test`; marks: Claude Code 🟠, Codex ⚪, OpenCode ⚫,
+Gemini CLI 🔵, DeepSeek Harness 🐋, Grok Build ⬛) ([ADR-047](08-decisions.md)).
+The second is the status (`✅ Finished`, `⚠️ Stopped: <error>`, `⏳ Needs
+approval`, `❓ Needs your answer`); then the folder with home as `~` and the
+branch; for a dialog the tool and its command, file, URL or question (100
+characters), led by `Subagent (<type>)` when a subagent asks; for a finished
 run — since the last main-thread prompt — its duration, cost, tool calls and
 changed files (`Edit`/`Write`/`MultiEdit`/`NotebookEdit` paths, three named),
 and while `alert_reply` is on the first line of the final reply (the Stop
 hook's `last_assistant_message`, else the newest main-thread prose; 120
 characters); last, a link to `#/session/<id>` on the address phone access
 listens on — the LAN or Tailscale one — omitted when phone access is off. Code,
-diffs and tool output are never sent (ADR-036, amended 2026-10-05).
+diffs and tool output are never sent (ADR-036, amended 2026-10-05), except as
+§ Telegram bridge below allows. Under the message: **Open on phone** (a URL
+button, when the link exists; a message Telegram refuses for its address is
+sent again without it) and **Mute this session**; with two-way chat active,
+**Approve** and **Deny** under a dialog in a session Caprock started whose
+prompt is the only one outstanding (ADR-035).
 The same decisions reach the desktop app as `notify` frames, under the same rules and caps, with switches of their own (§ Notify frame).
 `CAPROCK_TELEGRAM_API` in the daemon's environment replaces
-`https://api.telegram.org` for both senders, to test against a stub.
+`https://api.telegram.org` for every Telegram call, to test against a stub.
+
+#### Telegram bridge
+
+[ADR-047](08-decisions.md). The bot set up for the alerts also reads what its
+one paired chat sends back. Routes, all machine-only (none is on a paired
+device's list), all answering the status below:
+
+```
+GET    /v1/telegram           → TelegramStatus
+PUT    /v1/telegram/token     {token} → checked with getMe, stored only when Telegram knows it; 400 with Telegram's reason otherwise
+POST   /v1/telegram/pair      → a new one-time code (10 minutes); 409 with no bot
+DELETE /v1/telegram/pair      → the code withdrawn
+DELETE /v1/telegram           → token, chat and telegram.json forgotten (the weekly report and alerts stop too)
+```
+
+`TelegramStatus` = `{bot_set, token_masked?, bot_username?, chat_set,
+chat_name?, manual_chat?, pairing?: {code, link?, expires_ms}, polling,
+last_error?, mute_all?, muted?}`. `token_masked` is `••••••` and the token's
+last four characters; the token itself is never in a response, a log line or
+an error (a transport error's URL, which carries it, is dropped). `link` is
+`https://t.me/<bot>?start=<code>`, which opens the bot and sends `/start
+<code>` in one tap. `manual_chat` marks a chat id typed in before pairing
+existed; it keeps working.
+
+- **Pairing.** The first message from a **private** chat that is `/start
+  <code>`, `/start@bot <code>` or the six digits alone, while the code is
+  valid, pairs that chat: its id is stored as `report_chat_id`. A wrong code
+  is answered "does not match" (five end the pairing); a group is refused.
+- **Reading.** `getUpdates` long polling (25 s), only while pairing, or while
+  a chat is paired and an alert kind or two-way chat is on. Nothing listens
+  for Telegram. The next offset is kept in `telegram.json`. Failures back off
+  from 1 s to a minute; a refused token stops reading until a new one is
+  saved. A message from any other chat is dropped unanswered; one dated more
+  than two minutes before reading began is skipped.
+- **Free** (no licence): `/help`, `/start`, `/mute` (as a reply, `/mute <n>`,
+  `/mute all` or bare), `/unmute`, and the Mute button.
+- **Premium** — an active licence **and** `telegram_chat` on: a reply to one
+  of the bot's messages types its text into that session and presses Enter
+  (line breaks as ESC CR, then CR after 200 ms), only for a session Caprock
+  started and is running; a session it did not start gets "I can only watch
+  this one", one waiting on a permission prompt gets "answer that first".
+  `/sessions` lists up to 20 live sessions with their header and state,
+  numbered, with a button per running owned one that asks for a reply to it.
+  `/new <project> <message>` starts Claude Code in the project of that name
+  (exact, else the only prefix, else the only substring match) in
+  `spawn_permission_mode`; Bypass asks first (*Start in Bypass* / *Ask first
+  instead* / *Cancel*) and still needs the one-time consent of ADR-041.
+  `/stop <n>` (or as a reply) asks, then kills a session Caprock started.
+  Approve and Deny call the same answer path as the card (`AnswerPermission`:
+  the key read off the screen, `422` cases toasted, nothing typed blind); the
+  buttons are replaced by the outcome. Without a licence or with the switch
+  off, the chat gets one line saying so at most once a day; a button gets a
+  toast.
+- **Conversations.** A session typed into from Telegram, or started there,
+  answers there for an hour after: its permission prompts are sent at once
+  (with Approve and Deny), and its reply the moment its turn ends — the Stop
+  hook's `last_assistant_message`, up to 3,000 characters, `inline code` and
+  `**bold**` kept, each fenced block replaced by `[<lang>, N lines]` unless
+  `telegram_code` is on (then `<pre>`). The rules' own alerts skip it meanwhile.
+  With two-way chat active, finished alerts carry the reply the same way.
+- **Pace.** One message per second to the chat; a 429's `retry_after` is
+  waited out up to 10 s and holds the queue for longer ones; with more than
+  three plain messages waiting they are joined into one; an alert not sent
+  within 30 s is dropped.
+
+`PUT /v1/settings` accepts `telegram_chat` and `telegram_code` (bools, off
+unless turned on; `GET` returns them). `<data_dir>/telegram.json` (`0600`) is
+the bridge's own: `{bot_id, bot_username, chat_id, chat_name, paired_at,
+offset, refs: [{message_id, session_id, prompt_id, kind, at}], muted:
+{session_id: ms}, mute_all, premium_note_at}` — the last 400 messages and the
+sessions they were about, so a reply finds its session across a restart. The
+token stays in `config.json`.
 
 `GET /v1/gemini` reports whether asking Gemini is possible here: `{available, env_var, licensed, model}`. It performs **no network I/O** and **never returns the key** — `available` says only that one is present. `POST /v1/gemini/ask` takes `{prompt, model?}` and answers `{text, model, usage}`, where `usage` carries the response's own `promptTokenCount` / `candidatesTokenCount` / `cachedContentTokenCount` / `thoughtsTokenCount`. It is the one endpoint in the product that checks the licence **server-side** (402 without an active key) rather than leaving the paywall to the UI, because the call spends the user's Gemini quota and opens an outbound connection — the reasoning and its limits are in [ADR-023](08-decisions.md). With no key set it answers 412 with the variable to set, which is a different problem from 402 and is reported separately so the screen can say which. The key is read from `GEMINI_API_KEY` in the daemon's environment at call time; it is never stored, never accepted by `PUT /v1/settings`, and never present in `GET /v1/settings`.
 
@@ -2386,7 +2467,7 @@ A platform without a signed bundle is absent. The signature is minisign over the
 
 ### File permissions
 
-Everything Caprock writes into `<data_dir>` is owner-only on POSIX. The data directory is `0700`; `config.json`, `runtime.json` and the log are `0600`; and **`caprock.db` plus its `-wal`/`-shm` siblings are `0600`**.
+Everything Caprock writes into `<data_dir>` is owner-only on POSIX. The data directory is `0700`; `config.json`, `runtime.json`, `telegram.json` and the log are `0600`; and **`caprock.db` plus its `-wal`/`-shm` siblings are `0600`**.
 
 The database is included because it stores prompts and responses in cleartext — that is what makes the Memory screen searchable — so a world-readable mode hands every other local account the user's entire session history. It was previously left at whatever the process umask produced, which under a default umask is `0644`, while `config.json` beside it had always been `0600`.
 

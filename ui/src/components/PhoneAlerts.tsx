@@ -1,11 +1,14 @@
 /**
- * Phone alerts (#/settings): a Telegram message when a session is waiting for
- * approval, and when one has finished (ADR-036).
+ * Telegram (#/settings): a message when a session is waiting for approval,
+ * and when one has finished (ADR-036), from the owner's own bot — set up and
+ * paired right here (ADR-047).
  *
  * Free, through the bot the weekly report uses — so the bot is set up here as
  * well, outside the report's lock. Both switches are off until switched on,
- * so a bot saved for the weekly report never starts alerting on its own. The test button exists for the same reason as
- * the report's: the failure mode of an alert is silence.
+ * so a bot saved for the weekly report never starts alerting on its own. The
+ * test button exists for the same reason as the report's: the failure mode of
+ * an alert is silence. Talking back from Telegram is Premium and lives in the
+ * section under this one (TelegramChat).
  */
 import { useState } from 'react'
 import { api, errText, type Settings } from '@/lib/api'
@@ -52,14 +55,16 @@ export function PhoneAlerts() {
   const bot = <TelegramBotFields s={s} onSaved={() => settings.refresh?.()} />
   return (
     <Section
-      title="Phone alerts"
+      id="telegram"
+      title="Telegram"
       aside={<span className="text-[12px] text-fg-muted">{configured ? 'via your Telegram bot' : 'needs a Telegram bot'}</span>}
     >
       <p className="text-[12px] leading-relaxed text-fg-muted">
-        A Telegram message when a session needs you, from any terminal. It names the session (its title, or
-        its first prompt), its folder and branch, with a link when your phone can open this dashboard. A
-        dialog adds the tool and the command or file it asks about; a finished run adds its time, cost, tool
-        calls and changed files. Telegram can read every message; code and tool output are never sent.
+        A Telegram message when a session needs you, from any terminal. Each one opens with whose it is — the agent, the
+        project and the session's title — then its folder and branch, with a link when your phone can open this dashboard.
+        A dialog adds the tool and the command or file it asks about; a finished run adds its time, cost, tool calls and
+        changed files. Telegram can read every message; tool output is never sent, and code only if you switch it on
+        below. Free.
       </p>
       <Toggle
         checked={s.alert_approval === true}
@@ -97,6 +102,10 @@ export function PhoneAlerts() {
           ) : s.alert_last_sent_ms ? (
             <p className="text-[11px] text-fg-faint">Last alert sent {fmtAgo(s.alert_last_sent_ms, now)}.</p>
           ) : null}
+          <p className="text-[11px] text-fg-faint">
+            Each message has a <span className="text-fg-muted">Mute this session</span> button; <span className="mono">/mute all</span> in
+            the chat silences everything until <span className="mono">/unmute</span>.
+          </p>
           <Details summary="Telegram bot">
             <div className="grid gap-3 text-[12px]">{bot}</div>
           </Details>

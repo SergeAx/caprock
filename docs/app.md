@@ -418,7 +418,7 @@ with its Yes and No buttons.
 
 Settings → *Desktop notifications* has two switches: *waiting for approval*
 (on) and *has finished* (off). They are separate from the Telegram alerts in
-[Phone alerts](../README.md#hear-about-it-on-your-phone), which stay off until
+[Phone alerts](../README.md#hear-about-it-on-your-phone--and-answer-from-telegram), which stay off until
 you turn them on.
 
 With Premium's plan-window stop on (Settings → *Pause at the plan limit*), a

@@ -49,8 +49,8 @@ Linux, which only the CI matrix can catch. Run a single package's tests with
 Full engineering rules: [`.ai/06-engineering-rules.md`](.ai/06-engineering-rules.md). The non-negotiables:
 
 - **Local-first** — no telemetry, and no outbound call the user did not switch
-  on (the release check, the Gemini chat, the weekly report — each off by
-  default).
+  on (the release check, and integrations the user turns on — Gemini, GitHub,
+  Telegram — each off by default and saying what it sends).
 - **No invented numbers** — a figure that isn't measured or sourced doesn't ship.
 - **The shim never breaks a user's Claude session** — every error path exits 0.
 - **Contracts change with their docs, together** — a new/changed endpoint, DB

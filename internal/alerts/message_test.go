@@ -27,13 +27,13 @@ func approval(tool, payload string) Alert {
 func TestAFinishedAlertSaysWhatTheRunDid(t *testing.T) {
 	d := Details{
 		Title: "Make phone alerts informative", Cwd: "/Users/ds/Downloads/caprock", Home: "/Users/ds",
-		Branch: "feat/alert-content", Agent: "Claude Code", Link: link,
+		Branch: "feat/alert-content", Agent: "Claude Code", Project: "caprock", Link: link,
 		Run: 12*time.Minute + 30*time.Second, CostUSD: 1.844, Tools: 37,
 		Files: []string{"/Users/ds/Downloads/caprock/internal/alerts/message.go", "/Users/ds/Downloads/caprock/internal/alerts/alerts.go", "/x/phonealerts.go", "/x/api.go"},
 		Reply: "## Done\nAlerts now carry the title.",
 	}
 	got := Message(finished(`{}`), d)
-	want := "✅ <b>Finished</b> · Make phone alerts informative\n" +
+	want := "🟠 Claude Code · caprock · Make phone alerts informative\n✅ <b>Finished</b>\n" +
 		"<code>~/Downloads/caprock</code> · feat/alert-content\n" +
 		"12m · $1.84 · 37 tool calls\n" +
 		"4 files changed: message.go, alerts.go, phonealerts.go +1\n" +
@@ -48,7 +48,7 @@ func TestAFailedTurnSaysWhy(t *testing.T) {
 	a := finished(`{"hook_event_name":"StopFailure","error":"rate_limit"}`)
 	a.Trigger.Kind = event.KindThrottle
 	got := Message(a, Details{Title: "t"})
-	if !strings.HasPrefix(got, "⚠️ <b>Stopped: rate limit</b> · t") {
+	if !strings.HasPrefix(got, "🟠 Claude Code · t\n⚠️ <b>Stopped: rate limit</b>") {
 		t.Fatalf("got %q", got)
 	}
 }
@@ -68,11 +68,11 @@ func TestAnApprovalNamesTheToolAndWhatItAsks(t *testing.T) {
 	for _, c := range cases {
 		got := Message(approval(c.tool, c.payload), d)
 		lines := strings.Split(got, "\n")
-		head := "⏳ <b>Needs approval</b> · Fix CI"
+		head := "⏳ <b>Needs approval</b>"
 		if c.tool == "AskUserQuestion" {
-			head = "❓ <b>Needs your answer</b> · Fix CI"
+			head = "❓ <b>Needs your answer</b>"
 		}
-		if len(lines) != 3 || lines[0] != head || lines[1] != "<code>~/dev/caprock</code> · main" || lines[2] != c.want {
+		if len(lines) != 4 || lines[0] != "🟠 Claude Code · caprock · Fix CI" || lines[1] != head || lines[2] != "<code>~/dev/caprock</code> · main" || lines[3] != c.want {
 			t.Errorf("%s: got\n%s", c.tool, got)
 		}
 	}
@@ -105,7 +105,7 @@ func TestNastyTextIsEscaped(t *testing.T) {
 			t.Fatalf("title not escaped as text:\n%s", got)
 		}
 	}
-	if got := Message(finished(`{}`), d); !strings.Contains(got, "· feat/&lt;x&gt;&amp;y · Codex") {
+	if got := Message(finished(`{}`), d); !strings.Contains(got, "· feat/&lt;x&gt;&amp;y\n") || !strings.HasPrefix(got, "🟠 Codex · &lt;dir&gt;") {
 		t.Fatalf("branch/agent:\n%s", got)
 	}
 }
@@ -124,11 +124,11 @@ func TestLongTextIsClippedOnARuneBoundary(t *testing.T) {
 
 // With nothing known the message still reads, and invents nothing.
 func TestAnUnknownSessionStillReads(t *testing.T) {
-	if got := Message(Alert{Kind: KindApproval}, Details{}); got != "⏳ <b>Needs approval</b> · a session" {
+	if got := Message(Alert{Kind: KindApproval}, Details{}); got != "🟠 Claude Code\n⏳ <b>Needs approval</b>" {
 		t.Fatalf("got %q", got)
 	}
 	got := Message(Alert{Kind: KindFinished, LastThisHour: true}, Details{Cwd: "/home/u/caprock"})
-	if !strings.HasPrefix(got, "✅ <b>Finished</b> · caprock\n<code>/home/u/caprock</code>\n\nThat is 20 alerts") {
+	if !strings.HasPrefix(got, "🟠 Claude Code · caprock\n✅ <b>Finished</b>\n<code>/home/u/caprock</code>\n\nThat is 20 alerts") {
 		t.Fatalf("got %q", got)
 	}
 	if strings.Contains(CheckMessage(""), "http") {
@@ -143,11 +143,11 @@ func TestLongPathsKeepTheirName(t *testing.T) {
 	d := Details{Title: "t", Cwd: deep, Branch: "HEAD"}
 	got := Message(approval("Write", `{"tool_input":{"file_path":"/elsewhere/`+strings.Repeat("y", 120)+`/hello.txt"}}`), d)
 	lines := strings.Split(got, "\n")
-	if !strings.HasPrefix(lines[1], "<code>…") || !strings.HasSuffix(lines[1], "/proj</code>") {
-		t.Fatalf("folder line: %q", lines[1])
+	if !strings.HasPrefix(lines[2], "<code>…") || !strings.HasSuffix(lines[2], "/proj</code>") {
+		t.Fatalf("folder line: %q", lines[2])
 	}
-	if !strings.HasSuffix(lines[2], "/hello.txt</code>") || !strings.Contains(lines[2], "<code>…") {
-		t.Fatalf("subject line: %q", lines[2])
+	if !strings.HasSuffix(lines[3], "/hello.txt</code>") || !strings.Contains(lines[3], "<code>…") {
+		t.Fatalf("subject line: %q", lines[3])
 	}
 }
 
@@ -156,5 +156,47 @@ func TestDurations(t *testing.T) {
 		if got := duration(d); got != want {
 			t.Errorf("%v: %q, want %q", d, got, want)
 		}
+	}
+}
+
+// The owner runs several agents at once: every message opens with whose it
+// is, and a mark a glance tells apart.
+func TestEveryMessageSaysWhichAgentItIsFrom(t *testing.T) {
+	for _, c := range []struct{ key, name, mark string }{
+		{"", "Claude Code", "🟠"}, {"claude", "Claude Code", "🟠"}, {"codex", "Codex", "⚪"},
+		{"opencode", "OpenCode", "⚫"}, {"gemini", "Gemini CLI", "🔵"},
+	} {
+		d := Details{AgentKey: c.key, Agent: c.name, Project: "caprock", Title: "Fix the cache test"}
+		want := c.mark + " " + c.name + " · caprock · Fix the cache test"
+		for _, got := range []string{Message(finished(`{}`), d), Message(approval("Bash", `{}`), d)} {
+			if first := strings.Split(got, "\n")[0]; first != want {
+				t.Errorf("%s: first line %q, want %q", c.name, first, want)
+			}
+		}
+	}
+}
+
+// A session the owner talks to from Telegram sends its whole reply; code
+// blocks stay out unless asked for, and everything is escaped.
+func TestALongReplyKeepsCodeOutUnlessAsked(t *testing.T) {
+	reply := "Fixed it in `cache.go` — **all green**.\n\n```go\nfunc a() {}\nfunc b() {}\n```\nThen <ran> & done."
+	d := Details{Title: "t", Reply: reply, LongReply: true}
+	got := Message(finished(`{}`), d)
+	if !strings.Contains(got, "Fixed it in <code>cache.go</code> — <b>all green</b>.") {
+		t.Fatalf("prose:\n%s", got)
+	}
+	if strings.Contains(got, "func a") || !strings.Contains(got, "<i>[go, 2 lines]</i>") {
+		t.Fatalf("code block not replaced:\n%s", got)
+	}
+	if !strings.Contains(got, "Then &lt;ran&gt; &amp; done.") {
+		t.Fatalf("not escaped:\n%s", got)
+	}
+	d.Code = true
+	if got := Message(finished(`{}`), d); !strings.Contains(got, "<pre>func a() {}\nfunc b() {}</pre>") {
+		t.Fatalf("code kept:\n%s", got)
+	}
+	long := ReplyBody(strings.Repeat("ω", 5000), false, 3000)
+	if n := len([]rune(long)); n != 3001 || !strings.HasSuffix(long, "…") {
+		t.Fatalf("long reply is %d runes", n)
 	}
 }

@@ -12,11 +12,11 @@ import (
 
 	"github.com/dspv/caprock/internal/agents"
 	"github.com/dspv/caprock/internal/alerts"
-	"github.com/dspv/caprock/internal/api"
 	"github.com/dspv/caprock/internal/bus"
 	"github.com/dspv/caprock/internal/event"
 	"github.com/dspv/caprock/internal/relay"
 	"github.com/dspv/caprock/internal/store"
+	"github.com/dspv/caprock/internal/telegram"
 )
 
 // alertTick is how often pending "finished" alerts are checked. Their minute
@@ -111,6 +111,7 @@ func (d *Daemon) alertLoop(ctx context.Context, sub *bus.Subscriber) {
 			for _, a := range rules.Observe(ev, d.rec.Now()) {
 				go d.deliverAlert(ctx, a)
 			}
+			d.observeConversation(ctx, ev)
 		case <-t.C:
 			for _, a := range rules.Due(d.rec.Now()) {
 				go d.deliverAlert(ctx, a)
@@ -125,9 +126,19 @@ func (d *Daemon) deliverAlert(ctx context.Context, a alerts.Alert) {
 	if d.notifyEnabled(a.Kind) {
 		d.publishNotify(ctx, a)
 	}
-	if d.alertEnabled(a.Kind) {
+	if d.alertEnabled(a.Kind) && !d.telegramHandles(a.SessionID) {
 		d.sendAlert(ctx, a)
 	}
+}
+
+// telegramHandles reports whether Telegram hears nothing from the rules about
+// a session: it is muted there, or the owner talks to it from there and the
+// conversation sends its questions and replies itself (ADR-047).
+func (d *Daemon) telegramHandles(id string) bool {
+	if d.tg == nil {
+		return false
+	}
+	return d.tg.Muted(id) || (d.tg.Active() && d.tg.Conversing(id))
 }
 
 // publishNotify puts the alert on /v1/live as a notify frame, numbered and
@@ -166,17 +177,47 @@ func answerablePrompt(p *agents.Permission, ok bool) string {
 // for the settings screen; an alert is never retried, because a late
 // "waiting for approval" is worse than none.
 func (d *Daemon) sendAlert(ctx context.Context, a alerts.Alert) {
+	if d.tg != nil {
+		d.sendToTelegram(ctx, a, false)
+		return
+	}
 	ctx, cancel := context.WithTimeout(ctx, alertSendTimeout)
 	defer cancel()
 	msg := alerts.Message(a, d.alertDetails(ctx, a))
 	cfg := d.config()
 	err := d.sender().SendFormatted(ctx, cfg.ReportBotToken, cfg.ReportChatID, msg, alerts.ParseMode)
+	d.recordAlert(a, err)
+}
+
+func (d *Daemon) recordAlert(a alerts.Alert, err error) {
 	d.phone.record(err)
 	if err != nil {
 		d.log.Warn("phone alert: send failed", "component", "alerts", "kind", a.Kind, "session_id", a.SessionID, "err", err)
 		return
 	}
 	d.log.Info("phone alert sent", "component", "alerts", "kind", a.Kind, "session_id", a.SessionID)
+}
+
+// sendToTelegram queues an alert through the bridge, at Telegram's pace,
+// with its buttons, and remembers which session it is about so a reply or a
+// button finds it. conversing sends the reply whole (ADR-047). A message that
+// cannot go out within alertSendTimeout is dropped, not sent late.
+func (d *Daemon) sendToTelegram(ctx context.Context, a alerts.Alert, conversing bool) {
+	det := d.alertDetails(ctx, a)
+	cfg := d.config()
+	if a.Kind == alerts.KindFinished && d.tg.Active() {
+		det.LongReply, det.Code = true, cfg.TelegramCodeOn()
+		if conversing && det.Reply == "" {
+			det.Reply = d.finalReply(ctx, a)
+		}
+	}
+	prompt := d.waitingPrompt(a)
+	d.tg.Deliver(telegram.Out{
+		Text:      alerts.Message(a, det),
+		ParseMode: alerts.ParseMode,
+		Markup:    d.alertMarkup(a, det.Link, prompt),
+		Expires:   time.Now().Add(alertSendTimeout), // the outbox runs on the wall clock
+	}, telegram.Ref{SessionID: a.SessionID, PromptID: prompt, Kind: "alert"}, func(err error) { d.recordAlert(a, err) })
 }
 
 // runSlack widens a run's end past its Stop: the transcript writes the last
@@ -186,14 +227,14 @@ const runSlack = 2 * time.Second
 // alertDetails gathers what an alert says about its session. A failed read
 // leaves a field empty rather than holding the alert back.
 func (d *Daemon) alertDetails(ctx context.Context, a alerts.Alert) alerts.Details {
-	det := alerts.Details{Agent: relay.AgentName(""), Link: d.sessionLink(a.SessionID)}
+	det := alerts.Details{Agent: relay.AgentName("")}
 	det.Home, _ = os.UserHomeDir()
 	q := d.store.DB()
 	s, err := store.GetSession(ctx, q, a.SessionID)
 	if err == nil {
-		det.Title, det.Cwd, det.Branch, det.Agent = api.Describe(ctx, q, s), s.Cwd, s.GitBranch, relay.AgentName(s.Agent)
-		det.Project = s.Project
+		det = d.sessionDetails(ctx, s)
 	}
+	det.Link = d.sessionLink(a.SessionID)
 	if a.Kind != alerts.KindFinished {
 		return det
 	}
@@ -261,8 +302,13 @@ func (d *Daemon) SendAlertCheck(ctx context.Context) error {
 	if !d.botConfigured() {
 		return fmt.Errorf("no bot configured")
 	}
-	cfg := d.config()
-	err := d.sender().SendFormatted(ctx, cfg.ReportBotToken, cfg.ReportChatID, alerts.CheckMessage(d.sessionLink("")), alerts.ParseMode)
+	var err error
+	if d.tg != nil {
+		_, err = d.tg.Out.Send(ctx, telegram.Out{Text: alerts.CheckMessage(d.sessionLink("")), ParseMode: alerts.ParseMode})
+	} else {
+		cfg := d.config()
+		err = d.sender().SendFormatted(ctx, cfg.ReportBotToken, cfg.ReportChatID, alerts.CheckMessage(d.sessionLink("")), alerts.ParseMode)
+	}
 	d.phone.record(err)
 	return err
 }

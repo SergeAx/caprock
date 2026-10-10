@@ -22,9 +22,10 @@ type Details struct {
 	// the folder reads ~/dev/caprock rather than one of several "caprock"s.
 	Cwd, Home string
 	Branch    string
-	// Agent is the agent's display name. Claude Code, the usual one, is not
-	// repeated on every message.
-	Agent string
+	// Agent is the agent's display name; AgentKey its id ("claude",
+	// "codex", …), which picks the mark the header opens with.
+	Agent    string
+	AgentKey string
 	// Project is the session's project as the dashboard names it; the app's
 	// notification leads with it.
 	Project string
@@ -42,6 +43,11 @@ type Details struct {
 	// Reply is the agent's final reply; empty when the owner switched the
 	// line off or there is none.
 	Reply string
+	// LongReply sends the reply whole, up to longReplyMaxRunes, rather than
+	// its first line: a session the owner talks to from Telegram (ADR-047).
+	// Code says its code blocks go too; without it each is a one-line
+	// placeholder.
+	LongReply, Code bool
 }
 
 // Limits that keep one alert readable on a lock screen.
@@ -51,6 +57,9 @@ const (
 	subjectMaxRunes = 100
 	replyMaxRunes   = 120
 	filesNamed      = 3
+	// longReplyMaxRunes keeps a whole reply inside one Telegram message
+	// (4096) with room for the lines around it.
+	longReplyMaxRunes = 3000
 )
 
 // ParseMode is the Telegram parse mode Message and CheckMessage are written
@@ -59,20 +68,28 @@ const ParseMode = "HTML"
 
 // Message renders an alert as one Telegram message in HTML.
 //
-// The first line is what a lock screen shows, so it carries what happened and
-// which session: "✅ Finished · <title>". Then the folder and branch, and for a
-// finished run what it took and changed and the first line of its reply; for a
-// dialog, the tool and the command or file it asks about. What this sends to
-// Telegram is set out in ADR-036.
+// The first line says which session it is from — the agent's mark and name,
+// the project and the session's title: "🟠 Claude Code · caprock · Fix the
+// cache test" — because the owner runs several at once and a message that
+// does not say whose it is cannot be acted on (ADR-047). The second says what
+// happened: "✅ Finished", "⏳ Needs approval". Then the folder and branch, and
+// for a finished run what it took and changed and its reply; for a dialog,
+// the tool and the command or file it asks about. What this sends to Telegram
+// is set out in ADR-036 and ADR-047.
 func Message(a Alert, d Details) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s · %s", headline(a), html(name(d)))
+	b.WriteString(Header(d) + "\n" + headline(a))
 	if where := location(d); where != "" {
 		b.WriteString("\n" + where)
 	}
 	if a.Kind == KindFinished {
 		writeRun(&b, d)
 	} else if s := subject(a.Trigger, d); s != "" {
+		if by := subagentOf(a.Trigger); by != "" {
+			// A subagent's dialog is drawn in the parent's terminal; unnamed,
+			// it reads as the parent's own request (ADR-035).
+			s = html(by) + " · " + s
+		}
 		b.WriteString("\n" + s)
 	}
 	if d.Link != "" {
@@ -99,6 +116,49 @@ func headline(a Alert) string {
 	return "⏳ <b>Needs approval</b>"
 }
 
+// Header is the line that says which session a message is from, in HTML:
+// the agent's mark and name, the project and the title — "🟠 Claude Code ·
+// caprock · Fix the cache test". A part not known is left out.
+func Header(d Details) string {
+	agent := d.Agent
+	if agent == "" {
+		agent = "Claude Code"
+	}
+	parts := []string{Mark(d.AgentKey) + " " + html(agent)}
+	proj := clip(d.Project, folderMaxRunes)
+	if base := path.Base(slashes(d.Cwd)); proj == "" && d.Cwd != "" && base != "/" && base != "." {
+		proj = clip(base, folderMaxRunes)
+	}
+	if proj != "" {
+		parts = append(parts, html(proj))
+	}
+	if t := clip(d.Title, titleMaxRunes); t != "" {
+		parts = append(parts, html(t))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// Mark is an agent's sign at the head of a message: a coloured shape a
+// glance tells apart in a list of them, in the colours the dashboard draws
+// the agents in.
+func Mark(agent string) string {
+	switch agent {
+	case "", "claude":
+		return "🟠"
+	case "codex":
+		return "⚪"
+	case "opencode":
+		return "⚫"
+	case "gemini":
+		return "🔵"
+	case "deepseek":
+		return "🐋"
+	case "grok":
+		return "⬛"
+	}
+	return "🔹"
+}
+
 // name is the session's title, or its folder's name when it has none.
 func name(d Details) string {
 	if t := clip(d.Title, titleMaxRunes); t != "" {
@@ -120,9 +180,6 @@ func location(d Details) string {
 	if d.Branch != "" && d.Branch != "HEAD" {
 		parts = append(parts, html(d.Branch))
 	}
-	if d.Agent != "" && d.Agent != "Claude Code" {
-		parts = append(parts, html(d.Agent))
-	}
 	return strings.Join(parts, " · ")
 }
 
@@ -131,9 +188,93 @@ func writeRun(b *strings.Builder, d Details) {
 	for _, line := range runLines(d, html) {
 		b.WriteString("\n" + line)
 	}
+	if d.LongReply {
+		if r := ReplyBody(d.Reply, d.Code, longReplyMaxRunes); r != "" {
+			b.WriteString("\n\n" + r)
+		}
+		return
+	}
 	if r := clip(plainReply(d.Reply), replyMaxRunes); r != "" {
 		b.WriteString("\n💬 <i>" + html(r) + "</i>")
 	}
+}
+
+// ReplyBody renders an agent's reply for Telegram's HTML: the text escaped,
+// `inline code` as code, and each fenced block either kept as a <pre> block
+// (code true) or replaced by a one-line note saying how long it was. Cut at
+// limit runes of the source, on a rune boundary.
+func ReplyBody(reply string, code bool, limit int) string {
+	reply = strings.TrimSpace(strings.ReplaceAll(reply, "\r\n", "\n"))
+	if reply == "" {
+		return ""
+	}
+	clipped := false
+	if r := []rune(reply); len(r) > limit {
+		reply, clipped = string(r[:limit]), true
+	}
+	var b strings.Builder
+	parts := strings.Split(reply, "```")
+	for i, p := range parts {
+		if i%2 == 0 {
+			b.WriteString(prose(p))
+			continue
+		}
+		// A fenced block; its first line may name the language.
+		lang, body, ok := strings.Cut(p, "\n")
+		if !ok {
+			body, lang = lang, ""
+		}
+		body = strings.Trim(body, "\n")
+		if code {
+			b.WriteString("<pre>" + html(body) + "</pre>")
+			continue
+		}
+		n := strings.Count(body, "\n") + 1
+		what := "code"
+		if l := strings.TrimSpace(lang); l != "" && !strings.ContainsAny(l, " \t") {
+			what = l
+		}
+		fmt.Fprintf(&b, "<i>[%s, %s]</i>", html(what), plural(n, "line"))
+	}
+	out := strings.TrimSpace(b.String())
+	if clipped {
+		out += "…"
+	}
+	return out
+}
+
+// prose escapes reply text and keeps its `inline code` and **bold**.
+func prose(s string) string {
+	var b strings.Builder
+	for i, seg := range strings.Split(s, "`") {
+		if i%2 == 1 && !strings.Contains(seg, "\n") && seg != "" {
+			b.WriteString("<code>" + html(seg) + "</code>")
+			continue
+		}
+		if i%2 == 1 {
+			b.WriteString("`")
+		}
+		b.WriteString(bold(html(seg)))
+	}
+	return b.String()
+}
+
+// bold turns **x** into <b>x</b> when the pair closes on the same line, and
+// drops the markers otherwise.
+func bold(s string) string {
+	parts := strings.Split(s, "**")
+	if len(parts)%2 == 0 {
+		return strings.Join(parts, "")
+	}
+	var b strings.Builder
+	for i, p := range parts {
+		if i%2 == 1 && !strings.Contains(p, "\n") && p != "" {
+			b.WriteString("<b>" + p + "</b>")
+			continue
+		}
+		b.WriteString(p)
+	}
+	return b.String()
 }
 
 // runLines is what the run took ("12m · $0.75 · 4 tool calls") and what it

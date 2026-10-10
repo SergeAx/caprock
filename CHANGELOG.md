@@ -24,6 +24,27 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 - **Interface size in the app.** Settings → Appearance sets 100, 110, 125
   or 140%, and ⌘+ / ⌘− / ⌘0 (Ctrl+Shift off macOS) step it. The window
   zooms natively, terminal included. The app now opens at 110%.
+- **Talk to your agents from Telegram (Premium).** Reply to a session's
+  message in Telegram and Caprock types it into that session and presses
+  Enter; the answer comes back in the chat as soon as the turn ends, with
+  code blocks left out unless you switch them on. *Approve* and *Deny* answer
+  a question the way the app's card does. `/sessions` lists what is running,
+  `/new <project> <message>` starts Claude Code in a project (Bypass asks
+  first), `/stop <n>` stops one. Only sessions Caprock started are typed
+  into. Off until switched on in Settings → *Talk to your agents from
+  Telegram*. It runs through your own bot: no server of ours, nothing
+  listening on your computer, and it works on mobile data. See
+  [docs/telegram.md](docs/telegram.md).
+- **Telegram set up in two steps.** Settings → *Telegram*: paste the token
+  from `@BotFather` (Caprock checks it with Telegram before keeping it), then
+  send your bot the six-digit code shown — one tap from the button. No more
+  copying a chat id out of `getUpdates`; a chat id typed in before keeps
+  working.
+- **Every Telegram message says whose it is.** The first line is now the
+  agent, project and session — *🟠 Claude Code · caprock · Fix the cache
+  test* — and what happened moves to the second. Alerts carry *Mute this
+  session* and, with phone access on, *Open on phone*; `/mute all` and
+  `/unmute` work from the chat. Free, like the alerts.
 - **See what your sessions cost the machine.** While Caprock is open it
   samples every live session's processes every 5 seconds: the status bar
   shows the session's CPU and memory, the inspector lists its three busiest

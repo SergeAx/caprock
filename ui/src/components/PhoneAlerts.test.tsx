@@ -22,6 +22,7 @@ vi.mock('@/lib/api', async (orig) => {
         saved.calls.push(s)
         return s
       },
+      telegram: async () => ({ bot_set: false, chat_set: false, polling: false }),
       testAlert: async () => {
         tested.n++
         if (tested.fail) throw new Error(tested.fail)
@@ -36,7 +37,7 @@ describe('PhoneAlerts', () => {
     settings.value = { alert_approval: true, alert_finished: true } as Settings
     render(<PhoneAlerts />)
     await waitFor(() => expect(screen.getByText('needs a Telegram bot')).toBeInTheDocument())
-    expect(screen.getByPlaceholderText('123456:ABC-DEF…')).toBeInTheDocument()
+    expect(await screen.findByPlaceholderText('123456:ABC-DEF…')).toBeInTheDocument()
     expect(screen.getByLabelText(/waiting for approval/)).toBeChecked()
     expect(screen.getByLabelText(/has finished/)).toBeChecked()
     expect(screen.getByLabelText(/last reply's first line/)).toBeChecked()

@@ -22,18 +22,20 @@ vi.mock('@/lib/api', async (orig) => {
         saved.calls.push(s)
         return s
       },
+      telegram: async () => ({ bot_set: true, bot_username: 'my_bot', token_masked: '••••••x9Zq', chat_set: true, chat_name: 'Dima', polling: false }),
     },
   }
 })
 
 describe('WeeklyReport', () => {
-  it('says a token is stored without showing it', async () => {
+  it('says which bot is stored without showing its token', async () => {
     settings.value = { report_bot_set: true, report_chat_id: '123' } as Settings
     render(<WeeklyReport />)
-    // The field is empty because GET never returns the token — so the panel
-    // has to say one exists, or an unchanged setup reads as unsaved.
-    await waitFor(() => expect(screen.getByText(/one is stored/)).toBeInTheDocument())
-    expect(screen.getByPlaceholderText(/leave blank to keep/)).toHaveValue('')
+    // GET never returns the token, so the panel names the bot and shows a
+    // mask, or an unchanged setup reads as unsaved.
+    await waitFor(() => expect(screen.getByText('@my_bot')).toBeInTheDocument())
+    expect(screen.getByText('••••••x9Zq')).toBeInTheDocument()
+    expect(screen.getByText('Dima')).toBeInTheDocument()
   })
 
   // The whole reason the status line exists.
@@ -52,16 +54,13 @@ describe('WeeklyReport', () => {
     await waitFor(() => expect(screen.getByText(/Nothing sent yet/)).toBeInTheDocument())
   })
 
-  it('does not send an empty token, which would clear a working one', async () => {
+  it('cannot send an empty token, which would clear a working one', async () => {
     saved.calls = []
     settings.value = { report_bot_set: true, report_chat_id: '123' } as Settings
     render(<WeeklyReport />)
-    // Wait for the chat id to seed from settings, or the button is disabled
-    // and the click does nothing.
-    await waitFor(() => expect(screen.getByPlaceholderText('123456789')).toHaveValue('123'))
-    fireEvent.click(screen.getByRole('button', { name: /save/i }))
-    await waitFor(() => expect(saved.calls.length).toBe(1))
-    expect(saved.calls[0]).not.toHaveProperty('report_bot_token')
+    fireEvent.click(await screen.findByText('Change bot'))
+    expect(screen.getByText('Check and save')).toBeDisabled()
+    expect(saved.calls).toEqual([])
   })
 
   it('states what the message carries and what it does not', async () => {

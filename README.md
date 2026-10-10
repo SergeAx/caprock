@@ -388,8 +388,8 @@ Windows, but it has not been run on either.
   Caprock runs come back green.
 - **Local-first** — loopback only, no servers, no telemetry, no account. Nothing
   reaches the network unless you switch it on: the release check, the Gemini
-  chat on your own key, and the weekly report and phone alerts to your own
-  Telegram bot are each off by default.
+  chat on your own key, GitHub, and the weekly report, alerts and chat through
+  your own Telegram bot are each off by default.
 
 What your usage is actually worth — the same work priced at the API rate,
 against what your plan costs. Nobody else tells you this number:
@@ -694,25 +694,36 @@ loopback-only:
   on Tailscale's own interface: the same range is carrier-grade NAT, and on
   your Wi-Fi it would be shared with strangers.
 
-### Hear about it on your phone
+### Hear about it on your phone — and answer from Telegram
 
-Settings → *Phone alerts* sends a Telegram message to a bot you own when a
-session is **waiting for approval** (at once) or **has finished** (after a
-minute with nothing new) — every session on the machine, from any terminal,
-each kind with its own switch. Free. Create a bot with `@BotFather`, paste its
-token and your chat id, and press *Send a test alert*.
+Settings → *Telegram* sends a message from a bot you own when a session is
+**waiting for approval** (at once) or **has finished** (after a minute with
+nothing new) — every session on the machine, from any terminal, each kind with
+its own switch. Free. Make a bot with `@BotFather`, paste its token (Caprock
+checks it with Telegram), and send the bot the six-digit code Settings shows:
+that pairs your chat, and the bot ignores every other.
 
-The first line, the one a lock screen shows, says what happened and which
-session — *✅ Finished · Fix the cache test*, *⏳ Needs approval · …*. Below it:
-the folder (`~/dev/caprock`) and branch; for a dialog, the command or file it
-asks about; for a finished run, how long it worked since your last prompt, what
-it cost, its tool calls, the files it changed and the first line of its reply
-(a switch turns that off); and a link to the session when phone access is on.
-Code and tool output are never sent. One message per question, at most one of a kind per session
-every few minutes and 20 an hour. It goes from your machine straight to
-Telegram, which can read it; nothing passes a server of ours. Today this covers
-Claude Code; Codex and OpenCode do not report an approval or a finished turn
-that Caprock can read.
+Every message opens with whose it is — *🟠 Claude Code · caprock · Fix the
+cache test* — then what happened (*✅ Finished*, *⏳ Needs approval*), the
+folder and branch, and for a dialog the command or file it asks about; for a
+finished run, how long it worked since your last prompt, what it cost, its tool
+calls, the files it changed and the first line of its reply. Under it: *Mute
+this session*, and *Open on phone* when phone access is on.
+
+**With Premium, talk back.** Reply to a session's message and Caprock types it
+in and presses Enter; the answer comes back in the chat as soon as the turn
+ends. *Approve* and *Deny* answer a question the way the app's card does.
+`/sessions` lists what is running, `/new caprock fix the flaky test` starts
+Claude Code in a project (Bypass asks first), `/stop 2` stops one. Only
+sessions Caprock started are typed into; one in your own terminal is watched.
+Off until you switch it on, licence or not.
+
+It goes from your machine straight to Telegram, which can read it; nothing
+passes a server of ours, and nothing on your computer listens for Telegram — it
+works on mobile data too. Code and tool output are not sent unless you switch
+code on. Setup, commands, what is sent and troubleshooting:
+[docs/telegram.md](docs/telegram.md). Today alerts cover Claude Code; Codex and
+OpenCode do not report an approval or a finished turn that Caprock can read.
 
 ## Start it at login
 

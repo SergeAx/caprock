@@ -17,6 +17,11 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Added
 
+- **Take Caprock with you.** A slim strip above the status bar offers *Open
+  on your phone* and *Connect Telegram*, each opening its Settings section.
+  It ticks an item off by itself once a phone is paired or the bot has a
+  chat, *Not needed* drops an item for good, × hides it for a week, and
+  once both are done or skipped it never comes back.
 - **Talk to your agents from Telegram (Premium).** Reply to a session's
   message in Telegram and Caprock types it into that session and presses
   Enter; the answer comes back in the chat as soon as the turn ends, with

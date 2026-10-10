@@ -20,7 +20,7 @@ package agents
 //
 // Grok writes its sessions to ~/.grok/sessions (its README), but Caprock does
 // not read them yet: a Grok session it starts has a row and a terminal, and no
-// turns or cost (ADR-045 says why).
+// turns or cost (ADR-046 says why).
 //
 //nolint:unparam // one signature for every builder; Grok has nothing to refuse
 func grokLaunch(in launchInput) (launch, error) {

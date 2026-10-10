@@ -10,7 +10,7 @@ import { useApi } from '@/lib/useApi'
  * of this list is how one of them ends up offering an agent the other does
  * not, or remembering a choice the other ignores.
  *
- * Since 2026-10-10 (ADR-045) the list comes from `GET /v1/agents/catalog`:
+ * Since 2026-10-10 (ADR-046) the list comes from `GET /v1/agents/catalog`:
  * every agent Caprock knows, installed or not, with its models and what is
  * missing, plus the user's custom agents. An agent that is not installed is
  * never the default choice, but it is listed, so the way to set it up is one

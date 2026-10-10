@@ -11,7 +11,7 @@ import (
 )
 
 // AgentCatalog is what the agent pickers read and the custom agents are kept
-// in (ADR-045). The daemon implements it; the API only routes and gates.
+// in (ADR-046). The daemon implements it; the API only routes and gates.
 type AgentCatalog interface {
 	// Catalog lists every agent Caprock knows here, built-in and custom, with
 	// what each is missing.

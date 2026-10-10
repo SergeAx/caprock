@@ -961,7 +961,7 @@ agent is a 400. No network I/O. Kept for older pages; the pickers read the
 catalog below.
 
 **`GET /v1/agents/catalog`** — every agent the pickers offer, installed or not
-([ADR-045](08-decisions.md)), in their order: Claude Code, Codex, OpenCode,
+([ADR-046](08-decisions.md)), in their order: Claude Code, Codex, OpenCode,
 Gemini CLI, Grok, then the custom agents. A `CatalogEntry` is `{id, label,
 installed, ready, default?, models: [{id, label}], typed_model?, observed,
 custom?, locked?, prompt, setup?: {reason, text, command?, docs?}}`:
@@ -985,7 +985,7 @@ setup shell opens in. Reads files and the login environment only: nothing is
 run and nothing goes over the network. Open to a controller phone (read-only,
 like the model list).
 
-**Custom agents** (Premium, ADR-045). A `CustomAgent` is `{id, name,
+**Custom agents** (Premium, ADR-046). A `CustomAgent` is `{id, name,
 command, args?, models?}`, stored as `custom_agents` in `config.json`.
 `PUT /v1/agents/custom` replaces the list: `402` without an active licence,
 `403` from any paired device, `400` with the reason when a name or command is
@@ -1243,7 +1243,7 @@ GET    /v1/shells?project=<id>             → {shells: [Shell]}; every running 
   `-c developer_instructions="<text>"` (quoted as TOML), a Grok one
   `--rules <text>`, on a start and a resume; OpenCode and Gemini ignore it. `defaults` is replaced whole by a PATCH, so a client sends the
   other keys back with it (`instructionsPatch`).
-- **`type`** on `POST /v1/shells` (ADR-045) is one line typed at the new
+- **`type`** on `POST /v1/shells` (ADR-046) is one line typed at the new
   shell's prompt once the shell has drawn it and gone quiet, never followed by
   Enter: an agent's install or sign-in command that the user reads and runs.
   Anything from the first line break on is dropped; ignored with `replaces`.

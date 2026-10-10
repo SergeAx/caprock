@@ -43,6 +43,44 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   prefix are found** even when the login shell's PATH does not carry them.
   Gemini CLI was never a paid feature: when its binary is not found it is
   now listed with its install command instead of being hidden.
+
+## [0.98.1] - 2026-10-10
+
+### Fixed
+
+- **Voice mode can use the microphone on macOS.** Claude Code's `/voice` in
+  a Caprock terminal recorded silence ("No audio detected from microphone")
+  with no prompt: the app and its daemon were signed with the hardened
+  runtime but without the right to ask for the microphone, so macOS refused
+  every session it held Caprock responsible for (`tccd` log, 2026-10-10).
+  Both are now signed with `com.apple.security.device.audio-input` and the
+  app says why it asks, so macOS shows its one-time prompt; after Allow,
+  recording works. Update, open the app once, and start a new session for
+  voice ([docs](docs/app.md#voice-mode-and-the-microphone), ADR-045).
+
+## [0.98.0] - 2026-10-10
+
+### Changed
+
+- **Working from your phone is spelled out where you set it up.** The phone
+  section of Settings sits right under Appearance, and its steps now run to
+  the end: pair, press *Let it control sessions* to work rather than watch,
+  add it to the home screen (an iPhone pairs once more there), carry on a
+  session from its Chat, and turn phone access on again after a restart. The
+  command palette has *Open Caprock on your phone*, which opens that section.
+
+- **Each tab shows its jump key.** ⌘1–⌘8 by position and ⌘9 on the last
+  tab, as iTerm shows them (Ctrl⇧1… on Windows and Linux); the keys worked
+  before, but only a tooltip said so.
+- **The status bar carries the session in front.** With an agent's tab in
+  front, the bar along the bottom shows its model, how full its context is,
+  what the next call costs to re-read it, and what the session has cost.
+- **What's new, in the app.** The version in the status bar opens the notes
+  of the release you are running, and the update card's *What's new* opens
+  the new release's notes in the app instead of a GitHub page.
+
+### Fixed
+
 - **Windows and Linux see their own shortcuts.** Hints, tooltips and the
   shortcuts sheet showed ⌘ on every platform; off macOS they now read
   Ctrl+Shift+N, Ctrl+Alt+Shift+N, Ctrl+Enter, F5, the keys that actually

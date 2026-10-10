@@ -77,13 +77,28 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 New agent's Project field and Add a project search projects, recent folders
 and the repositories under the default folder (`GET /v1/browse/repos`).
-The agent pickers read `GET /v1/agents/catalog` (ADR-045): every agent,
+The agent pickers read `GET /v1/agents/catalog` (ADR-046): every agent,
 installed or not, with its models and the fix for what is missing, typed
 into a shell tab rather than run. OpenCode lists its connected providers'
 models or says none is connected. Grok Build is a sixth agent, started but
 not observed (23-grok.md). Custom agents are Premium, gated on the server.
 Not built: reading Grok's sessions (no sourced prices), resuming Grok or a
 custom agent from the session screen.
+
+### 2026-10-10 — 0.98.1: voice mode can use the microphone on macOS
+
+The app and its daemon are signed with the audio-input entitlement and the
+app carries a microphone purpose string, so an agent's `/voice` in a Caprock
+terminal gets macOS's prompt instead of silence (ADR-045).
+
+### 2026-10-10 — 0.98.0: the phone set up from the app, jump keys on tabs, each platform's keys
+
+The phone section of Settings sits under Appearance and its steps run to the
+end (control, home screen, carrying on from Chat, after a restart); the
+palette opens it. Tabs show ⌘1–⌘9; every key label is written for the
+platform it runs on; the status bar shows the session in front (model,
+context, next call, cost) and opens the running release's notes. Feedback is
+a labelled row with a speech bubble, not a volume icon.
 
 ### 2026-10-10 — 0.97.0: a share card worth posting, feedback with screenshots, Paper is the site
 

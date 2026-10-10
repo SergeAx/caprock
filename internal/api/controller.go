@@ -38,7 +38,7 @@ func (s *Server) controllerSpawnRefusal(req map[string]any) string {
 			return "a phone starts one of the coding agents Caprock knows, not " + k + " — set that up on the machine Caprock runs on"
 		}
 	}
-	// A custom agent is a command the owner set up (ADR-045); a phone starts
+	// A custom agent is a command the owner set up (ADR-046); a phone starts
 	// only the agents Caprock itself knows.
 	if a, _ := req["agent"].(string); strings.HasPrefix(a, "custom:") {
 		return "a phone starts one of the coding agents Caprock knows, not a custom one — start it on the machine Caprock runs on"

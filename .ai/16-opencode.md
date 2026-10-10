@@ -339,7 +339,7 @@ and each flag exercised by starting the TUI with it:
   the user's config decides. Until 2026-10-10 no list was offered, because
   `opencode models` fetches the catalog over the network; the picker then
   showed *OpenCode default* alone, even with no provider connected (the
-  owner: "OpenCode there is empty"). Since ADR-045 the list is read from
+  owner: "OpenCode there is empty"). Since ADR-046 the list is read from
   OpenCode's own files, nothing run: the providers connected by a credential
   (`auth.json`), the config's `provider`, or a catalog `env` variable set in
   the login shell — the three sources `opencode providers list` shows — and

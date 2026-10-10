@@ -334,7 +334,7 @@ func (s *Server) handleStartShell(w http.ResponseWriter, r *http.Request) {
 		Replaces string `json:"replaces,omitempty"`
 		// Type is one line typed at the new shell's prompt once it is drawn,
 		// never followed by Enter: an agent's install or sign-in command the
-		// user reads and runs (ADR-045).
+		// user reads and runs (ADR-046).
 		Type string `json:"type,omitempty"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&body); err != nil {

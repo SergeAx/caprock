@@ -90,6 +90,9 @@ export function StatusScreen() {
         <>
           {owner && <SpawnModeSetting />}
           <AppearanceSection />
+          {/* The phone high up: eighth of eleven, people asked where it was. */}
+          {owner && <Pairing />}
+          {owner && <PhoneAlerts />}
           <TerminalSettings />
           {owner && <EditorSetting />}
           {owner && <DefaultFolderSetting />}
@@ -97,8 +100,6 @@ export function StatusScreen() {
           {owner && isTauri() && <DesktopNotifications />}
           {owner && isTauri() && <GlobalHotkey />}
           <GitHubSettings />
-          {owner && <Pairing />}
-          {owner && <PhoneAlerts />}
           {owner && <PlanSection />}
           {owner && <WindowStopSection />}
         </>
@@ -167,7 +168,7 @@ function WindowStopSection() {
   )
 }
 
-/** Custom agents (Premium, ADR-045): live with a licence, behind glass
+/** Custom agents (Premium, ADR-046): live with a licence, behind glass
  *  without one, in the place they will be. */
 function CustomAgentsSection() {
   return (

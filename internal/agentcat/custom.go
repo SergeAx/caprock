@@ -10,7 +10,7 @@ import (
 	"github.com/dspv/caprock/internal/config"
 )
 
-// Custom agents (ADR-045): a coding agent the user adds by name, command and
+// Custom agents (ADR-046): a coding agent the user adds by name, command and
 // an argument template, started in a Caprock terminal like the built-ins. A
 // Premium feature: the list is kept whatever the licence says, and offered
 // and started only while it is active.

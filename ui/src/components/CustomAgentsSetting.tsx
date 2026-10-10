@@ -1,5 +1,5 @@
 /**
- * Settings → Agents: coding agents the user adds by command (ADR-045,
+ * Settings → Agents: coding agents the user adds by command (ADR-046,
  * Premium).
  *
  * The owner, 2026-10-10 (translated): "I'd also let people add new agents

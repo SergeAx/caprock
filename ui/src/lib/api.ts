@@ -807,7 +807,7 @@ export interface Status {
    *  installers put them. Absent on daemons older than this feature. */
   codex_available?: boolean
   opencode_available?: boolean
-  /** xAI's Grok Build CLI (ADR-045). Absent on older daemons. */
+  /** xAI's Grok Build CLI (ADR-046). Absent on older daemons. */
   grok_available?: boolean
   /** The version of the OpenCode a new session would start ("2.0.26"),
    *  absent while the daemon has not asked it. OpenCode 1 and 2 take
@@ -888,7 +888,7 @@ export interface RecentDir { dir: string; name: string; sessions: number; last_e
 /** `GET /v1/browse/repos`: what the daemon found under the default folder. */
 export interface LocalRepos { root: string; home?: string; scanned_at: number; truncated?: boolean; repos: { name: string; path: string }[] }
 
-/** One agent in the pickers (`GET /v1/agents/catalog`, ADR-045). */
+/** One agent in the pickers (`GET /v1/agents/catalog`, ADR-046). */
 export interface CatalogEntry {
   /** "claude", "grok", "custom:aider". */
   id: string

@@ -14,7 +14,7 @@
  * ↑ ↓ the model, Esc closes. The choice is remembered per viewer, in this
  * browser's storage, like the New agent sheet's agent.
  *
- * Since 2026-10-10 (ADR-045) the models come from the agent catalog — the
+ * Since 2026-10-10 (ADR-046) the models come from the agent catalog — the
  * providers connected to OpenCode, Grok's own list, a custom agent's — and an
  * agent missing something says what and offers the fix, instead of offering
  * an empty list (owner: "OpenCode there is empty — either give buttons to

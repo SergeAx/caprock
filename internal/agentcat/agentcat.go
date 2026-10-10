@@ -1,6 +1,6 @@
 // Package agentcat answers "which coding agents can start here, on which
 // models, and what is missing for the rest" — the New agent sheet's and Quick
-// chat's picker (GET /v1/agents/catalog, ADR-045).
+// chat's picker (GET /v1/agents/catalog, ADR-046).
 //
 // The owner's report that started it (2026-10-10, translated): "there's a
 // model choice, and OpenCode there is empty — either give buttons to connect
@@ -66,7 +66,7 @@ type Entry struct {
 	TypedModel bool `json:"typed_model,omitempty"`
 	// Observed is true when Caprock reads the sessions' turns and cost.
 	Observed bool `json:"observed"`
-	// Custom marks an agent the user added (ADR-045); Locked one that the
+	// Custom marks an agent the user added (ADR-046); Locked one that the
 	// licence no longer covers, listed so its owner can see why it is gone.
 	Custom bool `json:"custom,omitempty"`
 	Locked bool `json:"locked,omitempty"`

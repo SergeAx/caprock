@@ -303,7 +303,7 @@ func (m *Manager) waitQuiet(a *Agent) bool {
 
 // TypeAtPrompt types one line into a shell Caprock started, once the shell
 // has drawn its prompt, and does not press Enter: the user reads the command
-// and runs it (an agent's install or sign-in, ADR-045). A line break in text
+// and runs it (an agent's install or sign-in, ADR-046). A line break in text
 // is cut off there, so nothing can run by itself. Rule 7 holds: the shell is
 // Caprock's.
 func (m *Manager) TypeAtPrompt(id, text string) {

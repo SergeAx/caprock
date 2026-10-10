@@ -62,6 +62,7 @@
     "macOS": {
       "minimumSystemVersion": "13.0",
       "signingIdentity": "-",
+      "entitlements": "Entitlements.plist",
       "dmg": {
         "background": "dmg/background.png",
         "windowSize": {

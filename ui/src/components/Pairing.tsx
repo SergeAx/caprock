@@ -34,6 +34,21 @@ import { fmtAgo, fmtWhen } from '@/lib/format'
 import { useNow } from '@/lib/useNow'
 import { encodeQR, qrPath } from '@/lib/qr'
 
+/** The phone section's id: the palette's *Open Caprock on your phone* scrolls to it. */
+export const PHONE_SECTION = 'settings-phone'
+
+/** Open Settings and bring the phone section into view once it has rendered. */
+export function openPhoneSettings(): void {
+  location.hash = '#/settings'
+  let tries = 0
+  const look = () => {
+    const el = document.getElementById(PHONE_SECTION)
+    if (el) el.scrollIntoView({ block: 'start' })
+    else if (++tries < 40) setTimeout(look, 25)
+  }
+  setTimeout(look, 0)
+}
+
 /** The link a phone's camera opens: the address, with the code to redeem. */
 export function pairLink(url: string, code: string): string {
   return `${url.replace(/\/+$/, '')}/#/pair?code=${encodeURIComponent(code)}`
@@ -206,7 +221,7 @@ export function Pairing() {
   const hasTailscale = addresses.some((a) => a.kind !== 'lan')
 
   return (
-    <Section title="Open Caprock on your phone" aside={<StatusPill status={status} />}>
+    <Section id={PHONE_SECTION} title="Open Caprock on your phone" aside={<StatusPill status={status} />}>
       <div className="grid gap-4">
         {showingCode ? (
           <CodeView addresses={addresses} code={code} secondsLeft={secondsLeft} onNew={showCode} onCancel={cancelCode} busy={busy} />
@@ -223,7 +238,20 @@ export function Pairing() {
               <Step n={2}>
                 Press <span className="text-fg font-medium">Show a code</span> and point your phone&apos;s camera at it.
               </Step>
-              <Step n={3}>Your phone appears below. Remove it here any time.</Step>
+              <Step n={3}>
+                Your phone appears below, able to look. To work from it, press{' '}
+                <span className="text-fg font-medium">Let it control sessions</span> beside it — only for your own phone.
+              </Step>
+              <Step n={4}>
+                Keep it one tap away: on an iPhone, Share → <span className="text-fg">Add to Home Screen</span>, then
+                show another code and type its six digits there once; on Android, Chrome&apos;s menu →{' '}
+                <span className="text-fg">Add to Home screen</span>.
+              </Step>
+              <Step n={5}>
+                To carry on a session, open it on the phone from <span className="text-fg">Now</span> and type in its{' '}
+                <span className="text-fg">Chat</span>; answer approvals and stop it there too. After Caprock restarts,
+                turn phone access on here again — paired phones stay paired.
+              </Step>
             </ol>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <button

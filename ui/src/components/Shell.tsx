@@ -25,7 +25,7 @@ import { PremiumChip } from '@/components/PremiumChip'
 import { SiteFooter } from '@/components/SiteFooter'
 import { StarStrip } from '@/components/StarStrip'
 import { ShareMoment } from '@/components/Nudges'
-import { usePromptSync } from '@/lib/nudges'
+import { openExternal, usePromptSync } from '@/lib/nudges'
 import { Prose } from './Prose'
 import { ConnectionState } from './ConnectionState'
 import { StaleUiPill } from './StaleUiPill'
@@ -236,7 +236,7 @@ function VersionChip() {
  * is to be read. See ReleaseNotes — it recognises the few shapes our own notes
  * use and builds elements from strings, so nothing remote can become markup.
  */
-function NotesDialog({ u, onClose }: { u: UpdateStatus; onClose: () => void }) {
+export function NotesDialog({ u, onClose }: { u: UpdateStatus; onClose: () => void }) {
   return (
     <DialogBackdrop onClose={onClose} className="fixed inset-0 z-30 bg-black/50 flex items-start justify-center pt-[10vh] px-4">
       <div
@@ -263,6 +263,7 @@ function NotesDialog({ u, onClose }: { u: UpdateStatus; onClose: () => void }) {
             href="https://caprock.dev/changelog"
             target="_blank"
             rel="noopener noreferrer"
+            onClick={(e) => { e.preventDefault(); openExternal('https://caprock.dev/changelog') }}
             className="text-[12px] text-fg-faint no-underline hover:text-accent"
           >
             every release →

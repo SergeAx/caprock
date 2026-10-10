@@ -399,7 +399,7 @@ describe('the project search', () => {
   })
 })
 
-/** ADR-045: an agent that is not installed is listed, never the default, and
+/** ADR-046: an agent that is not installed is listed, never the default, and
  *  picking it shows how to install it instead of a model list. */
 describe('an agent that is not installed', () => {
   it('is listed after the rest, and picking it offers the install in a shell tab', async () => {

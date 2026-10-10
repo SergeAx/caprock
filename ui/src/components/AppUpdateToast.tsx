@@ -12,7 +12,10 @@
  * offer. It never takes focus from the terminal.
  */
 import { useState } from 'react'
-import { appUpdate, offerFor, useAppUpdate } from '@/lib/appupdate'
+import { createPortal } from 'react-dom'
+import { appUpdate, offerFor, useAppUpdate, v } from '@/lib/appupdate'
+import { openExternal } from '@/lib/nudges'
+import { NotesDialog } from './Shell'
 import { useUpdateStatus } from './AppUpdateNotice'
 
 /** The version whose card was put away; the strip's offer is separate. */
@@ -26,6 +29,7 @@ export function AppUpdateToast() {
   const st = useUpdateStatus()
   const info = useAppUpdate()
   const [seen, setSeen] = useState(readSeen)
+  const [notes, setNotes] = useState(false)
   const offer = offerFor(info, st, '')
 
   const next = offer.kind === 'install' || offer.kind === 'progress' || offer.kind === 'installing' ? offer.next : ''
@@ -47,7 +51,14 @@ export function AppUpdateToast() {
         <>
           <p className="text-fg-muted">Restarting keeps every session running, and brings back your tabs, splits and scroll where they were.</p>
           <div className="flex items-center gap-2">
-            <a className="link text-[12px]" href={st?.url ?? 'https://github.com/dspv/caprock/releases/latest'} target="_blank" rel="noreferrer">What’s new</a>
+            {/* In the app, not a GitHub tab: the notes come with the release
+              * check that found the update, and a link out of a webview did
+              * not always open. */}
+            {st?.notes && st.notes_for && v(st.notes_for) === next ? (
+              <button type="button" className="link text-[12px]" onClick={() => setNotes(true)}>What’s new</button>
+            ) : (
+              <button type="button" className="link text-[12px]" onClick={() => openExternal(st?.url ?? 'https://caprock.dev/changelog')}>What’s new</button>
+            )}
             <button type="button" onClick={later} className="ml-auto rounded-[6px] px-2 py-1 text-[12px] text-fg-muted hover:text-fg">Later</button>
             <button
               type="button"
@@ -68,6 +79,8 @@ export function AppUpdateToast() {
         </div>
       )}
       {offer.kind === 'installing' && <p className="text-fg-muted">Installing — Caprock restarts in a moment.</p>}
+      {/* Portalled: the card animates in, and a transformed parent would trap a fixed dialog. */}
+      {notes && st && createPortal(<NotesDialog u={st} onClose={() => setNotes(false)} />, document.body)}
     </div>
   )
 }

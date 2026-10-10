@@ -1,5 +1,5 @@
 /**
- * What an agent is missing, and the way to fix it (ADR-045).
+ * What an agent is missing, and the way to fix it (ADR-046).
  *
  * The owner, 2026-10-10 (translated): "there's a model choice, and OpenCode
  * there is empty — either give buttons to connect it or remove it." An agent

@@ -91,7 +91,7 @@ const FEATURES: Record<
       { icon: 'pie', text: 'A trend per group, and hints drawn only from those counts' },
     ],
   },
-  // ADR-045: any terminal coding agent, started like the built-in ones.
+  // ADR-046: any terminal coding agent, started like the built-in ones.
   agents: {
     title: 'Your own agents, started like the built-in ones',
     body: 'Add any terminal coding agent by its command. It appears in New agent and Quick chat and opens in a Caprock tab.',

@@ -1,6 +1,6 @@
 package config
 
-// CustomAgent is a coding agent the user added by its command (ADR-045).
+// CustomAgent is a coding agent the user added by its command (ADR-046).
 //
 // Args is a template: `{prompt}` and `{model}` are replaced when the agent
 // starts, and an argument whose placeholder has no value is left out,

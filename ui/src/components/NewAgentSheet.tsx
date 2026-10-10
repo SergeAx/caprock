@@ -68,7 +68,7 @@ export function NewAgentSheet({
   /** A new worktree's name, proposed: the sheet opens on "New worktree…" with it filled in. */
   worktree?: string
   onClose: () => void
-  /** Opens a shell tab in `home` with an agent's install or sign-in typed, not run (ADR-045). */
+  /** Opens a shell tab in `home` with an agent's install or sign-in typed, not run (ADR-046). */
   onSetup?: (command: string, home?: string) => void
   /** A repository picked in the search was added as a project. */
   onProjectAdded?: (projectId: string) => void
@@ -76,7 +76,7 @@ export function NewAgentSheet({
 }) {
   // Which OpenCode is installed decides what a mode becomes in it.
   const status = useApi(() => api.status(), [], { live: false })
-  // Every agent Caprock knows, installed or not (ADR-045): the ones that can
+  // Every agent Caprock knows, installed or not (ADR-046): the ones that can
   // start are the choices, and the rest are listed after them so the way to
   // set one up is a pick away.
   const catalog = useAgentCatalog()

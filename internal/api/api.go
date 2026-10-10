@@ -118,7 +118,7 @@ type Deps struct {
 	// Agents is the Phase 1 owned-session manager (nil ⇒ endpoints return 501).
 	Agents AgentController
 	// Catalog answers the agent pickers and keeps the custom agents
-	// (ADR-045). nil ⇒ /v1/agents/catalog and /v1/agents/custom return 501.
+	// (ADR-046). nil ⇒ /v1/agents/catalog and /v1/agents/custom return 501.
 	Catalog AgentCatalog
 	// Tasks is the Phase 2 hive-backed task board (nil ⇒ endpoints return 501).
 	Tasks TaskController

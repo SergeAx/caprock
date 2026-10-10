@@ -1145,7 +1145,7 @@ type Status struct {
 	// the login shell's PATH or where their installers put them.
 	CodexAvailable    bool `json:"codex_available"`
 	OpenCodeAvailable bool `json:"opencode_available"`
-	// GrokAvailable says the same of xAI's Grok Build CLI (ADR-045).
+	// GrokAvailable says the same of xAI's Grok Build CLI (ADR-046).
 	GrokAvailable bool `json:"grok_available"`
 	// OpenCodeVersion is the version of the OpenCode a new session would
 	// start ("2.0.26"), absent while unknown. OpenCode 1 and 2 take different
@@ -1472,7 +1472,7 @@ type agentAdapter struct {
 	d *Daemon
 }
 
-// customLaunch turns a request for a custom agent (ADR-045) into the command
+// customLaunch turns a request for a custom agent (ADR-046) into the command
 // and arguments to start: refused without an active licence, or when the
 // agent is not in the config or its command is not on this machine. The
 // browser names the agent only; the command comes from the config the owner

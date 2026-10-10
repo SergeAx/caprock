@@ -44,7 +44,7 @@ vi.mock('@/lib/api', async (orig) => {
           { id: 'gpt-6-sol', label: 'GPT-6-Sol' },
         ],
       }),
-      // The same list, as GET /v1/agents/catalog carries it since ADR-045.
+      // The same list, as GET /v1/agents/catalog carries it since ADR-046.
       agentCatalog: async () => ({
         licensed: false,
         agents: [{

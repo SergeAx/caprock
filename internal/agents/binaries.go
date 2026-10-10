@@ -17,7 +17,7 @@ const (
 	AgentGemini   = "gemini"
 	AgentCodex    = "codex"
 	AgentOpenCode = "opencode"
-	// AgentGrok is xAI's Grok Build CLI, `grok` (ADR-045).
+	// AgentGrok is xAI's Grok Build CLI, `grok` (ADR-046).
 	AgentGrok = "grok"
 )
 
@@ -86,7 +86,7 @@ func nvmBins(home string) []string {
 
 // FindBinary resolves a command the way an agent's binary is resolved: the
 // daemon's PATH, the login shell's, then the installers' directories. "" when
-// it is not found. For a custom agent's command (ADR-045).
+// it is not found. For a custom agent's command (ADR-046).
 func FindBinary(name string) string {
 	if filepath.IsAbs(name) {
 		if isExecutable(name) {

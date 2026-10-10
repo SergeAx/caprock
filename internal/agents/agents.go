@@ -965,6 +965,10 @@ func (a *Agent) Exited() (int, bool) {
 // Paused reports the pause state.
 func (a *Agent) Paused() bool { return a.sess.Paused() }
 
+// PID is the agent's (or shell's) own process id — the child of its pty-host,
+// not the host. The resource meter starts its process tree here.
+func (a *Agent) PID() int { return a.sess.PID() }
+
 // childEnv is the environment for a spawned session: the user's login-shell
 // environment (see internal/userenv — the daemon's own is launchd's bare one,
 // and a session started with it cannot find gcloud, Homebrew or anything the

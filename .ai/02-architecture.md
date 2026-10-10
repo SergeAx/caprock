@@ -288,7 +288,8 @@ internal/sessionlink/ # joins a spawned Codex/OpenCode session to the id the age
 internal/relay/       # the brief that carries a session on in a new one, any agent (ADR-032) — Control
 internal/alerts/      # when the phone hears about a session, and the message it reads (ADR-036)
 internal/telegram/    # the owner's own bot: Bot API client, long-poll reader, paced outbox, the two-way bridge (ADR-047) — Control
-internal/ptyhost/     # `caprock pty-host`: one process per owned session holding its PTY, so it outlives the daemon (ADR-033) — Control
+internal/ptyhost/     # `caprock pty-host`: one process per owned session holding its PTY, so it outlives the daemon (ADR-033); orphan verdicts — Control
+internal/procstat/     # the process table and each process's CPU and memory, read-only (the resource meter)
 internal/termbuf/     # scrollback ring + terminal-mode tracking, shared by the daemon and the pty-host
 internal/hive/        # on-disk orchestration state: agents/tasks/mailboxes/ledger, YAML — Orchestrate
 internal/board/       # task board: verification runner, destructive-command policy, approvals — Orchestrate

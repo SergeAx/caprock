@@ -159,7 +159,7 @@ func Open(ctx context.Context, path string, log *slog.Logger) (*Store, error) {
 	} else {
 		// _pragma is modernc's DSN syntax. WAL lets the UI read while ingest writes;
 		// busy_timeout avoids SQLITE_BUSY under the (rare) concurrent writer.
-		// cache_size is negative to mean kibibytes rather than pages: 64 MiB,
+		// cache_size is negative to mean kibibytes rather than pages: 16 MiB,
 		// against SQLite's 2 MiB default.
 		//
 		// The default is sized for a small database, and this one is not: the
@@ -169,8 +169,18 @@ func Open(ctx context.Context, path string, log *slog.Logger) (*Store, error) {
 		// sqlite3 CLI and 0.55s through this connection, and the difference was
 		// pages, not SQL.
 		//
-		// 64 MiB is a ceiling, not an allocation: SQLite grows into it only as
-		// pages are touched, so a small database still costs a small process.
+		// It was 64 MiB, chosen before mmap_size (below) covered the whole
+		// file; since then reads come through the map and the page cache holds
+		// little but written pages. But the same figure is also how much a
+		// sort or GROUP BY may hold in memory before it spills, per
+		// connection, and the pool has eight: in memory SQLite allocates
+		// itself, outside Go's heap, which it did not hand back. After a day
+		// the owner's daemon had a 440 MB footprint with 12 MB of Go heap in
+		// use (2026-10-10). 16 MiB keeps every measured endpoint as fast and
+		// caps the pool at a quarter of that.
+		//
+		// The size is a ceiling, not an allocation: SQLite grows into it only
+		// as pages are touched, so a small database still costs a small process.
 		//
 		// The page cache is not enough on its own, because it does not survive
 		// a write. Under WAL a connection that sees another one has committed
@@ -200,7 +210,7 @@ func Open(ctx context.Context, path string, log *slog.Logger) (*Store, error) {
 		// that race ~400 times an hour on the owner's machine, and busy_timeout
 		// never got a chance to help. Every transaction in the daemon writes,
 		// so none of them pays for taking the lock early.
-		dsn = "file:" + path + "?_txlock=immediate&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)&_pragma=cache_size(-65536)&_pragma=mmap_size(2147418112)"
+		dsn = "file:" + path + "?_txlock=immediate&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)&_pragma=cache_size(-16384)&_pragma=mmap_size(2147418112)"
 	}
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {

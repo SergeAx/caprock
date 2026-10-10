@@ -178,6 +178,8 @@ type Daemon struct {
 	// storage is the cached measurement of what the data directory holds;
 	// see storage.go.
 	storage storageState
+	// res is the resource meter (resources.go).
+	res *resourceMeter
 
 	// cap is the daily spend guard. Nil until run() builds it, because it needs
 	// the owned-session manager.
@@ -325,7 +327,7 @@ func newDaemon(ctx context.Context, opt Options) (*Daemon, error) {
 	b := bus.New()
 	rec := rollup.New(st, table, b, log)
 	det := loop.New(opt.Config.LoopK, time.Duration(opt.Config.LoopTMinutes)*time.Minute)
-	d := &Daemon{opt: opt, log: log, store: st, bus: b, table: table, rec: rec, det: det, alerts: map[string]*loop.Alert{}, start: time.Now(), upd: update.New()}
+	d := &Daemon{opt: opt, log: log, store: st, bus: b, table: table, rec: rec, det: det, alerts: map[string]*loop.Alert{}, start: time.Now(), upd: update.New(), res: newResourceMeter()}
 	return d, nil
 }
 
@@ -334,6 +336,7 @@ func (d *Daemon) run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	d.baseCtx = ctx
+	startPprof(ctx, d.log)
 
 	// Listener.
 	ln := d.opt.Listener
@@ -512,6 +515,8 @@ func (d *Daemon) run(ctx context.Context) error {
 	d.api = api.New(api.Deps{
 		Store: d.store, Bus: d.bus, Table: d.table, Log: d.log, Hook: hh, Version: d.opt.Version, Reporter: d, Alerts: d, Telegram: d.tg,
 		Status: d.status, InstallHooks: d.installHooks, BypassAccepted: bypassAccepted, AcceptBypass: acceptBypass, Storage: d.storageReport, WindowStop: d.windowStopStatus,
+		Resources:   d.resources,
+		ReapOrphans: func(ctx context.Context) (any, error) { return d.reapOrphans(ctx, true) },
 		RateLimitsRecorded: func(ctx context.Context) {
 			if d.winStop != nil {
 				d.winStop.Check(ctx)
@@ -661,6 +666,7 @@ func (d *Daemon) run(ctx context.Context) error {
 	go d.repairEmptyText(ctx)
 	go d.backfillPRs(ctx)
 	go d.storageLoop(ctx)
+	go d.resourceLoop(ctx)
 	if d.config().RetentionDays > 0 {
 		go d.pruneLoop(ctx)
 	}

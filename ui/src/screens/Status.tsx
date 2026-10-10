@@ -43,6 +43,7 @@ import { WindowStopSetting } from '@/components/WindowStopSetting'
 import { Locked } from '@/components/Locked'
 import { CloseButton, dialogOpen } from '@/components/Dialog'
 import { escapeLeavesPage, useCloseSettings } from '@/lib/settingsClose'
+import { CaprockItself } from '@/components/ResourceMeter'
 
 /**
  * The page's own way out (lib/settingsClose.ts): a × beside the heading, and
@@ -353,6 +354,7 @@ function AboutSection({ s }: { s: Status }) {
         Caprock <span className="mono text-fg">{s.version}</span> · running for {fmtDuration(s.uptime_s * 1000)} ·{' '}
         <span className="num text-fg">{s.events.toLocaleString()}</span> events recorded
       </p>
+      <CaprockItself owner={!isPairedDevice()} />
       <Details summary="Details">
         {/* Scrolls inside itself on a narrow screen rather than pushing the
           * page sideways — the fault on a phone is a body that scrolls

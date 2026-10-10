@@ -335,7 +335,7 @@ Every output byte has an offset and every input frame a sequence number, so a re
 
 Every `/v1/live` frame carries a `seq`, so a client that reconnects gets exactly the frames it missed, or is told to refetch ([21-app.md § Phase A](21-app.md#phase-a--resilience-and-starting-work-p0), WP-12). It mirrors [protocol v2](#terminal-socket-protocol-v2) with frames in the `{type, seq, data}` envelope. Code: `internal/bus` (numbering and the ring), `internal/api/ws.go`, `ui/src/lib/live.ts`.
 
-- **Seq.** One counter per daemon, raised by one for every frame published (`event`, `session`, `alert`, `permission`, `task`, `project`, `op`, and WP-09's `notify`). It starts at the daemon's start time in microseconds, so a seq handed out by an earlier daemon is never inside a later one's range, and stays below 2^53 (exact in JavaScript). Clients compare seqs only for order within one daemon.
+- **Seq.** One counter per daemon, raised by one for every frame published (`event`, `session`, `alert`, `permission`, `task`, `project`, `op`, WP-09's `notify`, and the resource meter's `resources`, § Resources). It starts at the daemon's start time in microseconds, so a seq handed out by an earlier daemon is never inside a later one's range, and stays below 2^53 (exact in JavaScript). Clients compare seqs only for order within one daemon.
 - **Ring.** The daemon keeps the last **2,000 frames or 10 minutes**, whichever is fewer.
 - **Resume.** Query `?since=<seq>`, the seq of the last frame the client applied (decimal; malformed is **400**). Omitted on a first connect, and by every client that predates replay: those get the stream as before, each frame now also carrying `seq`, which they ignore.
 - **Hello.** The first frame is `{type:"hello", seq, data:{server_time, reset}}`. `reset:false` with a `since`: `seq` equals it, and the frames after it follow, in order, then the live stream with no gap and no duplicate. `reset:true` (the ring no longer holds `since`, or never did — another daemon, a seq from the future): `seq` is the newest frame and `{type:"reset", seq, data:{seq}}` follows; the client refetches what it shows and continues from `seq`. Without `since`, `reset` is false and `seq` is the newest frame.
@@ -673,7 +673,10 @@ reclaimable_bytes, growth_bytes_per_day_est, retention_days}`.
   through this driver (2026-10-01). The daemon measures a minute after start,
   then every 30 minutes, and serves the last result; `database` is absent until
   the first one finishes. A failed refresh keeps the previous figures and sets
-  `error`.
+  `error`. The breakdown is one scan of `events` in rowid order, folded in Go:
+  it was a `GROUP BY` over a join, which SQLite sorted through temp files
+  carrying every payload (11 s in the sqlite3 shell on a 1.8 GB database,
+  against 0.4 s for the scan; 2026-10-10).
 - **`reclaimable_bytes`** is `free_pages × page_size`: what a VACUUM would
   return. **Caprock does not run VACUUM.** It rewrites the whole file, needs
   free disk space for a second copy, and holds the write lock for its whole run,
@@ -686,6 +689,68 @@ reclaimable_bytes, growth_bytes_per_day_est, retention_days}`.
   nothing to scale by.
 - **A paired device may read it** — sizes and counts only; the data directory
   path is already in `/v1/status`.
+
+#### Resources
+
+`GET /v1/resources` (2026-10-10) reports what each live session's process tree
+and Caprock itself cost the machine. Code: `internal/daemon/resources.go`,
+`internal/procstat` (the process table: one `sysctl kern.proc.all` on macOS,
+gopsutil on Linux and Windows; each process's CPU time from gopsutil, and its
+own memory as below). Only reads: nothing is signalled except by the reap below.
+
+```json
+{"at": 1791400000000,
+ "sessions": [{"session_id": "…", "pid": 4242, "cpu_pct": 182.4, "mem_bytes": 1342177280, "procs": 7, "warm": true,
+               "top": [{"pid": 4300, "name": "node vite", "cpu_pct": 150.2, "mem_bytes": 1181116006}],
+               "hot": true, "over_since": 1791399800000}],
+ "caprock": {"daemon": {"pid": 1, "name": "caprock", "cpu_pct": 1.2, "mem_bytes": 220000000},
+             "app": {"pid": 2, "name": "caprock-app", "cpu_pct": 2.0, "mem_bytes": 48000000},
+             "hosts": {"count": 19, "mem_bytes": 95000000, "cpu_pct": 0, "orphans": 15, "reapable": 15,
+                       "list": [{"pid": 2267, "state": "unreachable-idle", "reap": true, "ours": false, "child": "zsh"}]}},
+ "thresholds": {"cpu_pct": 100, "mem_bytes": 2147483648, "after_s": 60, "interval_s": 5},
+ "error": "…"}
+```
+
+- **A session's tree** is its process — `sessions.pid` of a session not
+  ended, or the agent or shell a pty-host runs for this daemon (a shell has no
+  session row) — and every process below it. `cpu_pct` is summed over the
+  tree, as a percentage of one core between two samples: `250` is two and a
+  half cores. `mem_bytes` is each process's own memory, summed — what the
+  OS's process manager shows, not the resident set, which counts the file
+  pages a process maps (the daemon maps its whole database: 544 MB resident,
+  122 MB footprint, 2026-10-10). macOS: the physical footprint
+  (`proc_pid_rusage`); Linux: `RssAnon + RssShmem`; Windows: private bytes.
+  `warm` is false on a tree's first
+  sample, before there is a rate; its CPU is then `0`. `top` is the three
+  busiest processes by CPU, named for a person: the program, and for an
+  interpreter the script it runs (`node vite`, `python3 pytest`).
+- **Hot.** `over_since` is when the tree last went over a limit — CPU at or
+  above `thresholds.cpu_pct` (one core) or memory at or above
+  `thresholds.mem_bytes` (2 GiB) — and `hot` turns on once it has stayed over
+  for `after_s` (60 s). It stays on through a dip and turns off after 15 s
+  under both. The limits are round numbers chosen to separate "an agent
+  waiting on the model" (a few percent) from "the machine will feel this", not
+  measured thresholds.
+- **Caprock itself.** `daemon` is this process; `app` is the desktop app's
+  shell process (`caprock-app`), absent when it is not running — its web view
+  runs in the system's WebKit or WebView2 processes, which are not counted.
+  `hosts` is every `caprock pty-host` of this user on the machine, whichever
+  Caprock started it, with the verdict on each (§ Terminal holders, Orphans).
+- **When it samples.** Every 5 s, and only while a `/v1/live` client is
+  connected or `GET /v1/resources` was asked within the last 15 s; a daemon
+  nobody watches reads no process table. Each sample goes out as a
+  `{type:"resources", seq, data:<the object above>}` frame on `/v1/live`. A
+  `GET` answers the last sample when it is under 5 s old, otherwise takes one.
+- **A paired device may read it**; it may not reap.
+
+`POST /v1/resources/reap` → `{reaped[], failed[]?, kept[]}` (verdicts as in
+`hosts.list`; `failed` is `{pid, error}`): stops every holder whose verdict is
+`reap`, and lists in `kept` the orphans left running because something still
+runs in them. Machine only — not on a paired device's list. The daemon also
+sweeps on its own, five minutes after start and then hourly, but only holders
+whose verdict is `ours` (they registered with its own data directory): a
+preview or test daemon must never stop another install's leftovers, so those
+wait for the button.
 
 `PUT /v1/settings` also accepts `gemini_api_key`, stored write-only in the same way. `GET` reports `gemini_key_set` and `gemini_key_from_env` instead of the value; `GEMINI_API_KEY` in the daemon's environment takes precedence over the stored key when both exist ([ADR-025](08-decisions.md)).
 
@@ -2451,6 +2516,41 @@ The holder starts the child, listens on `127.0.0.1:0`, writes its registry entry
 **Compatibility rule.** A holder started by one release must work with the daemon of the next. Frame types are never renumbered or repurposed; a side ignores a frame type it does not know. A change that cannot be made additively raises `proto`, and the daemon keeps speaking every older version while a holder of it can still be running. A registry entry with a newer `proto` than the daemon's is left alone (a downgrade).
 
 **Lifecycle.** The daemon reattaches every registry entry at startup — after `OnExit` is wired, before the first liveness sweep and before the API serves. On shutdown it closes its connections and leaves holders running (`ptyman.ErrDetached` is not an exit and is not recorded as one). The session's pid in `sessions.pid` is the **child's**, so liveness ([ADR-028](08-decisions.md#adr-028--a-session-ends-when-its-process-does)) is unchanged. The holder ignores `SIGHUP` and `SIGINT`, passes `SIGTERM` to its child, and exits when the child does. Pause, resume, kill and resize go through the holder.
+
+**Orphans** (2026-10-10). A holder exits when its child does, and a daemon
+reattaches whatever its registry lists — but a holder whose registry is gone
+is reachable by nobody, and if its child is a login shell it never exits. The
+owner's machine had fifteen of them, a day and a half old: a demo script ran
+throwaway daemons with `CAPROCK_DATA_DIR` in `$TMPDIR`, opened shell tabs,
+stopped the daemon, `pkill -f`'d processes whose command line named the
+directory — a holder's command line is just `caprock pty-host`, so none was
+matched — and deleted the directory. So each holder now carries
+`CAPROCK_PTYHOST_REGISTRY=<registry dir>` in its own environment (never its
+child's, whose environment is the spec's), and the daemon judges every
+`caprock pty-host` of its user (`ptyhost.Classify`):
+
+- **`registered`** — listed in this daemon's registry. Never touched.
+- **`young`** — under two minutes old: a holder starting up has, for a moment,
+  neither child nor entry. Never touched.
+- **`dead`** — no child process. Reaped, whichever Caprock started it.
+- **`foreign`** — another data directory that still lists it, or a holder
+  whose registry cannot be told (no `CAPROCK_PTYHOST_REGISTRY` and no
+  `CAPROCK_DATA_DIR` in its environment — a daemon started with `--data-dir`
+  leaves no trace, and the directory is never guessed from `HOME`, because a
+  guessed directory that exists without the holder in it would make a running
+  session look unreachable). Never touched.
+- **`unreachable-idle`** — its registry directory is gone, or no longer lists
+  it, and its child is a shell (`zsh`, `bash`, `sh`, `fish`, `pwsh`, `cmd`, …)
+  with nothing running under it. Reaped.
+- **`unreachable-busy`** — unreachable, but the child is an agent, or a shell
+  running a command. Reported, never touched: something is still running.
+
+A reap re-reads the process table before every signal and acts only when the
+pid still has the start time it was judged with; it sends `SIGTERM` (the holder
+passes it to the child), and `SIGKILL` after 3 s, which closes the PTY and
+hangs the shell up the way closing a terminal window does. Windows has no
+`SIGTERM`, so the holder is terminated at once and its pseudoconsole closes
+the shell.
 
 ## Transcript JSONL (observed shape)
 

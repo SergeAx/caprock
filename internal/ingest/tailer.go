@@ -59,9 +59,27 @@ type Tailer struct {
 	mu    sync.Mutex
 	files map[string]*fileState
 	stats Stats
+	// dirty holds the files fsnotify reported written since the last wake;
+	// a wake reads those and nothing else (see Run).
+	dirty map[string]struct{}
 	// wake is signalled by fsnotify to trigger an immediate pass.
 	wake chan struct{}
+	// watching is set once fsnotify is running: the poll can then be
+	// narrowed to recently written files.
+	watching bool
 }
+
+// hotWindow is how recently a transcript must have changed for the 2-second
+// poll to look at it while fsnotify is running. Every file is still stat'ed by
+// the full pass that follows each 30-second rescan.
+//
+// The poll used to stat every transcript the machine had ever written, and
+// so did every fsnotify wake — one per line a session wrote. With 1,264
+// transcripts and a few busy sessions that was tens of thousands of stat
+// calls a second, the largest single cost in an otherwise idle daemon
+// (2026-10-10, the owner's machine). fsnotify names the file it saw written,
+// so a wake reads that file; the poll is the fallback for a missed event.
+const hotWindow = 10 * time.Minute
 
 type fileState struct {
 	mu        sync.Mutex // serializes readFile between the live loop and backfill
@@ -82,7 +100,7 @@ func New(root string, rec *rollup.Recorder, st *store.Store, log *slog.Logger) *
 	return &Tailer{
 		Root: root, Recorder: rec, Store: st, Log: log,
 		PollInterval: 2 * time.Second, BackfillWindow: 24 * time.Hour, MaxLine: 16 << 20,
-		files: map[string]*fileState{}, wake: make(chan struct{}, 1),
+		files: map[string]*fileState{}, dirty: map[string]struct{}{}, wake: make(chan struct{}, 1),
 	}
 }
 
@@ -107,6 +125,9 @@ func (t *Tailer) Run(ctx context.Context) error {
 		t.Log.Warn("fsnotify unavailable; polling only", "component", "ingest", "err", err)
 	} else {
 		defer watcher.Close()
+		t.mu.Lock()
+		t.watching = true
+		t.mu.Unlock()
 		go t.watchLoop(ctx, watcher)
 	}
 	if err := t.discover(watcher); err != nil {
@@ -126,13 +147,14 @@ func (t *Tailer) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-t.wake:
-			t.pass(ctx, true)
+			t.passDirty(ctx)
 		case <-ticker.C:
-			t.pass(ctx, true)
+			t.passHot(ctx)
 		case <-rescan.C:
 			if err := t.discover(watcher); err != nil {
 				t.Log.Warn("rescan failed", "component", "ingest", "err", err)
 			}
+			t.pass(ctx, true)
 		}
 	}
 }
@@ -182,6 +204,7 @@ func (t *Tailer) watchLoop(ctx context.Context, w *fsnotify.Watcher) {
 				if _, ok := t.files[ev.Name]; !ok {
 					t.files[ev.Name] = &fileState{path: ev.Name}
 				}
+				t.dirty[ev.Name] = struct{}{}
 				t.mu.Unlock()
 				select {
 				case t.wake <- struct{}{}:
@@ -205,6 +228,53 @@ func (t *Tailer) pass(ctx context.Context, liveOnly bool) {
 		paths = append(paths, f)
 	}
 	t.mu.Unlock()
+	t.read(ctx, paths, liveOnly)
+}
+
+// passDirty reads the files fsnotify reported written since the last wake.
+func (t *Tailer) passDirty(ctx context.Context) {
+	t.mu.Lock()
+	paths := make([]*fileState, 0, len(t.dirty))
+	for p := range t.dirty {
+		if f := t.files[p]; f != nil {
+			paths = append(paths, f)
+		}
+	}
+	clear(t.dirty)
+	t.mu.Unlock()
+	t.read(ctx, paths, true)
+}
+
+// passHot is the poll: every file while fsnotify is unavailable, otherwise
+// the files written within hotWindow and any whose last read stalled.
+func (t *Tailer) passHot(ctx context.Context) {
+	t.mu.Lock()
+	if !t.watching {
+		t.mu.Unlock()
+		t.pass(ctx, true)
+		return
+	}
+	all := make([]*fileState, 0, len(t.files))
+	for _, f := range t.files {
+		all = append(all, f)
+	}
+	t.mu.Unlock()
+	// f.mu is taken with t.mu released: readFile holds f.mu and takes t.mu.
+	since := time.Now().Add(-hotWindow)
+	paths := all[:0]
+	for _, f := range all {
+		f.mu.Lock()
+		hot := f.lastSize < 0 || f.lastMod.After(since)
+		f.mu.Unlock()
+		if hot {
+			paths = append(paths, f)
+		}
+	}
+	t.read(ctx, paths, true)
+}
+
+// read stats each file and reads the ones that changed.
+func (t *Tailer) read(ctx context.Context, paths []*fileState, liveOnly bool) {
 	cutoff := time.Now().Add(-t.BackfillWindow)
 	for _, f := range paths {
 		if ctx.Err() != nil {

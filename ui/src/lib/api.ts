@@ -1,5 +1,6 @@
 // Typed client for the daemon API (.ai/03-contracts.md § HTTP API). snake_case
 // on the wire, kept as-is in the types so the contract is visible in the code.
+import type { ReapResult, ResourceReport } from './resources'
 
 export type Health = 'working' | 'idle' | 'waiting-on-you' | 'looping' | 'error' | 'ended'
 
@@ -1229,6 +1230,10 @@ export const api = {
   stopOrchestrator: () => post<{ stopped: number }>('/v1/orchestrator/stop', {}),
   status: () => get<Status>('/v1/status'),
   storage: () => get<StorageReport>('/v1/storage'),
+  /** What each live session's process tree and Caprock itself cost (lib/resources.ts). */
+  resources: () => get<ResourceReport>('/v1/resources'),
+  /** Stop the orphaned pty-hosts nothing runs in. Machine only. */
+  reapOrphans: () => post<ReapResult>('/v1/resources/reap', {}),
   /** Terminal applications installed here, most preferred first. */
   terminals: () => get<TerminalList>('/v1/terminals'),
   /** Open a session in the user's own terminal app. */

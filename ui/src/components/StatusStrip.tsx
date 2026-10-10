@@ -18,6 +18,7 @@ import type { PaneStatus } from './TerminalPane'
 import { ConnectionState } from './ConnectionState'
 import { AppUpdateNotice } from './AppUpdateNotice'
 import { StaleUiPill } from './StaleUiPill'
+import { SessionLoad } from './ResourceMeter'
 import { useAppUpdate } from '@/lib/appupdate'
 
 export function StatusStrip({ summary, pane, session, version, figures = true }: {
@@ -97,7 +98,7 @@ function Limit({ label, pct }: { label: string; pct: number }) {
   )
 }
 
-/** Model, how full the context is, what the next call costs, what the session has cost. */
+/** Model, how full the context is, what the next call costs, what the session has cost, and what its processes use. */
 function SessionFigures({ s }: { s: SessionSummary }) {
   const ctx = s.context
   const pct = ctx ? Math.max(0, Math.min(100, ctx.pct)) : 0
@@ -122,6 +123,9 @@ function SessionFigures({ s }: { s: SessionSummary }) {
       <span title="What this session has cost at API list prices">
         session <span className="num text-fg">{fmtUSD(s.stats.cost_usd)}</span>
       </span>
+      {/* Its processes' CPU and memory, from the resource meter: absent
+        * until the daemon has measured them, and for a daemon without one. */}
+      <SessionLoad sessionId={s.session_id} />
     </span>
   )
 }

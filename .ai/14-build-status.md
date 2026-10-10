@@ -73,6 +73,15 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-11 — 0.101.0: Telegram both ways, several sign-ins, a resource meter, readable sizes
+
+Ships the three unreleased entries below (the Telegram bridge, subscriptions,
+the resource meter and a lighter daemon), plus readable key chips on sheet
+buttons, a larger feedback dialog, the app's interface size (native webview
+zoom, 110% by default) and the setup strip for phone access and Telegram.
+Not verified against the real Telegram API or a real second `claude auth
+login`; both are listed in their entries.
+
 ### 2026-10-10 — unreleased: subscriptions (several sign-ins per agent)
 
 Settings → Subscriptions (ADR-048): Claude Code and Codex sign-ins in

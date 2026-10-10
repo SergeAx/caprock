@@ -38,9 +38,13 @@ vi.mock('@/lib/api', async (orig) => {
   }
 })
 const addProject = vi.fn(async (req: { path: string }) => ({ project: { id: '9', root: req.path, name: 'caprock-web', kind: 'repo' }, created: true }))
+const BRANCHES = [
+  { name: 'main', main: true, default: true, local: true, remote: 'origin', committed_ms: 2 },
+  { name: 'feat/old', local: true, committed_ms: 1 },
+]
 vi.mock('@/lib/projects', async (orig) => {
   const actual = await orig<typeof import('@/lib/projects')>()
-  return { ...actual, projectsApi: { ...actual.projectsApi, add: (req: { path: string }) => addProject(req) } }
+  return { ...actual, projectsApi: { ...actual.projectsApi, add: (req: { path: string }) => addProject(req), branches: async () => BRANCHES } }
 })
 
 import { NewAgentSheet } from './NewAgentSheet'
@@ -212,9 +216,9 @@ describe('a new worktree from the sheet', () => {
   it('says beside the field what a typed name may not contain, and does not start', async () => {
     open()
     fireEvent.change(await screen.findByLabelText<HTMLSelectElement>('Where'), { target: { value: '__new__' } })
-    fireEvent.change(screen.getByLabelText(/^Branch name/), { target: { value: 'feat/x' } })
+    fireEvent.change(screen.getByLabelText(/^New branch name/), { target: { value: 'feat/x' } })
     expect(screen.getByText('letters, digits, dot and dash only')).toBeTruthy()
-    fireEvent.keyDown(screen.getByLabelText(/^Branch name/), { key: 'Enter', metaKey: true })
+    fireEvent.keyDown(screen.getByLabelText(/^New branch name/), { key: 'Enter', metaKey: true })
     await new Promise((r) => setTimeout(r, 0))
     expect(spawn).not.toHaveBeenCalled()
   })
@@ -232,7 +236,7 @@ describe('Where, in plain words', () => {
     render(<NewAgentSheet projects={withCopy} projectId="1" onClose={vi.fn()} onStarted={vi.fn()} />)
     const where = await screen.findByLabelText<HTMLSelectElement>('Where')
     const labels = Array.from(where.options).map((o) => o.textContent)
-    expect(labels).toEqual(['This folder · main', 'Existing copy · caprock/login', 'New copy on its own branch'])
+    expect(labels).toEqual(['New copy from a branch', 'This folder · main', 'Existing copy · caprock/login'])
     expect(labels.join(' ')).not.toMatch(/worktree/i)
     expect(where.title).toMatch(/git worktree/)
   })
@@ -240,10 +244,10 @@ describe('Where, in plain words', () => {
   it('explains a new copy in one line and asks for a branch name', async () => {
     open()
     fireEvent.change(await screen.findByLabelText<HTMLSelectElement>('Where'), { target: { value: '__new__' } })
-    expect(screen.getByLabelText(/^Branch name/)).toBeTruthy()
-    expect(screen.getByText(/A separate folder with its own branch, so this agent doesn’t collide with others\. Branch:/)).toBeTruthy()
+    expect(screen.getByLabelText(/^New branch name/)).toBeTruthy()
+    expect(screen.getByText(/A separate folder, so this agent doesn’t collide with others:/)).toBeTruthy()
     expect(screen.getByText(/^caprock\/agent-\d{4}-\d{4}$/)).toBeTruthy()
-    fireEvent.change(screen.getByLabelText(/^Branch name/), { target: { value: 'login-fix' } })
+    fireEvent.change(screen.getByLabelText(/^New branch name/), { target: { value: 'login-fix' } })
     expect(screen.getByText('caprock/login-fix')).toBeTruthy()
     expect(screen.queryByText(/worktree/i)).toBeNull()
   })
@@ -326,7 +330,7 @@ describe('focus stays where the person put it', () => {
     open()
     const where = await screen.findByLabelText<HTMLSelectElement>('Where')
     where.focus()
-    fireEvent.keyDown(where, { key: 'ArrowDown' })
+    fireEvent.keyDown(where, { key: 'ArrowUp' })
     expect(where.value).toBe('__new__')
     expect(document.activeElement).toBe(where)
   })
@@ -421,5 +425,19 @@ describe('an agent that is not installed', () => {
     } finally {
       catalogExtra.agents = []
     }
+  })
+})
+
+/** Owner, 2026-10-10: "I want to take it from master/main, pulled from the chosen branch". */
+describe('a new copy from a branch', () => {
+  it('starts from the default branch, pulled first, and remembers the choice', async () => {
+    open()
+    fireEvent.change(await screen.findByLabelText<HTMLSelectElement>('Where'), { target: { value: '__new__' } })
+    expect(await screen.findByLabelText('Start from branch')).toHaveAttribute('placeholder', 'main')
+    expect(screen.getByRole('checkbox')).toBeChecked()
+    fireEvent.click(screen.getByRole('button', { name: /^Start/ }))
+    await waitFor(() => expect(spawn).toHaveBeenCalled())
+    expect(spawn.mock.calls[0]![0]).toMatchObject({ worktree_base: 'main', worktree_pull: true })
+    expect(localStorage.getItem('caprock.newAgent.where')).toBe('__new__')
   })
 })

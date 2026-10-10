@@ -162,7 +162,8 @@ others. Installing it: [install-app.md](install-app.md).
   another project never takes a tab out of the strip: the project's own
   tabs are listed under it in the sidebar, under the same names, or its
   page shows when it has none. Picking a tab makes its project current.
-  ⌘1–9, ⌃Tab and dragging run along the whole strip. Tabs come back when
+  ⌘1–9, ⌃Tab and dragging run along the whole strip; each tab shows its
+  key (⌘1–⌘8, ⌘9 on the last). Tabs come back when
   you reopen the app. Closing a tab (⌘W) never stops its agent — a shell's
   tab closes the shell, as above — and the tab beside it comes to the front; *Stop the session…* in the inspector
   stops one, after asking.

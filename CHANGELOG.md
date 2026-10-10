@@ -14,6 +14,7 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   is readable in the dark theme; the rest is folded under *Then: …*. After a
   restart, with phones paired, the section leads with *Phone access is off*
   and a large *Turn on*.
+
 ### Added
 
 - **See what your sessions cost the machine.** While Caprock is open it
@@ -28,12 +29,6 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   orphans, with a button that stops them (`POST /v1/resources/reap`).
 - **`CAPROCK_PPROF=127.0.0.1:<port>`** serves Go's profiler on a separate
   loopback listener, off unless set. See `.ai/10-infrastructure.md`.
-- **Start an agent from a fresh main.** New agent's *Where* leads with *New
-  copy from a branch*: pick the branch it starts from in a search that puts
-  the main branches first (the default one on top) instead of a list of
-  every branch, and the copy starts from the latest of it on the server —
-  Caprock fetches it first unless you untick *Pull the latest*. Choosing a
-  new copy is remembered, so the next agent starts the same way.
 
 ### Fixed
 
@@ -53,6 +48,24 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   of activity: CPU 3.8% → 3.1%, memory footprint 263 MB → 122 MB, the
   storage measurement over 40 s → 6.7 s.
 
+## [0.100.0] - 2026-10-10
+
+### Added
+
+- **Start an agent from a fresh main.** New agent's *Where* leads with *New
+  copy from a branch*: pick the branch it starts from in a search that puts
+  the main branches first (the default one on top) instead of a list of
+  every branch, and the copy starts from the latest of it on the server —
+  Caprock fetches it first unless you untick *Pull the latest*. Choosing a
+  new copy is remembered, so the next agent starts the same way.
+
+### Changed
+
+- **The phone section reads at a glance.** Three large steps — same Wi-Fi,
+  scan the code, let it work — and one large *Show a code* button whose text
+  is readable in the dark theme; the rest is folded under *Then: …*. After a
+  restart, with phones paired, the section leads with *Phone access is off*
+  and a large *Turn on*.
 ## [0.99.0] - 2026-10-10
 
 ### Added

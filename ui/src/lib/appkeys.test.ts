@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matchAppShortcut, type KeyLike } from './appkeys'
+import { matchAppShortcut, type KeyLike, keys } from './appkeys'
 
 const k = (key: string, mods: Partial<KeyLike> = {}): KeyLike => ({
   key,
@@ -79,5 +79,25 @@ describe('the app keyboard map', () => {
     // Ctrl+F is a shell's forward-char and less's page-down.
     expect(matchAppShortcut(k('f', { ctrlKey: true }), false)).toBeNull()
     expect(matchAppShortcut(k('f', { ctrlKey: true }), true)).toBeNull()
+  })
+})
+
+describe('a key label off macOS', () => {
+  it('writes the app chords as Ctrl+Shift, Quick chat with Alt, Enter with Ctrl alone', () => {
+    expect(keys('⇧⌘N', false)).toBe('Ctrl+Shift+N')
+    expect(keys('⌘W', false)).toBe('Ctrl+Shift+W')
+    expect(keys('⌥⌘N', false)).toBe('Ctrl+Alt+Shift+N')
+    expect(keys('⌘↵', false)).toBe('Ctrl+Enter')
+    expect(keys('⇧⌘↵', false)).toBe('Ctrl+Shift+Enter')
+    expect(keys('⌃Tab, ⇧⌘[ ]', false)).toBe('Ctrl+Tab, Ctrl+Shift+[ ]')
+    expect(keys('⌘1–8, ⌘9', false)).toBe('Ctrl+Shift+1–8, Ctrl+Shift+9')
+  })
+  it('says F5 for reload and nothing for the pane keys, which have none there', () => {
+    expect(keys('⌘R', false)).toBe('F5')
+    expect(keys('⌘[ ]', false)).toBe('')
+    expect(keys('⌘]', false)).toBe('')
+  })
+  it('leaves macOS as written', () => {
+    expect(keys('⇧⌘N', true)).toBe('⇧⌘N')
   })
 })

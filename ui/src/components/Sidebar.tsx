@@ -38,6 +38,7 @@ import { TodayStrip } from './TodayStrip'
 import { AgentGlyph } from './AgentMarks'
 import { FeedbackButton } from './Feedback'
 import { CaprockMark, ChatIcon, ChevronIcon, DashboardIcon, FolderPlusIcon, MoonIcon, PlusIcon, SearchIcon, SettingsIcon, SunIcon } from './AppIcons'
+import { keys } from '@/lib/appkeys'
 
 /** Project ids hidden by hand: this browser's. */
 export const HIDDEN_KEY = 'caprock.app.hidden-projects'
@@ -233,7 +234,7 @@ export function Sidebar(props: SidebarProps) {
           <CaprockMark size={15} />
           <span data-tauri-drag-region className="text-[13px] font-semibold tracking-[-0.01em] text-fg">Caprock</span>
         </span>
-        <IconButton label="Search projects, sessions and actions (⌘K)" onClick={props.onPalette}><SearchIcon size={15} /></IconButton>
+        <IconButton label={`Search projects, sessions and actions (${keys('⌘K')})`} onClick={props.onPalette}><SearchIcon size={15} /></IconButton>
       </div>
 
       {/* The app's main action, where the eye lands first: starting an agent
@@ -245,12 +246,12 @@ export function Sidebar(props: SidebarProps) {
           onClick={() => props.onNewAgent(activeProjectId)}
           aria-label="New agent"
           aria-keyshortcuts="Shift+Meta+N"
-          title="Start an agent in the project in front (⇧⌘N)"
+          title={`Start an agent in the project in front (${keys('⇧⌘N')})`}
           className="app-primary flex h-[32px] w-full items-center gap-2 rounded-[8px] border pl-2.5 pr-2 text-left text-[13px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:transition-none"
         >
           <PlusIcon size={15} />
           <span className="flex-1">New agent</span>
-          <kbd className="app-kbd">⇧⌘N</kbd>
+          <kbd className="app-kbd">{keys('⇧⌘N')}</kbd>
         </button>
         {props.onQuickChat && (
           <button
@@ -258,12 +259,12 @@ export function Sidebar(props: SidebarProps) {
             onClick={props.onQuickChat}
             aria-label="Quick chat"
             aria-keyshortcuts="Alt+Meta+N"
-            title="Ask Claude something without picking a folder (⌥⌘N)"
+            title={`Ask Claude something without picking a folder (${keys('⌥⌘N')})`}
             className="mt-1 flex h-[26px] w-full items-center gap-2 rounded-[7px] pl-2.5 pr-2 text-left text-[12.5px] text-fg-muted hover:bg-[var(--app-row-hover)] hover:text-fg"
           >
             <ChatIcon size={14} />
             <span className="flex-1">Quick chat</span>
-            <kbd className="app-kbd">⌥⌘N</kbd>
+            <kbd className="app-kbd">{keys('⌥⌘N')}</kbd>
           </button>
         )}
         <button
@@ -271,12 +272,12 @@ export function Sidebar(props: SidebarProps) {
           onClick={props.onAddProject}
           aria-label="Add project"
           aria-keyshortcuts="Meta+O"
-          title="Add a project — a folder, a new one, or a clone (⌘O)"
+          title={`Add a project — a folder, a new one, or a clone (${keys('⌘O')})`}
           className="mt-1 flex h-[26px] w-full items-center gap-2 rounded-[7px] pl-2.5 pr-2 text-left text-[12.5px] text-fg-muted hover:bg-[var(--app-row-hover)] hover:text-fg"
         >
           <FolderPlusIcon size={14} />
           <span className="flex-1">Add project</span>
-          <kbd className="app-kbd">⌘O</kbd>
+          <kbd className="app-kbd">{keys('⌘O')}</kbd>
         </button>
       </div>
 
@@ -330,9 +331,9 @@ export function Sidebar(props: SidebarProps) {
           >
             <DashboardIcon size={15} className="text-fg-muted" />
             <span className="flex-1">Dashboard</span>
-            <kbd className="app-kbd">⇧⌘D</kbd>
+            <kbd className="app-kbd">{keys('⇧⌘D')}</kbd>
           </button>
-          {props.onSettings && <IconButton label="Settings (⌘,)" onClick={props.onSettings}><SettingsIcon size={15} /></IconButton>}
+          {props.onSettings && <IconButton label={`Settings (${keys('⌘,')})`} onClick={props.onSettings}><SettingsIcon size={15} /></IconButton>}
           <ThemeButton />
         </div>
       </div>

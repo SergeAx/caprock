@@ -18,6 +18,12 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Fixed
 
+- **Windows and Linux see their own shortcuts.** Hints, tooltips and the
+  shortcuts sheet showed ⌘ on every platform; off macOS they now read
+  Ctrl+Shift+N, Ctrl+Alt+Shift+N, Ctrl+Enter, F5, the keys that actually
+  work there. The pane keys, which exist only on macOS, are no longer
+  offered elsewhere.
+
 - **Feedback no longer looks like a volume control.** Its icon is a speech
   bubble rather than a megaphone, and in the desktop app it is a labelled
   *Send feedback* row above *Dashboard* instead of a bare icon beside

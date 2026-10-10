@@ -8,6 +8,7 @@ import { useState } from 'react'
 import { api, errText, type Settings } from '@/lib/api'
 import { resetEditors, useEditors } from '@/lib/editors'
 import { Choice, Section } from './SettingsParts'
+import { keys } from '@/lib/appkeys'
 
 export function EditorSetting() {
   const list = useEditors()
@@ -26,7 +27,7 @@ export function EditorSetting() {
     <Section title="Editor">
       <Choice label="Open in" value={list.preferred} options={list.editors.map((e) => ({ value: e.id, label: e.name }))} onChange={(id) => void save(id)} />
       <p className="text-[12px] text-fg-muted">
-        What <span className="text-fg">Open in editor</span> uses — in the palette (⌘K), a project&apos;s right-click menu and the inspector.
+        What <span className="text-fg">Open in editor</span> uses — in the palette ({keys('⌘K')}), a project&apos;s right-click menu and the inspector.
       </p>
       {error && <p className="text-[12px] text-danger">{error}</p>}
     </Section>

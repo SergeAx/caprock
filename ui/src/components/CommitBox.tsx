@@ -7,6 +7,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from 'react'
 import { api } from '@/lib/api'
 import { changesApi, changedCount, failureOf, messageFromSummary, type ChangeFailure, type Changes, type WorktreeRef } from '@/lib/changes'
+import { keys } from '@/lib/appkeys'
 
 const DRAFT_PREFIX = 'caprock.changes.message.'
 
@@ -175,7 +176,7 @@ export const CommitBox = forwardRef<CommitBoxHandle, CommitBoxProps>(function Co
           type="button"
           disabled={!canCommit}
           onClick={() => void commit(false)}
-          title="⌘↵"
+          title={keys('⌘↵')}
           className={`${h} flex-1 rounded-[7px] bg-accent px-3 text-[12.5px] font-medium text-bg hover:brightness-110 disabled:opacity-40`}
         >
           {busy === 'commit' ? 'Committing…' : label}
@@ -184,7 +185,7 @@ export const CommitBox = forwardRef<CommitBoxHandle, CommitBoxProps>(function Co
           type="button"
           disabled={!canCommit || !changes?.remote || !!changes?.detached}
           onClick={() => void commit(true)}
-          title={changes?.remote ? '⇧⌘↵' : 'This repository has no remote'}
+          title={changes?.remote ? keys('⇧⌘↵') : 'This repository has no remote'}
           className={`${h} flex-1 rounded-[7px] border border-[var(--app-hairline-strong,var(--color-border))] px-3 text-[12.5px] text-fg hover:bg-[var(--app-row-hover,transparent)] disabled:opacity-40`}
         >
           {busy === 'push' ? 'Committing and pushing…' : 'Commit & Push'}

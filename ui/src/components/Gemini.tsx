@@ -26,6 +26,7 @@ import { api, errText, type GeminiReply, type Settings } from '@/lib/api'
 import { useApi } from '@/lib/useApi'
 import { Panel } from '@/components/ui'
 import { fmtTokens } from '@/lib/format'
+import { keys } from '@/lib/appkeys'
 
 /** Prices below a cent, which is most of them, without rounding them to
  *  nothing: fmtUSD renders $0.002 as "$0.00", and a reader who believes a
@@ -181,7 +182,7 @@ export function GeminiPanel() {
                 ))}
               </select>
             )}
-            <span className="text-[11px] text-fg-faint">⌘↵ to send</span>
+            <span className="text-[11px] text-fg-faint">{keys('⌘↵')} to send</span>
           </div>
 
           {error && <div className="text-danger text-[12px]">{error}</div>}

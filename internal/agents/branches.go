@@ -142,7 +142,7 @@ func startPoint(ctx context.Context, repo, base string, pull bool) (string, erro
 		fctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
 		if _, err := gitOut(fctx, repo, "fetch", "--quiet", remote, "refs/heads/"+base+":refs/remotes/"+remote+"/"+base); err != nil {
-			return "", fmt.Errorf("agents: could not pull %s from %s: %v", base, remote, err)
+			return "", fmt.Errorf("agents: could not pull %s from %s: %w", base, remote, err)
 		}
 	}
 	point := base

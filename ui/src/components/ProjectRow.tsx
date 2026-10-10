@@ -42,6 +42,7 @@ import { AgentGlyph } from './AgentMarks'
 import { CloseIcon, EyeIcon, FileIcon, MoreIcon, PlusIcon, StopIcon, TerminalIcon } from './AppIcons'
 import { MenuBox, MenuItem, type MenuAt } from './RowMenu'
 import { StopConfirm, stopLabel, type StopWhat } from './StopConfirm'
+import { keys } from '@/lib/appkeys'
 
 const DOT_CLASS: Record<Dot, string> = {
   working: 'bg-ok',
@@ -287,7 +288,7 @@ export const ProjectRow = memo(function ProjectRow({
       )}
       {tabMenu && menuTab && (
         <MenuBox at={tabMenu} label={`${labels.get(menuTab.id)?.title ?? menuTab.title}: tab actions`} width={200} onClose={closeTabMenu}>
-          {onCloseTab && <MenuItem icon={<CloseIcon size={14} />} label={closeWord(labels.get(menuTab.id)?.file !== undefined, !!labels.get(menuTab.id)?.isShell)} hint="⌘W" onClick={() => { setTabMenu(null); onCloseTab(menuTab.id) }} />}
+          {onCloseTab && <MenuItem icon={<CloseIcon size={14} />} label={closeWord(labels.get(menuTab.id)?.file !== undefined, !!labels.get(menuTab.id)?.isShell)} hint={keys('⌘W')} onClick={() => { setTabMenu(null); onCloseTab(menuTab.id) }} />}
           {menuStop && (
             <MenuItem
               icon={<StopIcon size={14} />}

@@ -6,6 +6,7 @@
  */
 import type { SessionSummary } from './api'
 import { leaves, namingLeaf, type PaneLeaf, type Tab } from './tabs'
+import { keys } from './appkeys'
 
 /** A shell the close would end, or ask about. */
 export interface ClosingShell {
@@ -113,8 +114,8 @@ export function liveShells(list: readonly { id: string; program?: string }[]): M
 
 /** What a tab's close button says: a shell closes for real, an agent runs on. */
 export function closeTitle(isFile: boolean, isShell: boolean): string {
-  if (isFile) return 'Close tab (⌘W)'
-  return isShell ? 'Close shell (⌘W)' : 'Close tab (⌘W) — the agent keeps running'
+  if (isFile) return `Close tab (${keys('⌘W')})`
+  return isShell ? `Close shell (${keys('⌘W')})` : `Close tab (${keys('⌘W')}) — the agent keeps running`
 }
 
 /** The close action's name: "Close shell" for a shell's tab, else "Close tab". */

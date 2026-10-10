@@ -9,6 +9,10 @@ import { TabStrip, TerminalStack } from './TerminalTabs'
 import type { Tab } from '@/lib/tabs'
 import type { SessionSummary } from '@/lib/api'
 
+// These read the labels in their macOS spelling; lib/appkeys.test.ts covers
+// Windows and Linux.
+Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true })
+
 // A pane that counts its renders: xterm is beside the point here.
 const panes = vi.hoisted(() => ({ renders: new Map<string, number>() }))
 vi.mock('./TerminalPane', () => ({

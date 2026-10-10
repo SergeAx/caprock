@@ -20,6 +20,7 @@ import { ChatIcon, CloseIcon, DashboardIcon, FileIcon, InspectorIcon, PlusIcon, 
 import { StatusDot, TitleAndBranch } from './ProjectRow'
 import { closeTitle, closeWord } from '@/lib/closeShell'
 import { NewMenu, type NewMenuItem } from './NewMenu'
+import { keys } from '@/lib/appkeys'
 
 /** The pinned Dashboard tab: the dashboard's screens, in the strip with the terminals. */
 export interface DashboardTab {
@@ -122,7 +123,7 @@ export function TabStrip(props: TabStripProps) {
             onClick={props.dashboard.onActivate}
             onAuxClick={(e) => { if (e.button === 1) props.dashboard!.onClose() }}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') props.dashboard!.onActivate() }}
-            title={`${props.dashboard.label} — ⇧⌘D`}
+            title={`${props.dashboard.label} — ${keys('⇧⌘D')}`}
             className={`group relative flex h-[32px] shrink-0 cursor-default select-none items-center gap-2 rounded-t-[9px] pl-3 pr-1.5 text-[12.5px] transition-colors duration-100 motion-reduce:transition-none ${
               props.dashboard.active ? 'app-tab-front app-tab-dash bg-bg font-medium text-fg' : 'app-tab-dash text-fg hover:text-fg'
             }`}
@@ -164,7 +165,7 @@ export function TabStrip(props: TabStripProps) {
               }}
               onAuxClick={(e) => { if (e.button === 1) props.onDetach(t.id) }}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') props.onActivate(t.id) }}
-              title={`${file ?? title}${label?.branch ? ` · ${label.branch}` : ''}${project ? ` · ${project}` : ''}${i < 9 ? ` — ⌘${i + 1}` : ''}`}
+              title={`${file ?? title}${label?.branch ? ` · ${label.branch}` : ''}${project ? ` · ${project}` : ''}${i < 9 ? ` — ${keys(`⌘${i + 1}`)}` : ''}`}
               data-project={t.projectId}
               className={`group relative flex h-[32px] min-w-[112px] max-w-[260px] flex-1 basis-[200px] cursor-default select-none items-center gap-2 rounded-t-[9px] pl-3 pr-1.5 text-[12.5px] transition-colors duration-100 motion-reduce:transition-none ${
                 active ? (file !== undefined ? 'app-tab-front bg-bg font-medium text-fg' : 'app-tab-front app-slab font-medium text-fg') : 'app-tab-back text-fg-muted hover:text-fg'
@@ -199,8 +200,8 @@ export function TabStrip(props: TabStripProps) {
         })}
         <div className="mb-[5px] ml-1.5 flex shrink-0 items-center">
           <NewMenu items={props.newItems ?? [
-            { id: 'agent', label: 'New agent', hint: '⇧⌘N', icon: <PlusIcon size={13} />, run: props.onNewAgent },
-            { id: 'shell', label: 'New shell', hint: '⌘T', icon: <TerminalIcon size={13} />, run: props.onNewShell },
+            { id: 'agent', label: 'New agent', hint: keys('⇧⌘N'), icon: <PlusIcon size={13} />, run: props.onNewAgent },
+            { id: 'shell', label: 'New shell', hint: keys('⌘T'), icon: <TerminalIcon size={13} />, run: props.onNewShell },
           ]} />
         </div>
       </div>
@@ -208,7 +209,7 @@ export function TabStrip(props: TabStripProps) {
         {props.paneTools !== false && props.onToggleChat && (
           <StripButton label={props.chatOpen ? 'Show the terminal' : 'Show the chat'} pressed={props.chatOpen} onClick={props.onToggleChat}><ChatIcon size={15} /></StripButton>
         )}
-        {props.paneTools !== false && <StripButton label="Inspector (⌘I)" pressed={props.inspectorOpen} onClick={props.onToggleInspector}><InspectorIcon size={15} /></StripButton>}
+        {props.paneTools !== false && <StripButton label={`Inspector (${keys('⌘I')})`} pressed={props.inspectorOpen} onClick={props.onToggleInspector}><InspectorIcon size={15} /></StripButton>}
       </div>
     </div>
   )
@@ -334,7 +335,7 @@ function PaneView({ node, visible, ctx }: { node: PaneNode; visible: boolean; ct
           <button
             type="button"
             aria-label={isShell ? `Close shell ${title}` : `Close pane ${title} — the agent keeps running`}
-            title={isShell ? 'Close shell (⌘W)' : 'Close pane (⌘W) — the agent keeps running'}
+            title={isShell ? `Close shell (${keys('⌘W')})` : `Close pane (${keys('⌘W')}) — the agent keeps running`}
             onClick={(e) => { e.stopPropagation(); ctx.onClosePane?.(node.id) }}
             className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[4px] text-fg-faint hover:bg-[var(--app-row-hover)] hover:text-fg"
           >

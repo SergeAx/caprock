@@ -23,6 +23,10 @@ import { tabLabels } from '@/lib/tablabels'
 import type { Tab } from '@/lib/tabs'
 import { HIDDEN_KEY, Sidebar, type SidebarProps } from './Sidebar'
 
+// These read the labels in their macOS spelling; lib/appkeys.test.ts covers
+// Windows and Linux.
+Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true })
+
 const proj = (id: string): Project => ({ id, root: `/w/${id}`, name: id, kind: 'folder', last_activity: Date.now(), pinned: true })
 const live = (p: Partial<SessionSummary>) => ({
   session_id: 's', cwd: '/w/alpha', project: 'alpha', model: '', started_at: 1, last_event_at: 1, status: 'active',

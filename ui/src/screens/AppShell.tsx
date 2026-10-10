@@ -11,7 +11,7 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { api, ApiError, errText, type SessionSummary } from '@/lib/api'
 import { APP_ROUTE, isMacPlatform, isTauri, isWorkspaceHash } from '@/lib/appmode'
-import { FIND_EVENT, matchAppShortcut, type AppCommand } from '@/lib/appkeys'
+import { FIND_EVENT, keys, matchAppShortcut, type AppCommand } from '@/lib/appkeys'
 import { parseHash } from '@/lib/router'
 import { NotSupportedError, projectsApi, type Project } from '@/lib/projects'
 import { buildSidebar, dotOf, OTHER_FOLDERS_ID, sessionTitle, type InboxItem, type ProjectNode, type WorktreeNode } from '@/lib/sidebar'
@@ -401,7 +401,7 @@ export function AppShell() {
       else openTab({ kind: 'shell', sessionId: shell.id }, pid, 'shell')
       refresh()
     } catch (e) {
-      setToast(e instanceof NotSupportedError ? `${e.message} Start an agent with ⇧⌘N meanwhile.` : `Could not start a shell: ${errText(e)}`)
+      setToast(e instanceof NotSupportedError ? `${e.message} Start an agent with ${keys('⇧⌘N')} meanwhile.` : `Could not start a shell: ${errText(e)}`)
     }
   }, [projectsById, activeProjectId, source, refresh, openTab, openSplit])
 
@@ -456,11 +456,11 @@ export function AppShell() {
   // The strip's + menu (components/NewMenu.tsx): what opens a tab, with its key.
   const fileScopeRef = useRef<{ projectId: string; worktree: string; title: string } | undefined>(undefined)
   const newItems = useMemo(() => [
-    { id: 'agent', label: 'New agent', hint: '⇧⌘N', icon: <PlusIcon size={13} />, run: () => onNewAgent() },
-    { id: 'quick-chat', label: 'Quick chat…', hint: '⌥⌘N', icon: <ChatIcon size={13} />, run: onQuickChatChooser },
-    { id: 'shell', label: 'New shell', hint: '⌘T', icon: <TerminalIcon size={13} />, run: () => onNewShell() },
+    { id: 'agent', label: 'New agent', hint: keys('⇧⌘N'), icon: <PlusIcon size={13} />, run: () => onNewAgent() },
+    { id: 'quick-chat', label: 'Quick chat…', hint: keys('⌥⌘N'), icon: <ChatIcon size={13} />, run: onQuickChatChooser },
+    { id: 'shell', label: 'New shell', hint: keys('⌘T'), icon: <TerminalIcon size={13} />, run: () => onNewShell() },
     { id: 'file', label: 'Open file…', icon: <FileIcon size={13} />, run: () => { const f = fileScopeRef.current; if (f) setSheet({ kind: 'files', ...f }); else setToast('Open a project first: files are opened from one.') } },
-    { id: 'project', label: 'Add project', hint: '⌘O', icon: <FolderPlusIcon size={13} />, run: onAddProject },
+    { id: 'project', label: 'Add project', hint: keys('⌘O'), icon: <FolderPlusIcon size={13} />, run: onAddProject },
   ], [onNewAgent, onQuickChatChooser, onNewShell, onAddProject])
   const onSettings = useCallback(() => { location.hash = '#/settings' }, [])
   const onPaneStatus = useCallback((sessionId: string, s: PaneStatus) => setPaneStatus((cur) => ({ ...cur, [sessionId]: s })), [])
@@ -667,34 +667,34 @@ export function AppShell() {
     }))
     const split = current && current.root.type === 'split'
     items.push(
-      { id: 'a-agent', group: 'Actions', label: 'New agent', hint: '⇧⌘N', icon: <PlusIcon size={14} />, run: () => onNewAgent() },
-      { id: 'a-shell', group: 'Actions', label: 'New shell', hint: '⌘T', icon: <TerminalIcon size={14} />, run: () => onNewShell() },
-      { id: 'a-quick-chat', group: 'Actions', label: 'Quick chat', detail: 'starts at once, on the agent and model used last', hint: '⌥⌘N', icon: <ChatIcon size={14} />, run: () => { void onQuickChat() } },
+      { id: 'a-agent', group: 'Actions', label: 'New agent', hint: keys('⇧⌘N'), icon: <PlusIcon size={14} />, run: () => onNewAgent() },
+      { id: 'a-shell', group: 'Actions', label: 'New shell', hint: keys('⌘T'), icon: <TerminalIcon size={14} />, run: () => onNewShell() },
+      { id: 'a-quick-chat', group: 'Actions', label: 'Quick chat', detail: 'starts at once, on the agent and model used last', hint: keys('⌥⌘N'), icon: <ChatIcon size={14} />, run: () => { void onQuickChat() } },
       { id: 'a-quick-chat-with', group: 'Actions', label: 'Quick chat with…', detail: 'pick Claude, Codex, Gemini or OpenCode and a model', icon: <ChatIcon size={14} />, run: onQuickChatChooser },
-      { id: 'a-project', group: 'Actions', label: 'Add a project', hint: '⌘O', icon: <FolderPlusIcon size={14} />, run: onAddProject },
-      { id: 'a-inspector', group: 'Actions', label: prefs.inspector ? 'Hide the inspector' : 'Show the inspector', hint: '⌘I', icon: <InspectorIcon size={14} />, run: () => run({ kind: 'inspector' }) },
+      { id: 'a-project', group: 'Actions', label: 'Add a project', hint: keys('⌘O'), icon: <FolderPlusIcon size={14} />, run: onAddProject },
+      { id: 'a-inspector', group: 'Actions', label: prefs.inspector ? 'Hide the inspector' : 'Show the inspector', hint: keys('⌘I'), icon: <InspectorIcon size={14} />, run: () => run({ kind: 'inspector' }) },
       ...(fileScope ? [{ id: 'a-open-file', group: 'Actions' as const, label: 'Open file…', detail: fileScope.title, icon: <FileIcon size={14} />, run: () => setSheet({ kind: 'files', ...fileScope }) }] : []),
-      { id: 'a-dashboard', group: 'Actions', label: 'Open the dashboard', hint: '⇧⌘D', icon: <DashboardIcon size={14} />, run: onDashboard },
-      { id: 'a-settings', group: 'Actions', label: 'Settings', detail: 'permission mode, theme, terminal, notifications, phone', hint: '⌘,', icon: <SettingsIcon size={14} />, run: onSettings },
+      { id: 'a-dashboard', group: 'Actions', label: 'Open the dashboard', hint: keys('⇧⌘D'), icon: <DashboardIcon size={14} />, run: onDashboard },
+      { id: 'a-settings', group: 'Actions', label: 'Settings', detail: 'permission mode, theme, terminal, notifications, phone', hint: keys('⌘,'), icon: <SettingsIcon size={14} />, run: onSettings },
       { id: 'a-keys', group: 'Actions', label: 'Keyboard shortcuts', detail: 'every key the app answers to', icon: <SearchIcon size={14} />, run: () => setSheet({ kind: 'keys' }) },
       { id: 'a-theme', group: 'Actions', label: 'Switch theme', icon: <SparkIcon size={14} />, run: toggleTheme },
       { id: 'a-share', group: 'Actions', label: 'Share my numbers', detail: 'a card of your figures: copy, save or post to X', icon: <SparkIcon size={14} />, run: () => setSheet({ kind: 'share' }) },
       ...SCREENS.map(([route, label, detail]) => ({ id: `a-screen-${route}`, group: 'Actions' as const, label, detail, icon: <DashboardIcon size={14} />, run: () => { location.hash = `#/${route}` } })),
-      { id: 'a-waiting', group: 'Actions', label: 'Next session waiting on you', hint: '⌘J', icon: <SparkIcon size={14} />, run: jumpToWaiting },
+      { id: 'a-waiting', group: 'Actions', label: 'Next session waiting on you', hint: keys('⌘J'), icon: <SparkIcon size={14} />, run: jumpToWaiting },
     )
     // F20: the app's own updater; the answer shows in the status strip.
     if (isTauri()) items.push({ id: 'a-update', group: 'Actions', label: 'Check for updates', icon: <SparkIcon size={14} />, run: () => { void appUpdate.check() } })
     if (current) {
       items.push(
-        { id: 'a-find', group: 'Actions', label: focused?.kind === 'file' ? 'Find in the file' : 'Find in the terminal', hint: '⌘F', icon: <SearchIcon size={14} />, run: () => window.dispatchEvent(new Event(FIND_EVENT)) },
-        { id: 'a-split-right', group: 'Actions', label: 'Split right: a new shell beside', hint: '⌘E', icon: <TerminalIcon size={14} />, run: () => splitShell('row') },
-        { id: 'a-split-down', group: 'Actions', label: 'Split down: a new shell below', hint: '⇧⌘E', icon: <TerminalIcon size={14} />, run: () => splitShell('column') },
+        { id: 'a-find', group: 'Actions', label: focused?.kind === 'file' ? 'Find in the file' : 'Find in the terminal', hint: keys('⌘F'), icon: <SearchIcon size={14} />, run: () => window.dispatchEvent(new Event(FIND_EVENT)) },
+        { id: 'a-split-right', group: 'Actions', label: 'Split right: a new shell beside', hint: keys('⌘E'), icon: <TerminalIcon size={14} />, run: () => splitShell('row') },
+        { id: 'a-split-down', group: 'Actions', label: 'Split down: a new shell below', hint: keys('⇧⌘E'), icon: <TerminalIcon size={14} />, run: () => splitShell('column') },
       )
     }
     if (split) {
       items.push(
-        { id: 'a-pane-next', group: 'Actions', label: 'Focus the next pane', hint: '⌘]', icon: <TerminalIcon size={14} />, run: () => dispatch({ type: 'cycle-pane', delta: 1 }) },
-        { id: 'a-pane-close', group: 'Actions', label: 'Close the pane', hint: '⌘W', icon: <TerminalIcon size={14} />, run: detach },
+        { id: 'a-pane-next', group: 'Actions', label: 'Focus the next pane', hint: keys('⌘]'), icon: <TerminalIcon size={14} />, run: () => dispatch({ type: 'cycle-pane', delta: 1 }) },
+        { id: 'a-pane-close', group: 'Actions', label: 'Close the pane', hint: keys('⌘W'), icon: <TerminalIcon size={14} />, run: detach },
       )
     }
     if (editors) {
@@ -1098,9 +1098,9 @@ function EmptyWorkspace({
           </p>
         </div>
         <div className="grid gap-1">
-          {project && <EmptyAction icon={<PlusIcon size={15} />} label="New agent" hint="⇧⌘N" onClick={onNewAgent} />}
-          {project && <EmptyAction icon={<TerminalIcon size={15} />} label="New shell" hint="⌘T" onClick={onNewShell} />}
-          <EmptyAction icon={<FolderPlusIcon size={15} />} label="Add a project" hint="⌘O" onClick={onAddProject} />
+          {project && <EmptyAction icon={<PlusIcon size={15} />} label="New agent" hint={keys('⇧⌘N')} onClick={onNewAgent} />}
+          {project && <EmptyAction icon={<TerminalIcon size={15} />} label="New shell" hint={keys('⌘T')} onClick={onNewShell} />}
+          <EmptyAction icon={<FolderPlusIcon size={15} />} label="Add a project" hint={keys('⌘O')} onClick={onAddProject} />
         </div>
         {recent}
       </div>

@@ -26,6 +26,7 @@ import { CloseIcon, ExternalIcon, StopIcon } from './AppIcons'
 import { everyWhileVisible } from '@/lib/visible'
 import { Cockpit, SectionLabel } from './Cockpit'
 import { StopConfirm, stopLabel, type StopWhat } from './StopConfirm'
+import { keys } from '@/lib/appkeys'
 
 const DIFF_REFRESH_MS = 20_000
 const DIFF_FILES_SHOWN = 5
@@ -68,7 +69,7 @@ export function Inspector({
     <aside aria-label="Inspector" className="app-scroll flex h-full min-h-0 flex-col overflow-y-auto border-l border-[var(--app-hairline)] bg-[var(--app-chrome-bg)]">
       <div className="flex h-[40px] shrink-0 items-center gap-2 border-b border-[var(--app-hairline)] pl-4 pr-2">
         <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-faint">{isAgent ? 'Agent' : 'Inspector'}</h2>
-        <button type="button" onClick={onClose} aria-label="Close the inspector (⌘I)" title="Close (⌘I)" className="ml-auto flex h-[26px] w-[26px] items-center justify-center rounded-[6px] text-fg-muted hover:bg-[var(--app-row-hover)] hover:text-fg">
+        <button type="button" onClick={onClose} aria-label={`Close the inspector (${keys('⌘I')})`} title={`Close (${keys('⌘I')})`} className="ml-auto flex h-[26px] w-[26px] items-center justify-center rounded-[6px] text-fg-muted hover:bg-[var(--app-row-hover)] hover:text-fg">
           <CloseIcon size={13} />
         </button>
       </div>
@@ -160,7 +161,7 @@ function Actions({ s, sessionId, isShell, ended, editor, onDetach }: { s?: Sessi
         <button type="button" onClick={onDetach} className="app-row flex h-[30px] items-center gap-2 rounded-[7px] px-2 text-left text-[12.5px] text-fg">
           <CloseIcon size={14} className="text-fg-muted" />
           <span className="flex-1">{isShell ? 'Close the shell' : 'Close the tab'}</span>
-          <kbd className="mono text-[10.5px] text-fg-faint">⌘W</kbd>
+          <kbd className="mono text-[10.5px] text-fg-faint">{keys('⌘W')}</kbd>
         </button>
         {s?.owned && !ended && <StopButton sessionId={sessionId} what={isShell ? 'shell' : 'session'} />}
       </div>

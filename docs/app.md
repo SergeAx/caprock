@@ -539,6 +539,30 @@ or Photos library, cloud storage or a volume in the background.
   developer account): one entry, with Caprock's icon, and no new question
   after an update.
 
+### Voice mode and the microphone
+
+An agent's voice input (Claude Code's `/voice`) records from the
+microphone, and macOS asks once before it can. The prompt names the program
+macOS holds responsible: `claude` for a session started by a current
+Caprock, or "caprock" / Caprock for an older session or one the daemon runs
+directly. Choose **Allow** and recording works from then on.
+
+If an agent says "No audio detected from microphone" and no prompt
+appeared:
+
+- **Update Caprock.** Releases before this fix signed the app and its daemon
+  without the right to ask for the microphone, so macOS refused silently.
+  After updating, open the app once so it moves its daemon onto the new
+  build.
+- **Start a new session** for voice. A session that was already running
+  keeps the program that started it; a new one asks for itself.
+- **Check System Settings → Privacy & Security → Microphone.** If `claude`,
+  `caprock` or Caprock is listed and switched off, switch it on. After each
+  Caprock release macOS may ask again, since an ad-hoc signed release is a
+  new program to it.
+- **Homebrew without the app.** The formula's `caprock` is not signed with
+  the hardened runtime, so nothing stops the prompt; it names "caprock".
+
 ## Your phone
 
 The phone opens the same Caprock in its browser, over your Wi-Fi or over

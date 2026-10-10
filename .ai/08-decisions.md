@@ -2231,3 +2231,85 @@ session runs there.
 plain exec, so the symptom would be prompts in Caprock's name again), or
 Caprock ships as a Developer ID app whose own grants should cover its
 sessions.
+
+## ADR-045 — The app and its daemon may ask for the microphone
+
+**Date:** 2026-10-10 · **Status:** accepted (decided without the owner; he
+may overrule it)
+
+**Context.** Claude Code's voice mode in a Caprock terminal said "No audio
+detected from microphone", and macOS showed no prompt. The `tccd` log
+(`log show --predicate 'process == "tccd"'`, read 2026-10-10) holds every
+request: the accessing binary was `claude` itself, the responsible program
+was the app's daemon at `<data_dir>/bin/caprock`, and each request ended
+with
+
+> Prompting policy for hardened runtime; service: kTCCServiceMicrophone
+> requires entitlement com.apple.security.device.audio-input but it is
+> missing for responsible=… caprock/bin/caprock … Policy disallows prompt …
+> access to kTCCServiceMicrophone denied
+
+(`authValue=0, authReason=5`). The daemon is the bundler's universal
+sidecar, signed `flags=0x10002(adhoc,runtime)` with no entitlements; the
+app is signed the same way. Under the hardened runtime a program without
+`com.apple.security.device.audio-input` is refused the microphone without a
+prompt, and CoreAudio hands the recorder silence. The Homebrew formula's
+binary is only linker-signed (`flags=0x20002(adhoc,linker-signed)`, no
+runtime), so this gate does not apply to it.
+
+The failing session had started on 2026-10-07, before ADR-044, under a
+pty-host that does not disclaim, which is why the daemon was responsible.
+A session started since ADR-044 is responsible for itself, and `claude`
+(Developer ID, hardened runtime) carries the entitlement; the daemon is
+still responsible wherever the disclaim does not happen (sessions from an
+older pty-host, a macOS without the private call, anything the daemon starts
+unwrapped), and the app is responsible for a daemon it starts with `caprock
+up` rather than through launchd.
+
+**The decision.**
+
+- **The app and the daemon it bundles are signed with
+  `com.apple.security.device.audio-input`** (`app/src-tauri/Entitlements.plist`,
+  `bundle.macOS.entitlements`). The bundler signs the sidecar with the
+  same options as the app, and the app copies the sidecar byte for byte to
+  `<data_dir>/bin/caprock`, so the launchd daemon carries it too.
+- **The app's Info.plist gains `NSMicrophoneUsageDescription`**
+  (`app/src-tauri/Info.plist`, merged by the bundler): the sentence macOS
+  shows when the app is the responsible program.
+- **Checked at build time.** `scripts/check-app-mic.sh`, run by CI's macOS
+  app job and by `scripts/app-release.sh`, fails when either binary lacks the entitlement or the Info.plist lacks the
+  string.
+- Nothing else is asked for: no camera, no other entitlement.
+
+**Rejected.**
+
+- *Running the daemon from `Caprock.app/Contents/MacOS/`* so the bundle
+  answers for it: the copy outside the bundle exists because an unsigned
+  app may run translocated from a random read-only path and a login service
+  must outlive the app being moved or deleted (ADR-040). The entitlement is
+  needed either way, since the bundle's binaries run with the same hardened
+  runtime.
+- *An Info.plist linked into the Go binary* (`-sectcreate __TEXT
+  __info_plist`): external linking, so a C toolchain for every darwin
+  build, for a purpose string that the log shows is not what refused the
+  request; the formula's binary has no runtime gate to pass.
+- *Signing without the hardened runtime*: the entitlement is the narrower
+  change, and a Developer ID build has to be notarized, which requires the
+  runtime and then this entitlement anyway.
+
+**Consequences.** When the daemon or the app is the responsible program, a
+recording agent now gets macOS's one-time prompt, naming "caprock" (the
+daemon) or Caprock (the app), and works after Allow. Being ad-hoc signed,
+the answer lasts until the next release (ADR-040). A Homebrew-only install
+has no runtime gate; its prompt names "caprock".
+
+**Unverified.** That the prompt appears and recording then works needs a
+person at the microphone; no test here may raise a privacy dialog. Also
+unverified: that a session whose responsible program is a daemon binary
+replaced on disk since it started is judged by the new file (tccd's log
+reads the responsible program's static code from its path, which suggests
+so).
+
+**Revisit if** Caprock is Developer ID signed (keep the entitlement; the
+daemon as an `SMAppService` helper may change who is responsible), or an
+agent needs another device.

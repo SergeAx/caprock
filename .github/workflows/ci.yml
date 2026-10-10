@@ -207,6 +207,12 @@ jobs:
           ls "$mnt/.background/"*.png >/dev/null
           test -d "$mnt/Caprock.app"
           test -L "$mnt/Applications"
+      # The microphone (ADR-045): without the entitlement the hardened
+      # runtime refuses an agent's voice mode silently.
+      - name: microphone entitlement
+        if: runner.os == 'macOS'
+        shell: bash
+        run: bash scripts/check-app-mic.sh app/src-tauri/target/release/bundle/macos/Caprock.app
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v6.0.0
         with:
           name: caprock-app-${{ matrix.os }}

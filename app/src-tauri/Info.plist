@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Merged into Caprock.app's Info.plist by the Tauri bundler. macOS
+	     shows it in the microphone prompt when an agent in a Caprock
+	     terminal records, such as Claude Code's voice mode (ADR-045). -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>An agent running in a Caprock terminal wants the microphone, for example for voice input.</string>
+</dict>
+</plist>

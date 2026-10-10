@@ -198,7 +198,9 @@ macOS notification carries **Approve** and **Deny** — Approve only when the
 notification shows the whole request, so you never answer a command you have
 not read. Every dashboard screen below is inside it too.
 
-The whole tour is in [docs/app.md](docs/app.md).
+The whole tour is in [docs/app.md](docs/app.md). Voice mode says "No audio
+detected from microphone"? See
+[Voice mode and the microphone](docs/app.md#voice-mode-and-the-microphone).
 
 ## Your numbers, ready to publish
 

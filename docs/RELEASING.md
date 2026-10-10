@@ -158,8 +158,9 @@ goreleaser:
   `Caprock_<version>_universal.dmg` (arm64 + x86_64, ad-hoc signed), checked
   before upload (`hdiutil verify`, `codesign --verify`, `lipo` on the app and
   the bundled daemon, bundle id `dev.caprock.app`, `caprock version` of the
-  bundled daemon). It renders the cask from `app/packaging/caprock-app.rb.tmpl`
-  and, on a stable tag with `HOMEBREW_TAP_TOKEN` set, pushes it to
+  bundled daemon, and `scripts/check-app-mic.sh`: both binaries carry the
+  microphone entitlement and the Info.plist its usage string, ADR-045). It
+  renders the cask from `app/packaging/caprock-app.rb.tmpl` and, on a stable tag with `HOMEBREW_TAP_TOKEN` set, pushes it to
   `Casks/caprock-app.rb` in `dspv/homebrew-tap`.
 - **`app-other`** builds `Caprock_<version>_x64-setup.exe` (NSIS) on Windows
   and the AppImage, `.deb` and `.rpm` on Ubuntu 22.04. Each OS is its own job;

@@ -123,6 +123,7 @@ for bin in caprock-app caprock; do
   archs="$(lipo -archs "$APP/Contents/MacOS/$bin")"
   [[ "$archs" == *x86_64* && "$archs" == *arm64* ]] || die "$bin is $archs, not universal"
 done
+bash scripts/check-app-mic.sh "$APP" # ADR-045
 daemon="$("$APP/Contents/MacOS/caprock" version)"
 [[ "$daemon" == "caprock $VERSION "* ]] || die "the bundled daemon says: $daemon"
 hdiutil detach "$MNT" -quiet && trap - EXIT

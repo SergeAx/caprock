@@ -35,7 +35,7 @@ func (d *Daemon) startWindowStop(ctx context.Context) {
 			return cap.WindowSettings{Pct: c.WindowStop(), Licensed: license.Parse(c.LicenseKey, time.Now()).Active}
 		},
 		Windows: d.planWindows,
-		Sig:     d.mgr,
+		Sig:     defaultSubSessions{d: d},
 		Notify:  d.announceWindowStop,
 		Save: func(ctx context.Context, st cap.WindowState) error {
 			b, err := json.Marshal(st)

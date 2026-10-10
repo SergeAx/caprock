@@ -86,6 +86,10 @@ type forward struct {
 	SessionID string  `json:"session_id"`
 	FiveHour  *window `json:"five_hour,omitempty"`
 	SevenDay  *window `json:"seven_day,omitempty"`
+	// ConfigDir is the CLAUDE_CONFIG_DIR Claude Code ran this command under,
+	// "" for the default: the plan windows belong to that sign-in, and the
+	// daemon files them under its subscription (ADR-048).
+	ConfigDir string `json:"config_dir,omitempty"`
 }
 
 // stats is the daemon's answer to GET /v1/statusline/{id} — the session's own
@@ -143,7 +147,7 @@ func RunWith(stdin io.Reader, stdout io.Writer, opt Options) {
 	if in.RateLimits == nil || (in.RateLimits.FiveHour == nil && in.RateLimits.SevenDay == nil) {
 		return
 	}
-	post(forward{SessionID: in.SessionID, FiveHour: in.RateLimits.FiveHour, SevenDay: in.RateLimits.SevenDay})
+	post(forward{SessionID: in.SessionID, FiveHour: in.RateLimits.FiveHour, SevenDay: in.RateLimits.SevenDay, ConfigDir: os.Getenv("CLAUDE_CONFIG_DIR")})
 }
 
 // segment is one "·"-separated piece of the line. rank orders what survives a

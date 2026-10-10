@@ -2526,3 +2526,82 @@ store); a user asks for a second chat (a family or team group needs per-person
 rules, which this one-chat design does not have); Telegram changes what a bot
 may read; or Codex and OpenCode report turns and prompts, which would make
 their replies flow here with no change to the bridge.
+
+---
+
+## ADR-048 — Several sign-ins per agent, each in a config directory of Caprock's; three per agent are free
+
+**Date:** 2026-10-10 · **Status:** accepted
+
+The owner, 2026-10-10 (translated): "make subscription management so several
+subscriptions can be authorised and you can work through them." Decided with
+it: three subscriptions per agent kind are free, a fourth and more are
+Premium. Orca, a competitor, offers it free; parity is the reason it is not
+paid outright. (ADR-047 is the Telegram bridge.)
+
+**What the agents document, read 2026-10-10.**
+
+- Claude Code: "To stay signed in to multiple accounts at once … give each
+  account its own configuration directory … Each directory has its own
+  settings, session history, and claude.ai login or API key", and with
+  `CLAUDE_CONFIG_DIR` set it "keys the macOS Keychain entry to that directory
+  too, so a session with a different `CLAUDE_CONFIG_DIR` reads a different
+  entry" (code.claude.com/docs/en/authentication). The path must be absolute
+  (code.claude.com/docs/en/env-vars). `claude auth login` is the sign-in
+  (code.claude.com/docs/en/cli-reference).
+- Codex: "Codex stores its local state under `CODEX_HOME`"; `file`
+  credentials are `auth.json` under it (developers.openai.com/codex/auth,
+  /codex/config-advanced). Its keyring entry is keyed by a hash of the
+  `CODEX_HOME` path — `compute_store_key` in
+  github.com/openai/codex `codex-rs/login/src/auth/storage.rs` — so a second
+  directory is a second entry there too. `codex login` is the sign-in.
+
+No real sign-in was run to check this: it opens a browser and, on macOS, the
+Keychain, and that is the owner's to do.
+
+**The decision.**
+
+- **A subscription is a directory**: `<data dir>/profiles/<id>/`, stored as
+  `{id, label, agent, created_at}` in `config.json`. The user's normal
+  sign-in is the **Default** subscription — never stored, always listed,
+  `''` on a session.
+- **Caprock never signs anyone in.** Adding one makes the directory and types
+  the agent's own sign-in, pointed at it, into a shell tab, not run; the user
+  presses Enter. Whether a directory is signed in is read from what the
+  agent wrote (`oauthAccount` in its `.claude.json`, `.credentials.json`,
+  Codex's `auth.json`) — nothing is run, no secret is kept, the Keychain is
+  never touched.
+- **A new Claude Code directory gets Caprock's hooks and status line**, the
+  same entries `caprock hooks install` writes into `~/.claude/settings.json`,
+  because a new `CLAUDE_CONFIG_DIR` is a new `~/.claude` and a session in it
+  would otherwise be invisible. The user's acceptance of the bypass warning
+  is carried over (ADR-041: it is the user's consent, not an account's).
+  Nothing else is copied: settings, plugins and MCP servers start at the
+  agent's defaults, and the page says so.
+- **A session runs on the one picked**, in New agent and Quick chat, shown
+  only when an agent has more than one, remembered per project. The daemon
+  sets `CLAUDE_CONFIG_DIR` or `CODEX_HOME`; the request names an id, never a
+  path. A continued session runs on the one it ran on. Sessions record it
+  (`sessions.subscription`, migration 0044); the session's card, inspector
+  and page name it, and Settings shows each one's last seven days.
+- **Plan windows are per subscription**, stored under `sub:<id>:` and never
+  over the Default one's. The near-limit note (≥ 90% of a current window on
+  the chosen subscription) names one with room, and a click picks it for the
+  next session only. **Never a switch of a running session, never an
+  automatic rotation**: the providers' terms do not allow working around a
+  plan's limits, so the product offers a choice the user makes and its copy
+  says "you choose which subscription this session uses", nothing about
+  avoiding limits. The plan-window stop watches and pauses the Default
+  sign-in's sessions only.
+- **Three per agent free, the Default one included**; the daemon refuses a
+  fourth without a licence (402) and the page opens the Premium dialog.
+
+**Rejected.** Copying `~/.claude` into each directory (it would copy the
+user's credentials file on Linux and Windows, and settings drift apart from
+the copy); rotating to the subscription with room when one fills (terms, and
+a session's conversation lives in its own directory); running `claude auth
+status` to read a sign-in (it is a process reading the Keychain, from a
+daemon, on a timer).
+
+**Revisit if** Claude Code or Codex add a documented account switch that does
+not move the whole configuration directory, or stop keying credentials to it.

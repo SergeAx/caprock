@@ -33,8 +33,11 @@ import { agentLabel, isCustomAgent, SPAWN_AGENTS, useAgentCatalog, type SpawnAge
 import { AgentObservedNote, AgentSetupNote } from './AgentSetup'
 import { DEFAULT_MODELS, GEMINI_MODELS, listedModels, MODELS } from './SpawnDialog'
 import { Sheet, SheetButton } from './Sheet'
+import { SubscriptionNote, SubscriptionPicker, subscriptionsFor, useSubscriptionList } from './SubscriptionPicker'
+import { hasSubscriptions, rememberedSubscription, rememberSubscription } from '@/lib/subscriptions'
 
-export interface QuickChoice { agent: SpawnAgent; model: string }
+/** `subscription` is the sign-in (ADR-048); absent or "default" is the user's own. */
+export interface QuickChoice { agent: SpawnAgent; model: string; subscription?: string }
 
 const KEY = 'caprock.quickchat'
 
@@ -48,11 +51,18 @@ export function rememberedQuickChoice(agents: readonly SpawnAgent[]): QuickChoic
   try {
     const v = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<QuickChoice> | null
     if (v && typeof v.agent === 'string' && knownAgent(v.agent) && (agents.length === 0 || agents.includes(v.agent))) {
-      return { agent: v.agent, model: typeof v.model === 'string' ? v.model : DEFAULT_MODELS[v.agent] ?? '' }
+      return { agent: v.agent, model: typeof v.model === 'string' ? v.model : DEFAULT_MODELS[v.agent] ?? '', ...quickSubscription(v.agent) }
     }
   } catch { /* private mode, a malformed value: the default */ }
   const agent = agents.includes('claude') || agents.length === 0 ? 'claude' : agents[0]!
-  return { agent, model: DEFAULT_MODELS[agent] ?? '' }
+  return { agent, model: DEFAULT_MODELS[agent] ?? '', ...quickSubscription(agent) }
+}
+
+/** The sign-in a quick chat on `agent` was last started on, when not the user's own. */
+function quickSubscription(agent: string): { subscription?: string } {
+  if (!hasSubscriptions(agent)) return {}
+  const sub = rememberedSubscription(agent, '')
+  return sub === 'default' ? {} : { subscription: sub }
 }
 
 export function rememberQuickChoice(c: QuickChoice) {
@@ -64,6 +74,7 @@ export function quickChatRequest(c: QuickChoice): SpawnRequest {
   const req: SpawnRequest = { chat: true }
   if (c.agent !== 'claude') req.agent = c.agent
   if (c.model) req.model = c.model
+  if (c.subscription && c.subscription !== 'default' && hasSubscriptions(c.agent)) req.subscription = c.subscription
   return req
 }
 
@@ -110,8 +121,16 @@ export function QuickChatSheet({
   const missing = catalog.entries.filter((e) => !e.installed && !e.custom)
   const short = (a: SpawnAgent) => SHORT[a] ?? agentLabel(a, catalog.entries)
   const setup = onSetup && ((cmd: string) => { onSetup(cmd, catalog.home); onClose() })
+  // The sign-in (ADR-048): remembered for quick chats; a pick from the
+  // near-limit note holds for this chat only.
+  const subscriptions = useSubscriptionList()
+  const subList = subscriptionsFor(subscriptions.all, agent)
+  const [subPick, setSubPick] = useState<Record<string, string>>({})
+  const subWanted = subPick[agent] ?? rememberedSubscription(agent, '')
+  const subId = subList.some((s) => s.id === subWanted) ? subWanted : 'default'
+  const subscription = subList.length > 1 && subId !== 'default' ? subId : undefined
 
-  const start = (m = model, a = agent) => onStart({ agent: a, model: m })
+  const start = (m = model, a = agent) => onStart({ agent: a, model: m, ...(a === agent && subscription ? { subscription } : {}) })
   const step = (d: number) => {
     const i = offered.findIndex((a) => a.key === agent)
     const next = offered[(i + d + offered.length) % offered.length]
@@ -176,6 +195,8 @@ export function QuickChatSheet({
                 </button>
               ))}
             </div>
+            <SubscriptionPicker list={subList} value={subId} onChange={(id) => { rememberSubscription(agent, '', id); setSubPick((p) => ({ ...p, [agent]: id })) }} />
+            <SubscriptionNote list={subList} value={subId} onUse={(id) => setSubPick((p) => ({ ...p, [agent]: id }))} />
             {entry?.setup && <AgentSetupNote entry={entry} onSetup={setup} />}
             <ul
               ref={list}

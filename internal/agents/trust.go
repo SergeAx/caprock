@@ -51,11 +51,32 @@ func trustFolder(dir string) error {
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(home, ".claude.json")
+	granted, err := trustFolderIn(filepath.Join(home, ".claude.json"), dir)
+	if err != nil || !granted {
+		return err
+	}
+	// Record the grant only after the write succeeded, so the ledger never claims
+	// a grant that was not made. A failure to record is not fatal to the spawn:
+	// the worst case is a grant we cannot revoke automatically, which is the
+	// behaviour that shipped before this ledger existed.
+	return recordTrustGrant(dir)
+}
 
+// trustFolderInProfile is trustFolder for a session on a subscription
+// (ADR-048): Claude Code keeps .claude.json in the configuration directory
+// it runs with, and that directory is Caprock's own, so the grant is not
+// recorded in the ledger — removing the subscription removes the file.
+func trustFolderInProfile(configDir, dir string) error {
+	_, err := trustFolderIn(filepath.Join(configDir, ".claude.json"), dir)
+	return err
+}
+
+// trustFolderIn sets the trust flag for dir in the .claude.json at path and
+// reports whether it wrote it (false when it was already set).
+func trustFolderIn(path, dir string) (bool, error) {
 	root, err := readOrderedConfig(path)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	projects, _ := root.Get("projects")
@@ -74,22 +95,18 @@ func trustFolder(dir string) error {
 		// Already trusted — by the user or by an earlier spawn. Leave the file
 		// untouched, and do not claim the grant as ours: revoking it later would
 		// undo a decision the user may have made themselves.
-		return nil
+		return false, nil
 	}
 	eobj.Set("hasTrustDialogAccepted", true)
 
 	b, err := hooks.MarshalIndent(root)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if err := config.WriteFileAtomic(path, b, 0o600); err != nil {
-		return err
+		return false, err
 	}
-	// Record the grant only after the write succeeded, so the ledger never claims
-	// a grant that was not made. A failure to record is not fatal to the spawn:
-	// the worst case is a grant we cannot revoke automatically, which is the
-	// behaviour that shipped before this ledger existed.
-	return recordTrustGrant(dir)
+	return true, nil
 }
 
 // readOrderedConfig reads ~/.claude.json preserving key order. A missing or

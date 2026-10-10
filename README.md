@@ -17,6 +17,9 @@
 - **Every agent in a real terminal tab.** Claude Code, Codex, OpenCode and
   Gemini CLI in tabs and split panes, per project and per git worktree. The
   sessions you start in your own terminal show up beside them.
+- **More than one sign-in.** Keep a work and a personal Claude Code or Codex
+  account side by side and pick which one each new session runs on, with
+  every account's plan windows in view. Three per agent are free.
 - **Nothing waits on you unseen.** Sessions stuck on a permission prompt come
   first; for the ones Caprock started, answer *Yes* or *No* from the card, a
   notification, the menu bar or your phone.
@@ -548,6 +551,9 @@ Telegram bot.
 grouped by what they were about — Bash by command, Read and Edit by file,
 WebFetch by domain — and that much is free. Output, failure rate and a trend
 per group are Premium; without a licence the daemon leaves those figures out.
+
+**More subscriptions.** Three Claude Code and three Codex sign-ins are free,
+your own included; Premium adds as many more as you use.
 
 $30/year or $100 once — [caprock.dev/premium](https://caprock.dev/premium/).
 

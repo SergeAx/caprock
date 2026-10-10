@@ -28,6 +28,15 @@ describe('the quick chat choice', () => {
     expect(quickChatRequest({ agent: 'codex', model: '' })).toEqual({ chat: true, agent: 'codex' })
   })
 
+  it('starts on the subscription last picked for quick chats (ADR-048)', () => {
+    localStorage.setItem('caprock.subscription.claude.-', 'ab12')
+    const c = rememberedQuickChoice(['claude'])
+    expect(c).toEqual({ agent: 'claude', model: 'claude-opus-5-5', subscription: 'ab12' })
+    expect(quickChatRequest(c)).toEqual({ chat: true, model: 'claude-opus-5-5', subscription: 'ab12' })
+    // An agent without subscriptions never carries one.
+    expect(quickChatRequest({ agent: 'gemini', model: '', subscription: 'ab12' })).toEqual({ chat: true, agent: 'gemini' })
+  })
+
   it('offers each agent’s models as the New agent sheet labels them', () => {
     expect(quickModels('claude').map(([v]) => v)).toContain('claude-sonnet-5-5')
     expect(quickModels('codex', entry('codex', { label: 'Codex', default: 'gpt-5.5', models: [{ id: 'gpt-5.5', label: 'gpt-5.5' }, { id: 'o9', label: 'o9' }] }))).toEqual([['', 'gpt-5.5 (default)'], ['o9', 'o9']])

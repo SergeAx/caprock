@@ -79,7 +79,9 @@ describe('the paywall', () => {
     // A feature can also be offered inline rather than behind a whole-panel
     // lock: the tool drill-down shows its free half and opens the modal from a
     // chip, because a lock around the panel would hide the free breakdown.
-    for (const f of ['components/ToolDrill.tsx']) {
+    // Subscriptions are free up to three per agent, so the modal opens from
+    // the add form at the fourth (ADR-048).
+    for (const f of ['components/ToolDrill.tsx', 'components/SubscriptionsSetting.tsx']) {
       for (const m of read(f).matchAll(/<PremiumModal\s+feature="([a-z]+)"/g)) all.push(m[1]!)
     }
     for (const f of declared) {

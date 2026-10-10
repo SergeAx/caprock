@@ -23,6 +23,7 @@ import (
 	"github.com/dspv/caprock/internal/ptyhost"
 	"github.com/dspv/caprock/internal/ptyman"
 	"github.com/dspv/caprock/internal/store"
+	"github.com/dspv/caprock/internal/subs"
 	"github.com/dspv/caprock/internal/termbuf"
 	"github.com/dspv/caprock/internal/userenv"
 )
@@ -78,7 +79,16 @@ type SpawnRequest struct {
 	// environment. Never accepted from the browser — the API fills it in from
 	// settings, so a page cannot hand a spawned process someone else's
 	// credential.
-	GeminiKey string   `json:"-"`
+	GeminiKey string `json:"-"`
+	// Subscription is the sign-in to run on (ADR-048): a subscription id from
+	// Settings → Subscriptions, or "" (or "default") for the user's normal
+	// one. Claude Code and Codex only. Recorded on the session.
+	Subscription string `json:"subscription,omitempty"`
+	// ConfigDir is that subscription's configuration directory, set by the
+	// daemon from its own settings — never from the request, so a page cannot
+	// point a session at a directory of its choosing. It becomes
+	// CLAUDE_CONFIG_DIR or CODEX_HOME in the child's environment.
+	ConfigDir string   `json:"-"`
 	Args      []string `json:"args,omitempty"` // extra args
 	Cols      int      `json:"cols,omitempty"`
 	Rows      int      `json:"rows,omitempty"`
@@ -498,14 +508,34 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Agent, error) {
 	// Only for Claude Code: the other agents are told on their command line,
 	// and writing ~/.claude.json for a Codex session would claim a folder for
 	// a program that never asked.
+	sub := req.Subscription
+	if sub == "default" {
+		sub = ""
+	}
+	if sub != "" && (req.ConfigDir == "" || (agent != AgentClaude && agent != AgentCodex)) {
+		return nil, fmt.Errorf("subscription %q cannot start a %s session", sub, agent)
+	}
 	if agent == AgentClaude {
-		if err := trustFolder(cwd); err != nil {
+		trust := trustFolder
+		if req.ConfigDir != "" {
+			// Claude Code reads trust from the .claude.json of the
+			// configuration directory it runs with (ADR-048).
+			trust = func(dir string) error { return trustFolderInProfile(req.ConfigDir, dir) }
+		}
+		if err := trust(cwd); err != nil {
 			m.log.Warn("pre-trust folder", "component", "agents", "cwd", cwd, "err", err)
 		}
 	}
 
 	env := childEnv(userenv.Environ(m.log))
 	env = withEnv(env, extraEnv)
+	if req.ConfigDir != "" {
+		// The subscription's sign-in: Claude Code keys its credentials,
+		// Keychain entry included, and Codex its auth.json and keyring entry,
+		// to this directory (ADR-048). It replaces any value the login shell
+		// exports, which is the user's own default.
+		env = withEnv(env, []string{subs.EnvVar(agent) + "=" + req.ConfigDir})
+	}
 	// The Gemini CLI reads GEMINI_API_KEY from its environment, and the key the
 	// user pasted into the dashboard lives in the daemon's config — so it has
 	// to be handed over here or the child asks for a key it cannot see. Only
@@ -578,7 +608,7 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Agent, error) {
 		// row: the filter, the per-agent totals and the badge all read this
 		// column, and a Gemini session that arrived labelled "claude" would be
 		// counted under the wrong agent forever.
-		if err := store.UpsertSession(ctx, q, sessionID, store.SessionPatch{Cwd: cwd, Agent: agent}); err != nil {
+		if err := store.UpsertSession(ctx, q, sessionID, store.SessionPatch{Cwd: cwd, Agent: agent, Subscription: sub}); err != nil {
 			return err
 		}
 		if err := store.MarkOwned(ctx, q, sessionID, worktree, a.Command, sess.PID()); err != nil {

@@ -41,6 +41,9 @@ type SessionInfo struct {
 	// Title is the agent's own name for the session, when its source carries
 	// one (OpenCode). Empty leaves a stored title alone.
 	Title string
+	// Subscription is the sign-in the session runs on, when the source knows
+	// it (a Codex profile's importer); empty asks Recorder.SubscriptionOf.
+	Subscription string
 }
 
 // Result reports what Record did, for callers that need to fan out further.
@@ -72,6 +75,12 @@ type Recorder struct {
 	// a cap that paused sessions from inside the write path would hold the
 	// database open while signalling processes.
 	OnPriced func(ctx context.Context)
+	// SubscriptionOf names the subscription a transcript path belongs to
+	// (ADR-048): Claude Code writes a session's transcript under the
+	// configuration directory it runs with, so a hook or a transcript line
+	// from under <data dir>/profiles/<id>/ is that subscription's. Nil, or
+	// "", leaves the session on the Default sign-in.
+	SubscriptionOf func(transcriptPath string) string
 
 	// unpricedWarned holds the models already reported as missing from the
 	// pricing table.
@@ -184,6 +193,11 @@ func (r *Recorder) Record(ctx context.Context, ev *event.Event, info SessionInfo
 			Agent: info.Agent,
 			PID:   info.PID,
 			Title: info.Title,
+
+			Subscription: info.Subscription,
+		}
+		if patch.Subscription == "" && r.SubscriptionOf != nil && info.TranscriptPath != "" {
+			patch.Subscription = r.SubscriptionOf(info.TranscriptPath)
 		}
 		switch ev.Kind {
 		case event.KindTurnUser, event.KindTurnAssistant, event.KindToolPre, event.KindToolPost:

@@ -12,6 +12,7 @@ const acceptBypass = vi.fn(async () => ({ accepted: true }))
 const status = { accepted: undefined as boolean | undefined, opencode: undefined as string | undefined }
 const saved: unknown[] = []
 const catalogExtra = vi.hoisted(() => ({ agents: [] as unknown[] }))
+const subsState = vi.hoisted(() => ({ value: undefined as unknown }))
 vi.mock('@/lib/api', async (orig) => {
   const actual = await orig<typeof import('@/lib/api')>()
   return {
@@ -31,6 +32,7 @@ vi.mock('@/lib/api', async (orig) => {
       settings: async () => ({}),
       saveSettings: async (s: unknown) => { saved.push(s); return s },
       spawn: (req: unknown) => spawn(req),
+      subscriptions: async () => { if (!subsState.value) throw new Error('not offered'); return subsState.value },
       acceptBypass: () => acceptBypass(),
       recentDirs: async () => [],
       localRepos: async () => ({ root: '/w', home: '/h', scanned_at: 0, repos: [{ name: 'caprock-web', path: '/w/caprock-web' }] }),
@@ -439,5 +441,52 @@ describe('a new copy from a branch', () => {
     await waitFor(() => expect(spawn).toHaveBeenCalled())
     expect(spawn.mock.calls[0]![0]).toMatchObject({ worktree_base: 'main', worktree_pull: true })
     expect(localStorage.getItem('caprock.newAgent.where')).toBe('__new__')
+  })
+})
+
+/** ADR-048: the sign-in a session runs on, picked beside the agent. */
+describe('the subscription picker', () => {
+  const sub = (id: string, label: string, used: number) => ({
+    id, agent: 'claude', label, default: id === 'default', dir: `/d/${id}`, signed_in: true, login_command: 'claude auth login',
+    windows: [{ window: 'five_hour', used_percentage: used, resets_at: Math.floor(Date.now() / 1000) + 3600, observed_at: 0 }],
+    sessions_7d: 0, cost_7d_usd: 0, running: 0,
+  })
+  const withSubs = () => {
+    subsState.value = { licensed: false, free_per_agent: 3, agents: [{ agent: 'claude', label: 'Claude Code', installed: true, subscriptions: [sub('default', 'Default', 95), sub('ab12', 'Personal', 10)] }] }
+  }
+
+  it('is not there with one sign-in', async () => {
+    subsState.value = undefined
+    open()
+    await screen.findByRole('button', { name: /^Start/ })
+    expect(screen.queryByLabelText('Subscription')).toBeNull()
+  })
+
+  it('says the chosen one is near its window and switches this session only', async () => {
+    withSubs()
+    try {
+      open()
+      expect(await screen.findByText(/Default: 95% of its 5-hour window used/)).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Personal' }))
+      expect(screen.getByLabelText<HTMLSelectElement>('Subscription').value).toBe('ab12')
+      // Picked for this session only: nothing remembered.
+      expect(localStorage.getItem('caprock.subscription.claude.1')).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: /^Start/ }))
+      await waitFor(() => expect(spawn).toHaveBeenCalled())
+      expect(spawn.mock.calls[0]![0]).toMatchObject({ subscription: 'ab12' })
+    } finally {
+      subsState.value = undefined
+    }
+  })
+
+  it('remembers a pick in the select for the project', async () => {
+    withSubs()
+    try {
+      open()
+      fireEvent.change(await screen.findByLabelText<HTMLSelectElement>('Subscription'), { target: { value: 'ab12' } })
+      expect(localStorage.getItem('caprock.subscription.claude.1')).toBe('ab12')
+    } finally {
+      subsState.value = undefined
+    }
   })
 })

@@ -43,6 +43,7 @@ import { CloseIcon, EyeIcon, FileIcon, MoreIcon, PlusIcon, StopIcon, TerminalIco
 import { MenuBox, MenuItem, type MenuAt } from './RowMenu'
 import { StopConfirm, stopLabel, type StopWhat } from './StopConfirm'
 import { keys } from '@/lib/appkeys'
+import { HotMark } from './ResourceMeter'
 
 const DOT_CLASS: Record<Dot, string> = {
   working: 'bg-ok',
@@ -361,6 +362,7 @@ function TabRow({ tab, label, active, onOpen, onClose, onMenu }: {
           </>
         )}
         <TitleAndBranch title={title} branch={label?.branch} className={active ? 'text-fg' : 'text-fg-muted'} />
+        {!isFile && <HotMark sessionId={label?.session?.session_id} />}
         {word && <StateWord dot={word} hideOnHover={false} />}
       </button>
       {onClose && (
@@ -407,6 +409,7 @@ function LiveRow({ item, ownBranch, onOpen, onStop }: { item: SessionNode; ownBr
         <StatusDot dot={item.dot} />
         <AgentGlyph agent={s.agent} shell={item.isShell} />
         <TitleAndBranch title={title} branch={branch} className="text-fg-faint" />
+        <HotMark sessionId={s.session_id} />
         {!item.isShell && <StateWord dot={item.dot} hideOnHover={canStop} />}
       </button>
       {canStop && (

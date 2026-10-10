@@ -27,6 +27,7 @@ import { everyWhileVisible } from '@/lib/visible'
 import { Cockpit, SectionLabel } from './Cockpit'
 import { StopConfirm, stopLabel, type StopWhat } from './StopConfirm'
 import { keys } from '@/lib/appkeys'
+import { Processes } from './ResourceMeter'
 
 const DIFF_REFRESH_MS = 20_000
 const DIFF_FILES_SHOWN = 5
@@ -103,6 +104,7 @@ function Body({ session: s, project, sessionId, hasPermission, showPrompt, onDet
           summary={summary}
           changes={<Changes sessionId={sessionId} editor={editor} onReview={onReviewChanges} onOpenFile={onOpenFile} />}
         />
+        <Processes sessionId={sessionId} />
         <Actions s={s} sessionId={sessionId} isShell={false} ended={ended} editor={editor} onDetach={onDetach} />
       </div>
     )
@@ -129,6 +131,8 @@ function Body({ session: s, project, sessionId, hasPermission, showPrompt, onDet
       {!isShell && showPrompt && <PermissionPrompt sessionId={sessionId} />}
 
       {s && <Changes sessionId={sessionId} editor={editor} onReview={onReviewChanges} onOpenFile={onOpenFile} />}
+
+      <Processes sessionId={sessionId} />
 
       <Actions s={s} sessionId={sessionId} isShell={isShell} ended={ended} editor={editor} onDetach={onDetach} />
     </div>

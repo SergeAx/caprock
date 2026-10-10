@@ -73,6 +73,20 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-10 — unreleased: a resource meter, orphaned holders stopped, a lighter daemon
+
+The daemon samples each live session's process tree (`internal/procstat`:
+sysctl on macOS, gopsutil elsewhere; own memory = phys_footprint / RssAnon +
+RssShmem / private bytes) every 5 s while a UI client is connected and
+publishes `GET /v1/resources` plus a `resources` frame. Terminal holders are
+classified against their registry (`CAPROCK_PTYHOST_REGISTRY` in the host's
+env); dead and unreachable-idle ones of our own registry are reaped 5 min after
+start and hourly, and Settings can stop the rest. Profiling showed three
+costs: every fsnotify write stat'ed all transcripts, the 30-minute storage
+breakdown sorted payloads through temp files, and 8 × 64 MiB SQLite caches;
+all three are fixed (method and figures in the CHANGELOG entry). Opt-in pprof:
+`CAPROCK_PPROF`.
+
 ### 2026-10-10 — 0.100.0: a new copy from a fresh main, the phone section at a glance
 
 New agent's Where leads with *New copy from a branch*: a branch search with

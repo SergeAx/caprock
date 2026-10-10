@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/dspv/caprock/internal/userenv"
@@ -16,11 +17,13 @@ const (
 	AgentGemini   = "gemini"
 	AgentCodex    = "codex"
 	AgentOpenCode = "opencode"
+	// AgentGrok is xAI's Grok Build CLI, `grok` (ADR-045).
+	AgentGrok = "grok"
 )
 
 // Spawnable lists the agents Caprock can start, in the order the dialog
 // offers them.
-var Spawnable = []string{AgentClaude, AgentCodex, AgentOpenCode, AgentGemini}
+var Spawnable = []string{AgentClaude, AgentCodex, AgentOpenCode, AgentGemini, AgentGrok}
 
 // IsSpawnable reports whether agent names one Caprock can start. "" is Claude
 // Code, which every request before the agent field meant.
@@ -55,9 +58,50 @@ func extraDirs(name string) []string {
 	case AgentOpenCode:
 		// opencode's install script writes here.
 		dirs = append(dirs, filepath.Join(home, ".opencode", "bin"))
+	case AgentGrok:
+		// xAI's install script (x.ai/cli/install.sh) links it here.
+		dirs = append(dirs, filepath.Join(home, ".grok", "bin"))
 	}
+	// npm installs Codex and Gemini CLI (and can install the others) into its
+	// global prefix, which a version manager keeps outside every directory
+	// above. The login shell's PATH usually carries it; these are for when it
+	// does not (a profile that loads nvm lazily, a shell that timed out).
+	dirs = append(dirs, filepath.Join(home, ".npm-global", "bin"), filepath.Join(home, ".volta", "bin"), filepath.Join(home, ".bun", "bin"))
+	dirs = append(dirs, nvmBins(home)...)
 	return dirs
 }
+
+// nvmBins are the bin directories of the Node versions nvm installed, newest
+// first by name, so a CLI installed with `npm install -g` under any of them is
+// found.
+func nvmBins(home string) []string {
+	root := os.Getenv("NVM_DIR")
+	if root == "" {
+		root = filepath.Join(home, ".nvm")
+	}
+	matches, _ := filepath.Glob(filepath.Join(root, "versions", "node", "*", "bin"))
+	sort.Sort(sort.Reverse(sort.StringSlice(matches)))
+	return matches
+}
+
+// FindBinary resolves a command the way an agent's binary is resolved: the
+// daemon's PATH, the login shell's, then the installers' directories. "" when
+// it is not found. For a custom agent's command (ADR-045).
+func FindBinary(name string) string {
+	if filepath.IsAbs(name) {
+		if isExecutable(name) {
+			return name
+		}
+		return ""
+	}
+	return findBinaryIn(name, userenv.Cached(), extraDirs(name))
+}
+
+// IsBatch reports whether a binary is a Windows .cmd or .bat shim.
+func IsBatch(p string) bool { return isBatch(p) }
+
+// FlattenForBatch makes a prompt safe for a Windows batch shim's command line.
+func FlattenForBatch(p string) string { return flattenForBatch(p) }
 
 // findBinary resolves an agent's executable to an absolute path, or "" when
 // the machine does not have it.

@@ -15,11 +15,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/dspv/caprock/internal/agentcat"
 	"github.com/dspv/caprock/internal/agents"
 	"github.com/dspv/caprock/internal/api"
 	"github.com/dspv/caprock/internal/board"
@@ -41,6 +43,7 @@ import (
 	"github.com/dspv/caprock/internal/hooks"
 	"github.com/dspv/caprock/internal/ingest"
 	"github.com/dspv/caprock/internal/lan"
+	"github.com/dspv/caprock/internal/license"
 	"github.com/dspv/caprock/internal/logcap"
 	"github.com/dspv/caprock/internal/loop"
 	"github.com/dspv/caprock/internal/nativeterm"
@@ -509,7 +512,7 @@ func (d *Daemon) run(ctx context.Context) error {
 		},
 		ActiveLoops: d.activeLoop, IdleAfter: d.opt.IdleAfter,
 		LoopK: d.det.K, LoopWindow: d.det.Window,
-		Token: rt.Token, Shutdown: cancel, Agents: &agentAdapter{m: d.mgr, d: d},
+		Token: rt.Token, Shutdown: cancel, Agents: &agentAdapter{m: d.mgr, d: d}, Catalog: &catalogAdapter{d: d},
 		Tasks: &boardAdapter{d: d}, Settings: &settingsAdapter{d: d}, Update: d.upd,
 		AskGemini: d.askGemini,
 		DataDir:   d.opt.DataDir,
@@ -1142,6 +1145,8 @@ type Status struct {
 	// the login shell's PATH or where their installers put them.
 	CodexAvailable    bool `json:"codex_available"`
 	OpenCodeAvailable bool `json:"opencode_available"`
+	// GrokAvailable says the same of xAI's Grok Build CLI (ADR-045).
+	GrokAvailable bool `json:"grok_available"`
 	// OpenCodeVersion is the version of the OpenCode a new session would
 	// start ("2.0.26"), absent while unknown. OpenCode 1 and 2 take different
 	// flags, and the New session dialog words a mode by what it becomes.
@@ -1233,6 +1238,7 @@ func (d *Daemon) status(_ context.Context) any {
 		ClaudeAvailable: d.mgr.ClaudeAvailable(), GeminiAvailable: d.mgr.GeminiAvailable(), OwnedActive: len(d.mgr.OwnedRunning()),
 		CodexAvailable: d.mgr.AgentAvailable(agents.AgentCodex), OpenCodeAvailable: d.mgr.AgentAvailable(agents.AgentOpenCode),
 		OpenCodeVersion: d.mgr.OpenCodeVersion(),
+		GrokAvailable:   d.mgr.AgentAvailable(agents.AgentGrok),
 		ShellEnv:        userenv.Current(),
 		Orchestration:   b != nil,
 	}
@@ -1466,6 +1472,59 @@ type agentAdapter struct {
 	d *Daemon
 }
 
+// customLaunch turns a request for a custom agent (ADR-045) into the command
+// and arguments to start: refused without an active licence, or when the
+// agent is not in the config or its command is not on this machine. The
+// browser names the agent only; the command comes from the config the owner
+// wrote at this machine, never from the request.
+func (a *agentAdapter) customLaunch(sr *agents.SpawnRequest) error {
+	cfg := a.d.config()
+	if !license.Parse(cfg.LicenseKey, time.Now()).Active {
+		return errors.New("custom agents are a Premium feature; add a licence key in Settings to start one")
+	}
+	ca, ok := agentcat.FindCustom(cfg.CustomAgents, sr.Agent)
+	if !ok {
+		return fmt.Errorf("no custom agent called %q; add it in Settings → Agents", strings.TrimPrefix(sr.Agent, agentcat.CustomPrefix))
+	}
+	bin := agents.FindBinary(ca.Command)
+	if bin == "" {
+		return fmt.Errorf("%s: %q was not found on this machine", ca.Name, ca.Command)
+	}
+	prompt := sr.Prompt
+	if prompt != "" && agents.IsBatch(bin) {
+		prompt = agents.FlattenForBatch(prompt)
+	}
+	sr.Command = bin
+	sr.Args = agentcat.Argv(ca.Args, prompt, sr.Model)
+	// Caprock does not know this CLI's flags, so nothing else is guessed at.
+	sr.Model, sr.PermissionMode, sr.Prompt, sr.Fork = "", "", "", false
+	return nil
+}
+
+// catalogAdapter answers the agent pickers and keeps the custom agents.
+type catalogAdapter struct{ d *Daemon }
+
+func (c *catalogAdapter) Catalog() api.CatalogResponse {
+	cfg := c.d.config()
+	env := agentcat.DefaultEnv(userenv.Cached())
+	licensed := license.Parse(cfg.LicenseKey, time.Now()).Active
+	out := agentcat.Builtins(env, c.d.mgr.AgentAvailable)
+	out = append(out, agentcat.CustomEntries(cfg.CustomAgents, agents.FindBinary, licensed)...)
+	return api.CatalogResponse{Agents: out, Licensed: licensed, Home: env.Home}
+}
+
+func (c *catalogAdapter) Custom() []config.CustomAgent {
+	return slices.Clone(c.d.config().CustomAgents)
+}
+
+func (c *catalogAdapter) SetCustom(list []config.CustomAgent) error {
+	c.d.cfgMu.Lock()
+	c.d.opt.Config.CustomAgents = slices.Clone(list)
+	cfg := c.d.opt.Config
+	c.d.cfgMu.Unlock()
+	return config.Save(c.d.opt.DataDir, cfg)
+}
+
 // Available reports whether any agent can be started here. Claude Code is no
 // longer the only one, so a machine with Codex and no Claude Code can still
 // start sessions.
@@ -1496,7 +1555,11 @@ func (a *agentAdapter) Spawn(ctx context.Context, req any) (string, string, erro
 	if sr.Agent == agents.AgentGemini {
 		sr.GeminiKey = a.d.config().GeminiAPIKey
 	}
-	if !agents.IsSpawnable(sr.Agent) {
+	if strings.HasPrefix(sr.Agent, agentcat.CustomPrefix) && sr.Resume == "" {
+		if err := a.customLaunch(&sr); err != nil {
+			return "", "", err
+		}
+	} else if !agents.IsSpawnable(sr.Agent) {
 		return "", "", fmt.Errorf("caprock cannot start %q sessions", sr.Agent)
 	}
 	// Continuing a session is continuing it in the agent that ran it, whatever
@@ -1602,6 +1665,9 @@ func (a *shellAdapter) StartShell(ctx context.Context, cwd string, cols, rows in
 	}
 	return a.info(sh), nil
 }
+
+// TypeAtPrompt types a command into a shell's prompt without running it.
+func (a *shellAdapter) TypeAtPrompt(id, text string) { a.m.TypeAtPrompt(id, text) }
 
 func (a *shellAdapter) Shells() []api.ShellInfo {
 	var out []api.ShellInfo

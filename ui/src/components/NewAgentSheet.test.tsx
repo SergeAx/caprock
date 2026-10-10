@@ -11,6 +11,7 @@ const spawn = vi.fn(async (_req: unknown) => ({ session_id: 'new-1', cwd: '/w/ap
 const acceptBypass = vi.fn(async () => ({ accepted: true }))
 const status = { accepted: undefined as boolean | undefined, opencode: undefined as string | undefined }
 const saved: unknown[] = []
+const catalogExtra = vi.hoisted(() => ({ agents: [] as unknown[] }))
 vi.mock('@/lib/api', async (orig) => {
   const actual = await orig<typeof import('@/lib/api')>()
   return {
@@ -18,6 +19,15 @@ vi.mock('@/lib/api', async (orig) => {
     api: {
       ...actual.api,
       status: async () => ({ version: 'v0.0.0', claude_available: true, claude_bypass_accepted: status.accepted, opencode_available: status.opencode !== undefined, opencode_version: status.opencode || undefined }),
+      agentCatalog: async () => ({
+        licensed: false,
+        home: '/h',
+        agents: [
+          { id: 'claude', label: 'Claude Code', installed: true, ready: true, models: [], observed: true, prompt: true },
+          ...(status.opencode !== undefined ? [{ id: 'opencode', label: 'OpenCode', installed: true, ready: true, models: [], observed: true, prompt: true }] : []),
+          ...catalogExtra.agents,
+        ],
+      }),
       settings: async () => ({}),
       saveSettings: async (s: unknown) => { saved.push(s); return s },
       spawn: (req: unknown) => spawn(req),
@@ -386,5 +396,30 @@ describe('the project search', () => {
     fireEvent.keyDown(search, { key: 'Enter' })
     await waitFor(() => expect(spawn).toHaveBeenCalledOnce())
     expect(spawn.mock.calls[0]![0]).toMatchObject({ cwd: '/w/caprock-web' })
+  })
+})
+
+/** ADR-045: an agent that is not installed is listed, never the default, and
+ *  picking it shows how to install it instead of a model list. */
+describe('an agent that is not installed', () => {
+  it('is listed after the rest, and picking it offers the install in a shell tab', async () => {
+    catalogExtra.agents = [{ id: 'grok', label: 'Grok', installed: false, ready: false, models: [], observed: false, prompt: true, setup: { reason: 'not_installed', text: 'Grok is not installed on this machine.', command: 'curl -fsSL https://x.ai/cli/install.sh | bash', docs: 'https://docs.x.ai/build/overview' } }]
+    try {
+      const onSetup = vi.fn()
+      const onClose = vi.fn()
+      render(<NewAgentSheet projects={projects} projectId="1" onClose={onClose} onSetup={onSetup} onStarted={() => {}} />)
+      const picker = await screen.findByLabelText<HTMLSelectElement>('Agent')
+      expect(picker.value).toBe('claude')
+      expect(Array.from(picker.options).map((o) => o.textContent)).toEqual(['Claude Code', 'Grok · not installed'])
+      fireEvent.change(picker, { target: { value: 'grok' } })
+      expect(screen.getByText('Grok is not installed on this machine.')).toBeInTheDocument()
+      expect(screen.queryByLabelText('Model')).toBeNull()
+      expect(screen.getByRole('button', { name: /^Start/ })).toBeDisabled()
+      fireEvent.click(screen.getByRole('button', { name: 'Install in a shell tab' }))
+      expect(onSetup).toHaveBeenCalledWith('curl -fsSL https://x.ai/cli/install.sh | bash', '/h')
+      expect(onClose).toHaveBeenCalled()
+    } finally {
+      catalogExtra.agents = []
+    }
   })
 })

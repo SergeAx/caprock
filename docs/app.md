@@ -118,8 +118,25 @@ others. Installing it: [install-app.md](install-app.md).
   sidebar. ⌥⌘N starts it at once with the agent and model you used last.
   Clicking *Quick chat* (the sidebar, the + menu, or *Quick chat with…* in
   the palette) first shows the agents installed here — Claude Code, Codex,
-  Gemini CLI, OpenCode — and their models: click a model to start on it, or
-  press Enter for the highlighted one.
+  OpenCode, Gemini CLI, Grok and your custom agents — and their models: click
+  a model to start on it, or press Enter for the highlighted one. OpenCode
+  lists the models of the providers you connected; with none connected it
+  says so, and *Connect a provider* opens a shell tab with `opencode auth
+  login` typed for you to run. The agents that are not installed are named
+  underneath, each one click from its install command.
+- **Agents that are not set up.** In *New agent*, an agent that is not
+  installed is listed after the others, marked *not installed*, and never
+  picked for you. Choose it and the sheet shows the official install command
+  with *Install in a shell tab*: a new shell tab opens with the command typed
+  at the prompt, not run — read it and press Enter. Copy and the agent's docs
+  are beside it. Grok (xAI's `grok`) is started like the others, but Caprock
+  does not read its turns or cost, and says so.
+- **Custom agents** (Premium). Settings → *Custom agents* adds any terminal
+  coding agent by name, command and arguments, one per line, with `{prompt}`
+  where the first message goes and `{model}` where the model goes, plus the
+  models to offer. It then appears in New agent and Quick chat and opens in a
+  tab. Caprock keeps its sessions in your list but does not read their cost.
+  Without a licence key the section is shown with the upgrade button.
 - **The tab strip.** The tab in front has an amber top edge; the others are
   shaded tabs of their own. The amber + opens a menu: New agent, Quick
   chat, New shell, Open file, Add project, each with its key.

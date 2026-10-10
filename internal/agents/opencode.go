@@ -258,27 +258,8 @@ var (
 // (measured on 2.0.26) as in OpenCode 1's; a final CR sends it. Nothing is
 // typed into a process that has ended or never drew anything.
 func (m *Manager) typeWhenReady(a *Agent, text string) {
-	deadline := time.Now().Add(typeWait)
-	t := time.NewTicker(typeQuiet / 10)
-	defer t.Stop()
-wait:
-	for {
-		select {
-		case <-a.done:
-			return
-		case <-t.C:
-		}
-		at := a.outAt.Load()
-		switch {
-		case at != 0 && time.Since(time.Unix(0, at)) >= typeQuiet:
-			break wait
-		case time.Now().After(deadline):
-			if at == 0 {
-				m.log.Warn("the session drew nothing; its first message was not typed", "component", "agents", "session_id", a.SessionID)
-				return
-			}
-			break wait
-		}
+	if !m.waitQuiet(a) {
+		return
 	}
 	body := strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\n", "\x1b\r")
 	if err := m.Input(a.SessionID, []byte(body)); err != nil {
@@ -291,6 +272,59 @@ wait:
 	if err := m.Input(a.SessionID, []byte("\r")); err != nil {
 		m.log.Warn("could not send the first message", "component", "agents", "session_id", a.SessionID, "err", err)
 	}
+}
+
+// waitQuiet waits until a session's output has started and then stopped for
+// typeQuiet, or typeWait has passed with some output. false when the process
+// ended or never drew anything, and nothing should be typed.
+func (m *Manager) waitQuiet(a *Agent) bool {
+	deadline := time.Now().Add(typeWait)
+	t := time.NewTicker(typeQuiet / 10)
+	defer t.Stop()
+	for {
+		select {
+		case <-a.done:
+			return false
+		case <-t.C:
+		}
+		at := a.outAt.Load()
+		switch {
+		case at != 0 && time.Since(time.Unix(0, at)) >= typeQuiet:
+			return true
+		case time.Now().After(deadline):
+			if at == 0 {
+				m.log.Warn("the session drew nothing; nothing was typed", "component", "agents", "session_id", a.SessionID)
+				return false
+			}
+			return true
+		}
+	}
+}
+
+// TypeAtPrompt types one line into a shell Caprock started, once the shell
+// has drawn its prompt, and does not press Enter: the user reads the command
+// and runs it (an agent's install or sign-in, ADR-045). A line break in text
+// is cut off there, so nothing can run by itself. Rule 7 holds: the shell is
+// Caprock's.
+func (m *Manager) TypeAtPrompt(id, text string) {
+	a, ok := m.Get(id)
+	if !ok || a.Kind != KindShell {
+		return
+	}
+	if i := strings.IndexAny(text, "\r\n"); i >= 0 {
+		text = text[:i]
+	}
+	if text == "" {
+		return
+	}
+	go func() {
+		if !m.waitQuiet(a) {
+			return
+		}
+		if err := m.Input(id, []byte(text)); err != nil {
+			m.log.Warn("could not type into the shell", "component", "agents", "session_id", id, "err", err)
+		}
+	}()
 }
 
 // withEnv adds extra to a child's environment. A variable extra sets replaces

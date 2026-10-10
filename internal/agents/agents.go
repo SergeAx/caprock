@@ -458,7 +458,7 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Agent, error) {
 			Resume: req.Resume, NativeResume: req.NativeResume, Fork: req.Fork, Extra: req.Args,
 			Prompt: req.Prompt, AddDirs: m.ownDirs(),
 		}
-		if (agent == AgentClaude || agent == AgentCodex) && m.ProjectPrompt != nil {
+		if (agent == AgentClaude || agent == AgentCodex || agent == AgentGrok) && m.ProjectPrompt != nil {
 			in.SystemPrompt = m.ProjectPrompt(cwd)
 		}
 		if in.Prompt != "" && isBatch(m.binary(agent)) {

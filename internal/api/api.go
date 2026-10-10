@@ -117,6 +117,9 @@ type Deps struct {
 	AskGemini func(ctx context.Context, model, prompt string) (any, error)
 	// Agents is the Phase 1 owned-session manager (nil ⇒ endpoints return 501).
 	Agents AgentController
+	// Catalog answers the agent pickers and keeps the custom agents
+	// (ADR-045). nil ⇒ /v1/agents/catalog and /v1/agents/custom return 501.
+	Catalog AgentCatalog
 	// Tasks is the Phase 2 hive-backed task board (nil ⇒ endpoints return 501).
 	Tasks TaskController
 	// Settings reads and persists the user-editable settings (the subscription
@@ -470,6 +473,9 @@ func New(d Deps) *Server {
 	m.HandleFunc("POST /v1/agents", s.handleSpawn)
 	m.HandleFunc("GET /v1/sessions/{id}/relay", s.handleRelayBrief)
 	m.HandleFunc("GET /v1/agents/models", s.handleAgentModels)
+	m.HandleFunc("GET /v1/agents/catalog", s.handleAgentCatalog)
+	m.HandleFunc("GET /v1/agents/custom", s.handleCustomAgents)
+	m.HandleFunc("PUT /v1/agents/custom", s.handlePutCustomAgents)
 	m.HandleFunc("POST /v1/agents/{id}/input", s.handleAgentInput)
 	m.HandleFunc("POST /v1/agents/{id}/signal", s.handleAgentSignal)
 	m.HandleFunc("GET /v1/agents/{id}/permission", s.handlePermission)
@@ -2154,9 +2160,9 @@ func (s *Server) handleAgentModels(w http.ResponseWriter, r *http.Request) {
 			out.Models = m
 		}
 		out.Default = codex.ConfiguredModel()
-	case "claude", "gemini", "opencode":
+	case "claude", "gemini", "opencode", "grok":
 	default:
-		http.Error(w, `agent must be one of claude, codex, opencode, gemini`, http.StatusBadRequest)
+		http.Error(w, `agent must be one of claude, codex, opencode, gemini, grok`, http.StatusBadRequest)
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -2298,10 +2304,10 @@ func agentFilter(v string) (store.AgentFilter, error) {
 	switch v {
 	case "", "all":
 		return "", nil
-	case "claude", "opencode", "gemini", "codex", "deepseek":
+	case "claude", "opencode", "gemini", "codex", "deepseek", "grok":
 		return store.AgentFilter(v), nil
 	default:
-		return "", fmt.Errorf("unknown agent %q: use claude, opencode, gemini, codex, deepseek, or omit for all", v)
+		return "", fmt.Errorf("unknown agent %q: use claude, opencode, gemini, codex, deepseek, grok, or omit for all", v)
 	}
 }
 

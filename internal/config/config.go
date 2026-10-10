@@ -130,6 +130,11 @@ type Config struct {
 	// the same 0600/0700 posture as everything else here, and never returned
 	// over HTTP.
 	GeminiAPIKey string `json:"gemini_api_key,omitempty"`
+	// CustomAgents are coding agents the user added by command (ADR-045), a
+	// paid feature: kept whatever the licence says, offered and started only
+	// while it is active. Edited through PUT /v1/agents/custom, which
+	// validates them; see internal/agentcat.
+	CustomAgents []CustomAgent `json:"custom_agents,omitempty"`
 	// Prompts records when each of the dashboard's own offers was last
 	// answered — the GitHub star strip, the Premium and Teams nudges, the
 	// share prompt — keyed by prompt id, in Unix ms. Kept here rather than in

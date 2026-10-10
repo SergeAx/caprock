@@ -37,7 +37,7 @@ export function ProjectInstructions({ project, onSaved }: { project: Project; on
       <div className="grid min-w-0 gap-1.5">
         <span className="flex items-baseline gap-2 text-[12px] font-medium text-fg-muted">
           Project instructions
-          <span className="font-normal text-fg-faint">Claude Code · Codex</span>
+          <span className="font-normal text-fg-faint">Claude Code · Codex · Grok</span>
           <button type="button" onClick={() => { setText(saved); setEditing(true) }} className="ml-auto text-[12px] font-normal text-accent hover:underline">
             {saved ? 'Edit' : 'Add'}
           </button>

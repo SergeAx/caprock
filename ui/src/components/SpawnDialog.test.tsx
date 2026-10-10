@@ -44,6 +44,14 @@ vi.mock('@/lib/api', async (orig) => {
           { id: 'gpt-6-sol', label: 'GPT-6-Sol' },
         ],
       }),
+      // The same list, as GET /v1/agents/catalog carries it since ADR-045.
+      agentCatalog: async () => ({
+        licensed: false,
+        agents: [{
+          id: 'codex', label: 'Codex', installed: true, ready: true, observed: true, prompt: true, default: 'gpt-6-astra',
+          models: [{ id: 'gpt-6-astra', label: 'GPT-6-Astra' }, { id: 'gpt-6-sol', label: 'GPT-6-Sol' }],
+        }],
+      }),
     },
   }
 })

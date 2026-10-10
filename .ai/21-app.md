@@ -149,10 +149,16 @@ One window, three regions:
   on *Quick chat* (sidebar, the strip's + menu, the palette's *Quick chat
   with…*) opens a chooser sheet (`components/QuickChat.tsx`): a segmented
   row of the agents installed here (`useSpawnableAgents`), the selected
-  one's models under it with the New agent sheet's labels (Codex's from
-  `GET /v1/agents/models`, OpenCode its own default). A click on a model
+  one's models under it with the New agent sheet's labels (since
+  2026-10-10 from `GET /v1/agents/catalog`: Codex's catalog, the models of
+  the providers connected to OpenCode, Grok's cached list, a custom agent's
+  own). An agent missing something shows `AgentSetupNote` above its models —
+  OpenCode with no provider: *Connect a provider*, which opens a shell tab
+  with `opencode auth login` typed, not run (`POST /v1/shells` `type`) — and
+  the agents not installed are named under the list, each opening its install
+  note (ADR-045). A click on a model
   starts the chat on it — another vendor's model is two clicks, the last
-  vendor's one; Enter starts on the highlighted model; ← → or ⌘1–4 switch
+  vendor's one; Enter starts on the highlighted model; ← → or ⌘1–9 switch
   the agent, ↑ ↓ the model, Esc closes. The choice is kept per viewer in
   localStorage (`caprock.quickchat`). Rejected: a header on the started tab
   that restarts the chat on another model — it starts a process only to kill
@@ -171,6 +177,19 @@ One window, three regions:
   Enter, Esc. The separate >_ new-shell button is gone: it is the menu's
   third row and ⌘T, and two lone icons side by side read as one ambiguous
   control.
+- **Every agent in New agent, with what it lacks** (owner, 2026-10-10:
+  "OpenCode there is empty — either give buttons to connect it or remove
+  it", translated; ADR-045). The Agent select lists the startable agents
+  (`GET /v1/agents/catalog`: installed, not locked), then the rest marked
+  *not installed* (or *Premium* for a custom agent whose licence lapsed);
+  the default is never one of those. Picking one hides Model and
+  Permissions, disables Start, and shows the install command with *Install
+  in a shell tab*, Copy and the docs link. An installed agent missing a
+  provider or a sign-in keeps Start and shows the fix under the row. Grok and
+  custom agents carry a line that Caprock does not read their turns or cost;
+  a custom agent has no Permissions field and, without `{prompt}` in its
+  arguments, says the first message is not sent. Settings → Custom agents
+  (Premium, behind `Locked`) edits the list (`PUT /v1/agents/custom`).
 - **New agent's Project field is a search** (owner, 2026-10-10: "quickly
   search projects by repo in my folder", translated). A combobox, focused
   when the sheet opens, with its list open and the current project first:

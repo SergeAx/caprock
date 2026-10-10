@@ -2231,3 +2231,95 @@ session runs there.
 plain exec, so the symptom would be prompts in Caprock's name again), or
 Caprock ships as a Developer ID app whose own grants should cover its
 sessions.
+
+## ADR-045 — The agent pickers list every agent with what it lacks; Grok Build is a sixth agent; custom agents are Premium
+
+**Date:** 2026-10-10 · **Status:** accepted
+
+The owner, 2026-10-10 (translated): "When you create a new session or chat
+there's a model choice, and OpenCode there is empty — either give buttons to
+connect it or remove it"; "Gemini is missing — I think it was on the paid
+tier; in any case we need to finish this part"; "I also want to add Grok";
+"I'd also let people add new agents themselves, but in Premium (Pro)."
+
+**What was wrong.** The pickers knew one fact per agent: whether its binary
+was found. OpenCode was offered with *OpenCode default* and nothing else even
+on a machine with no provider connected, so it had nothing to run on. An agent
+that was not found was hidden, so the way to get it was nowhere — which is how
+Gemini CLI, installed under nvm, read as "missing". Gemini CLI as an agent was
+never paid ([ADR-026](#adr-026--gemini-cli-is-a-session-caprock-starts-not-a-chat-panel-it-owns)
+is free); the paid Gemini feature is *Ask Gemini* on the Cost screen
+([ADR-023](#adr-023--gemini-runs-on-a-key-caprock-never-holds-read-from-the-environment)),
+and that stays as decided.
+
+**The decision: one catalog.** `GET /v1/agents/catalog` lists every agent
+Caprock knows — Claude Code, Codex, OpenCode, Gemini CLI, Grok and the user's
+custom ones — with installed, ready, the models its own files list, whether
+Caprock reads its sessions, and, when something is missing, a sentence, the
+command that fixes it and the agent's own docs page (`internal/agentcat`). It
+reads files the agents already wrote and the login shell's environment, and
+runs nothing: `opencode models` and `grok models` fetch catalogs over the
+network, and rule 4 forbids a call the user did not switch on.
+
+- **OpenCode** is connected when a provider has a credential
+  (`<data>/opencode/auth.json`), an entry in its config, or one of its
+  environment variables set — the three sources `opencode providers list`
+  shows (opencode 1.15.10). Its models are those providers' models from the
+  models.dev catalog OpenCode cached (`<cache>/opencode/models.json`), as its
+  own `provider/model` ids. Nothing connected: *no provider connected*, with
+  `opencode auth login`.
+- **Not installed**: the agent stays in the list, after the installed ones and
+  marked, never the default; picked, it shows the official install command.
+- **The fix is typed, never run.** *Install in a shell tab* / *Connect a
+  provider* opens a Caprock shell tab with the command at the prompt
+  (`POST /v1/shells` `type`), after the shell has drawn its prompt, without
+  Enter and with anything after a line break cut off. The user reads it and
+  runs it. A copy button and the docs link stand beside it, and the
+  dashboard's dialog, which has no tabs, offers those only. Rule 7 holds: the
+  shell is one Caprock started.
+- **Binaries under nvm, Volta, `~/.npm-global` or bun** are found even when
+  the login shell's PATH does not carry them.
+
+**Grok Build.** xAI ships an official terminal coding agent, `grok`
+(docs.x.ai/build/overview, read 2026-10-10). Its argv was read from the real
+`grok --help` (grok 0.2.114) and is Claude-shaped: `--session-id <uuid>`,
+`--resume`, `--fork-session`, `--model`, `--permission-mode` with Claude
+Code's own mode names, `--rules` for appended instructions, and the first
+message as a positional prompt. It is launch-only: its sessions are written to
+`~/.grok/sessions/<cwd>/<id>/` (`updates.jsonl`, `signals.json` with token
+usage), but Caprock does not read them, because a cost would need Grok prices
+in `pricing.json` that nobody has sourced (rule 6). The session row, terminal
+and tab are there; turns and cost are not, and the pickers say so. Details and
+traps in [23-grok.md](23-grok.md). Its glyph is a neutral one of ours: no
+xAI mark is licensed for use here.
+
+**Custom agents (Premium).** In Settings → Custom agents a licensed user adds
+an agent by name, command, arguments (one per line; `{prompt}` is the first
+message, `{model}` the model; an argument whose placeholder has no value is
+left out with the flag before it) and optional models. It is stored in
+`config.json` (`custom_agents`), listed in the catalog as `custom:<id>`, and
+started in a Caprock terminal like the built-ins. Rules:
+
+- **Gated on the server, on the existing offline licence**
+  ([ADR-022](#adr-022--the-licence-key-is-an-offline-string-with-an-expiry-and-nothing-more)):
+  `PUT /v1/agents/custom` answers 402 without an active licence, and a spawn of
+  a custom agent is refused without one. The list is kept when a licence
+  lapses (the catalog marks those agents locked), so renewing restores them.
+  Free users see the section behind the Premium lock with the upgrade path,
+  as the daily cap and the window stop are shown.
+- **The command comes from the config, never from the request.** The browser
+  names `custom:<id>`; the daemon looks it up, resolves the binary like an
+  agent's, and fills the template. Each argument stays one argument — nothing
+  passes through a shell. A paired phone may neither set nor start one
+  (ADR-034: a phone starts only the agents Caprock knows).
+- **No observation, no mapped flags.** Caprock does not know a custom agent's
+  flags, so no permission mode is mapped and no session is resumed; it reads
+  no turns or cost for it, and the Settings section and pickers say so.
+
+**Rules out:** running an install or sign-in for the user; asking an agent's
+CLI over the network for its models; inventing Grok prices to show a cost;
+custom agents as a shell string; letting a request carry a custom command.
+
+**Revisit if** Grok's session files are priced (a Grok entry in
+`pricing.json` with a source), which would make Grok observed like Codex; or
+OpenCode moves its credentials out of `auth.json`.

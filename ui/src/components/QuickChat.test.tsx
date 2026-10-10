@@ -1,15 +1,18 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { CatalogEntry } from '@/lib/api'
 
+const entry = (id: string, more: Partial<CatalogEntry> = {}): CatalogEntry => ({ id, label: id, installed: true, ready: true, models: [], observed: true, prompt: true, ...more })
+const catalog = vi.hoisted(() => ({ agents: [] as unknown[] }))
 vi.mock('@/lib/api', async (orig) => {
   const actual = await orig<typeof import('@/lib/api')>()
-  return { ...actual, api: { ...actual.api, agentModels: async () => ({ agent: 'codex', default: 'gpt-5.5', models: [{ id: 'gpt-5.5', label: 'gpt-5.5' }, { id: 'gpt-5.5-mini', label: 'gpt-5.5-mini' }] }) } }
+  return { ...actual, api: { ...actual.api, agentCatalog: async () => ({ agents: catalog.agents, licensed: false, home: '/h' }) } }
 })
 vi.mock('@/lib/appmode', async (orig) => ({ ...(await orig<typeof import('@/lib/appmode')>()), isMacPlatform: () => true }))
 
 import { QuickChatSheet, quickChatRequest, quickModels, rememberQuickChoice, rememberedQuickChoice } from './QuickChat'
 
-beforeEach(() => { localStorage.clear() })
+beforeEach(() => { localStorage.clear(); catalog.agents = [] })
 
 describe('the quick chat choice', () => {
   it('is Claude Code on its default until something else was used', () => {
@@ -27,8 +30,9 @@ describe('the quick chat choice', () => {
 
   it('offers each agent’s models as the New agent sheet labels them', () => {
     expect(quickModels('claude').map(([v]) => v)).toContain('claude-sonnet-5-5')
-    expect(quickModels('codex', { default: 'gpt-5.5', models: [{ id: 'gpt-5.5', label: 'gpt-5.5' }, { id: 'o9', label: 'o9' }] })).toEqual([['', 'gpt-5.5 (default)'], ['o9', 'o9']])
+    expect(quickModels('codex', entry('codex', { label: 'Codex', default: 'gpt-5.5', models: [{ id: 'gpt-5.5', label: 'gpt-5.5' }, { id: 'o9', label: 'o9' }] }))).toEqual([['', 'gpt-5.5 (default)'], ['o9', 'o9']])
     expect(quickModels('opencode')).toEqual([['', 'OpenCode default']])
+    expect(quickModels('opencode', entry('opencode', { label: 'OpenCode', models: [{ id: 'deepseek/deepseek-chat', label: 'DeepSeek · DeepSeek Chat' }] }))).toEqual([['', 'OpenCode default'], ['deepseek/deepseek-chat', 'DeepSeek · DeepSeek Chat']])
   })
 })
 
@@ -68,5 +72,31 @@ describe('the chooser', () => {
   it('offers only the agents installed here', () => {
     render(<QuickChatSheet agents={['codex']} onStart={() => {}} onClose={() => {}} />)
     expect(screen.getAllByRole('radio').map((r) => r.textContent)).toEqual(['Codex'])
+  })
+
+  // The owner's report (2026-10-10): OpenCode offered an empty list. Now it
+  // says what is missing and offers to type the fix into a shell tab.
+  it('says when OpenCode has no provider, and offers to connect one', async () => {
+    catalog.agents = [entry('claude', { label: 'Claude Code' }), entry('opencode', { label: 'OpenCode', ready: false, setup: { reason: 'no_provider', text: 'OpenCode has no model provider connected, so it has no models to offer.', command: 'opencode auth login', docs: 'https://opencode.ai/docs/providers/' } })]
+    const onSetup = vi.fn()
+    const onClose = vi.fn()
+    render(<QuickChatSheet agents={['claude', 'opencode']} onStart={() => {}} onClose={onClose} onSetup={onSetup} />)
+    fireEvent.click(screen.getByRole('radio', { name: 'OpenCode' }))
+    expect(await screen.findByText(/no model provider connected/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Connect a provider' }))
+    expect(onSetup).toHaveBeenCalledWith('opencode auth login', '/h')
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('names the agents that are not installed, each one click from its install', async () => {
+    catalog.agents = [entry('claude', { label: 'Claude Code' }), entry('grok', { label: 'Grok', installed: false, ready: false, observed: false, setup: { reason: 'not_installed', text: 'Grok is not installed on this machine.', command: 'curl -fsSL https://x.ai/cli/install.sh | bash', docs: 'https://docs.x.ai/build/overview' } })]
+    const onStart = vi.fn()
+    render(<QuickChatSheet agents={['claude']} onStart={onStart} onClose={() => {}} onSetup={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Grok' }))
+    expect(screen.getByText('Grok is not installed on this machine.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Install in a shell tab' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: /Back to the agents here/ }))
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
   })
 })

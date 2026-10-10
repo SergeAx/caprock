@@ -315,7 +315,7 @@ var pairedDeviceRoutes = map[string]bool{
 //     handlers refuse anything not local as well (editor.go).
 //   - /v1/settings, /v1/pair*, /v1/hive, POST /v1/tasks, /v1/orchestrator/*,
 //     /v1/hooks/install, /v1/shutdown, /v1/update/check, /v1/report/test,
-//     /v1/gemini/ask — configuration of the machine, starting a fleet, or an
+//     /v1/telegram*, /v1/gemini/ask — configuration of the machine, starting a fleet, or an
 //     outbound call; none of them is "work on a session".
 //   - POST /v1/tasks/{id}/verify — it runs the task's done-criteria commands.
 var controllerRoutes = map[string]bool{

@@ -62,6 +62,9 @@ type Deps struct {
 	// whether their bot works without waiting for Monday. Nil disables the
 	// endpoint rather than crashing it.
 	Reporter ReportSender
+	// Telegram is the bridge to the owner's bot (ADR-047): its setup and
+	// pairing. Nil answers 501.
+	Telegram TelegramController
 	// Alerts sends a test phone alert on demand (ADR-036). Nil disables the
 	// endpoint.
 	Alerts  AlertSender
@@ -244,6 +247,11 @@ type Settings struct {
 	// AlertReply puts the first line of the final reply in a finished alert;
 	// on unless turned off.
 	AlertReply bool `json:"alert_reply"`
+	// TelegramChat is the two-way Telegram switch (Premium, ADR-047);
+	// TelegramCode keeps code blocks in the replies sent there. Both off
+	// unless turned on.
+	TelegramChat bool `json:"telegram_chat"`
+	TelegramCode bool `json:"telegram_code"`
 	// NotifyApproval and NotifyFinished are the desktop app's OS
 	// notifications, apart from Telegram's: approval on unless turned off,
 	// finished off unless turned on (WP-09).
@@ -439,6 +447,11 @@ func New(d Deps) *Server {
 	m.HandleFunc("PUT /v1/settings", s.handlePutSettings)
 	m.HandleFunc("POST /v1/report/test", s.handleTestReport)
 	m.HandleFunc("POST /v1/alerts/test", s.handleTestAlert)
+	m.HandleFunc("GET /v1/telegram", s.handleTelegram)
+	m.HandleFunc("PUT /v1/telegram/token", s.handleTelegramToken)
+	m.HandleFunc("POST /v1/telegram/pair", s.handleTelegramPair)
+	m.HandleFunc("DELETE /v1/telegram/pair", s.handleTelegramCancelPair)
+	m.HandleFunc("DELETE /v1/telegram", s.handleTelegramDisconnect)
 	m.HandleFunc("GET /v1/stats/daily", s.handleDaily)
 	m.HandleFunc("GET /v1/events", s.handleEventsFeed)
 	m.HandleFunc("GET /v1/history", s.handleHistory)
@@ -1199,6 +1212,8 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		AlertApproval  *bool   `json:"alert_approval"`
 		AlertFinished  *bool   `json:"alert_finished"`
 		AlertReply     *bool   `json:"alert_reply"`
+		TelegramChat   *bool   `json:"telegram_chat"`
+		TelegramCode   *bool   `json:"telegram_code"`
 		NotifyApproval *bool   `json:"notify_approval"`
 		NotifyFinished *bool   `json:"notify_finished"`
 		// Merged, not replaced: each named prompt keeps the later time, 0 clears one, and
@@ -1308,6 +1323,12 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if patch.AlertReply != nil {
 		in.AlertReply = *patch.AlertReply
+	}
+	if patch.TelegramChat != nil {
+		in.TelegramChat = *patch.TelegramChat
+	}
+	if patch.TelegramCode != nil {
+		in.TelegramCode = *patch.TelegramCode
 	}
 	if patch.NotifyApproval != nil {
 		in.NotifyApproval = *patch.NotifyApproval

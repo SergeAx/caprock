@@ -55,7 +55,7 @@ func TestADialogReachesThePhoneWithoutALicence(t *testing.T) {
 	for tg.count() == 0 && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
 	}
-	want := "⏳ <b>Needs approval</b> · Tidy the &lt;cache&gt;\n<code>/home/u/caprock</code> · main\nBash: <code>rm -rf secret-dir</code>"
+	want := "🟠 Claude Code · caprock · Tidy the &lt;cache&gt;\n⏳ <b>Needs approval</b>\n<code>/home/u/caprock</code> · main\nBash: <code>rm -rf secret-dir</code>"
 	if got := tg.last(); got != want {
 		t.Fatalf("message = %q, want %q", got, want)
 	}
@@ -158,7 +158,7 @@ func TestAFinishedAlertReportsTheRun(t *testing.T) {
 	}
 	a := alerts.Alert{Kind: alerts.KindFinished, SessionID: "s1", Trigger: *stop}
 	d.sendAlert(ctx, a)
-	want := "✅ <b>Finished</b> · Fix alerts\n<code>/home/u/caprock</code> · feat/x\n12m · $0.75 · 4 tool calls\n2 files changed: a.go, b.go\n💬 <i>All green.</i>"
+	want := "🟠 Claude Code · caprock · Fix alerts\n✅ <b>Finished</b>\n<code>/home/u/caprock</code> · feat/x\n12m · $0.75 · 4 tool calls\n2 files changed: a.go, b.go\n💬 <i>All green.</i>"
 	if got := tg.last(); got != want {
 		t.Fatalf("message =\n%s\nwant\n%s", got, want)
 	}

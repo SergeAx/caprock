@@ -7,6 +7,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+## [0.98.0] - 2026-10-10
+
 ### Changed
 
 - **Working from your phone is spelled out where you set it up.** The phone

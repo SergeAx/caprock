@@ -73,6 +73,15 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-10 — 0.98.0: the phone set up from the app, jump keys on tabs, each platform's keys
+
+The phone section of Settings sits under Appearance and its steps run to the
+end (control, home screen, carrying on from Chat, after a restart); the
+palette opens it. Tabs show ⌘1–⌘9; every key label is written for the
+platform it runs on; the status bar shows the session in front (model,
+context, next call, cost) and opens the running release's notes. Feedback is
+a labelled row with a speech bubble, not a volume icon.
+
 ### 2026-10-10 — 0.97.0: a share card worth posting, feedback with screenshots, Paper is the site
 
 The Figures card leads with one figure (cost at API list prices, or the

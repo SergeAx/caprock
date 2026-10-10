@@ -904,7 +904,7 @@ machine, never from a forge's API (rule 4):
   guarded recent folder without checking that it still exists.
 
 ```
-POST   /v1/agents                    {cwd?, chat?, create?, worktree?, agent?, model?, permission_mode?, resume?, fork?, command?, args?} → {session_id, cwd}
+POST   /v1/agents                    {cwd?, chat?, create?, worktree?, worktree_base?, worktree_pull?, agent?, model?, permission_mode?, resume?, fork?, command?, args?} → {session_id, cwd}
 GET    /v1/agents/models?agent=      {agent, default?, models:[{id,label}]}
 GET    /v1/agents/catalog            → {agents: [CatalogEntry], licensed, home?}
 GET    /v1/agents/custom             → {agents: [CustomAgent], licensed}
@@ -1241,6 +1241,7 @@ PATCH  /v1/projects/{id}                   {name?, pinned?, sort?, defaults?: {a
 DELETE /v1/projects/{id}                   → 204; unlists it: nothing on disk is touched, no session or cost changes
 GET    /v1/projects/{id}/worktrees         → {worktrees: [Worktree]}
 POST   /v1/projects/{id}/worktrees         {branch, create?, base?} → {worktree: {path, branch, tracks?}}
+GET    /v1/projects/{id}/branches          → {branches: [{name, main?, default?, local?, remote?, committed_ms}]}
 DELETE /v1/projects/{id}/worktrees/{name}  → 204; 409 {error} when it has any change
 POST   /v1/shells                          {cwd | project_id, cols?, rows?, replaces?} → {shell: Shell}
 GET    /v1/shells?project=<id>             → {shells: [Shell]}; every running shell without project
@@ -2486,3 +2487,5 @@ Not a public contract — the parser is schema-versioned and degrades to hooks-o
 - **The first messages a compaction preserves are copied with zeroed usage.** `input_tokens`, `output_tokens`, `cache_read_input_tokens` and `cache_creation_input_tokens` are 0, but `cache_creation.ephemeral_1h_input_tokens` keeps the original figure. The 1h write is part of `cache_creation_input_tokens`, so ingest bounds it by that total; read raw, each such copy was priced at a 1h cache write that never happened. On 2026-10-03, 6 of 24,239 local lines carrying the breakdown had it above the total, every one of them zeroed this way.
 
 Golden fixtures for the parser (normal, compacted, malformed line, unknown schema field) live in `testdata/transcripts/`.
+
+**A new copy from a branch** (`worktree_base`, `worktree_pull` on `POST /v1/agents`; `GET /v1/projects/{id}/branches`). `worktree` alone makes `caprock/<name>` from HEAD, as before. With `worktree_base` the branch starts from that branch instead; with `worktree_pull` the remote that has it (origin preferred) is fetched first and the copy starts from `<remote>/<base>`, so it is what the server has now. The new branch is created `--no-track`: a push never lands on the base. A base starting with `-` or holding a space or a ref metacharacter is refused before git runs. The branch list puts the remote's default branch (`origin/HEAD`, else main or master) first, then main, master, develop, dev, trunk, then the rest by newest commit; local and remote copies of one name are one row; Caprock's own `caprock/*` branches are left out. A paired phone gets it only for projects under home, like every project route.

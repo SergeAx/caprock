@@ -27,8 +27,9 @@ import { AgentObservedNote, AgentSetupNote } from './AgentSetup'
 import { DEFAULT_MODE, DEFAULT_MODELS, GEMINI_MAPPED, ModelField, modeNotes, modeOptions } from './SpawnDialog'
 import { useInitialMode } from '@/lib/permissionMode'
 import type { SpawnAgent } from './AgentPicker'
-import { projectsApi, type Project } from '@/lib/projects'
+import { projectsApi, type BranchInfo, type Project } from '@/lib/projects'
 import { ProjectCombobox } from './ProjectSearch'
+import { BranchPicker } from './BranchPicker'
 import type { Candidate } from '@/lib/projectSearch'
 import { ProjectInstructions } from './ProjectInstructions'
 import { Sheet, SheetButton, SheetField } from './Sheet'
@@ -94,7 +95,26 @@ export function NewAgentSheet({
   const allProjects = useMemo(() => [...projects, ...added.filter((a) => !projects.some((p) => p.id === a.id))], [projects, added])
   const project = allProjects.find((p) => p.id === pid)
   const worktrees = useMemo(() => (project?.worktrees ?? []).filter((w) => w.path !== project?.root), [project])
-  const [where, setWhere] = useState(initialWorktree ? NEW_WORKTREE : initialCwd && initialCwd !== project?.root ? initialCwd : '')
+  // A new copy is remembered as the way to start: someone who starts every
+  // agent from a fresh main should not pick it every time (owner, 2026-10-10).
+  const [where, setWhereRaw] = useState(initialWorktree ? NEW_WORKTREE : initialCwd && initialCwd !== project?.root ? initialCwd : readWhere())
+  const setWhere = (v: string) => { setWhereRaw(v); writeWhere(v === NEW_WORKTREE ? NEW_WORKTREE : '') }
+  const [branches, setBranches] = useState<BranchInfo[]>([])
+  const [branchesLoading, setBranchesLoading] = useState(false)
+  const [base, setBase] = useState('')
+  const [pull, setPullRaw] = useState(readPull)
+  const setPull = (v: boolean) => { setPullRaw(v); writePull(v) }
+  useEffect(() => {
+    if (where !== NEW_WORKTREE || !project) return
+    let alive = true
+    setBranchesLoading(true)
+    projectsApi.branches(project.id).then((list) => {
+      if (!alive) return
+      setBranches(list)
+      setBase((b) => (b && list.some((x) => x.name === b) ? b : list.find((x) => x.default)?.name ?? list[0]?.name ?? ''))
+    }).catch(() => { if (alive) setBranches([]) }).finally(() => { if (alive) setBranchesLoading(false) })
+    return () => { alive = false }
+  }, [where, project?.id])
   const [newBranch, setNewBranch] = useState(initialWorktree ?? '')
   const [models, setModels] = useState<Record<SpawnAgent, string>>(DEFAULT_MODELS)
   const [mode, setMode, rememberMode] = useInitialMode(DEFAULT_MODE)
@@ -133,7 +153,10 @@ export function NewAgentSheet({
       if (model) req.model = model
       // A custom agent's flags are its own; Caprock maps no mode onto them.
       if (mode && !custom) req.permission_mode = mode
-      if (where === NEW_WORKTREE) req.worktree = worktreeName
+      if (where === NEW_WORKTREE) {
+        req.worktree = worktreeName
+        if (base) { req.worktree_base = base; req.worktree_pull = pull }
+      }
       if (prompt.trim()) req.prompt = prompt.trim()
       const { session_id } = await api.spawn(req)
       rememberMode()
@@ -150,14 +173,14 @@ export function NewAgentSheet({
   // repository under the default folder is added first, then chosen.
   const pickProject = async (c: Candidate) => {
     setError('')
-    if (c.projectId) { setPid(c.projectId); setWhere(''); return }
+    if (c.projectId) { setPid(c.projectId); setWhereRaw((w) => (w === NEW_WORKTREE ? NEW_WORKTREE : '')); return }
     setAdding(true)
     try {
       const res = await projectsApi.add({ path: c.path })
       if (!('project' in res)) return
       setAdded((cur) => [...cur, res.project])
       setPid(res.project.id)
-      setWhere('')
+      setWhereRaw((w) => (w === NEW_WORKTREE ? NEW_WORKTREE : ''))
       onProjectAdded?.(res.project.id)
     } catch (e) {
       setError(`Could not add ${c.name}: ${errText(e)}`)
@@ -215,23 +238,35 @@ export function NewAgentSheet({
             </div>
             <SheetField label="Where">
               <select className="input" title={WHERE_TOOLTIP} value={where} onChange={(e) => setWhere(e.target.value)}>
+                <option value={NEW_WORKTREE}>New copy from a branch</option>
                 <option value="">{project?.branch ? `This folder · ${project.branch}` : 'This folder'}</option>
                 {worktrees.map((w) => <option key={w.path} value={w.path}>Existing copy · {w.branch || w.name}</option>)}
                 {initialCwd && initialCwd !== project?.root && !worktrees.some((w) => w.path === initialCwd) && <option value={initialCwd}>Existing copy · {baseName(initialCwd)}</option>}
-                <option value={NEW_WORKTREE}>New copy on its own branch</option>
               </select>
             </SheetField>
           </div>
           {where === NEW_WORKTREE && (
-            <div className="grid min-w-0 gap-1.5">
-              <SheetField
-                label="Branch name"
-                hint={nameBad ? <span className="text-danger">letters, digits, dot and dash only</span> : 'optional'}
-              >
-                <input className="input" aria-invalid={nameBad || undefined} placeholder={worktreeName} value={newBranch} onChange={(e) => setNewBranch(e.target.value)} spellCheck={false} />
-              </SheetField>
+            <div className="grid min-w-0 gap-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid min-w-0 gap-1.5">
+                  <span className="text-[12px] font-medium text-fg-muted">From branch</span>
+                  <BranchPicker branches={branches} value={base} onChange={setBase} loading={branchesLoading} />
+                </div>
+                <SheetField
+                  label="New branch name"
+                  hint={nameBad ? <span className="text-danger">letters, digits, dot and dash only</span> : 'optional'}
+                >
+                  <input className="input" aria-invalid={nameBad || undefined} placeholder={worktreeName} value={newBranch} onChange={(e) => setNewBranch(e.target.value)} spellCheck={false} />
+                </SheetField>
+              </div>
+              {base && branches.find((b) => b.name === base)?.remote && (
+                <label className="flex items-center gap-2 text-[13px] text-fg">
+                  <input type="checkbox" checked={pull} onChange={(e) => setPull(e.target.checked)} />
+                  Pull the latest <span className="mono">{base}</span> from {branches.find((b) => b.name === base)?.remote} first
+                </label>
+              )}
               <p className="text-[12px] leading-snug text-fg-faint" title={WHERE_TOOLTIP}>
-                A separate folder with its own branch, so this agent doesn’t collide with others. Branch: <span className="mono text-fg-muted">caprock/{worktreeName}</span>
+                A separate folder, so this agent doesn’t collide with others: <span className="mono text-fg-muted">caprock/{worktreeName}</span>{base ? <> from <span className="mono text-fg-muted">{base}</span></> : null}.
               </p>
             </div>
           )}
@@ -271,4 +306,19 @@ export function NewAgentSheet({
       )}
     </Sheet>
   )
+}
+
+const WHERE_KEY = 'caprock.newAgent.where'
+const PULL_KEY = 'caprock.newAgent.pull'
+function readWhere(): string {
+  try { return localStorage.getItem(WHERE_KEY) === NEW_WORKTREE ? NEW_WORKTREE : '' } catch { return '' }
+}
+function writeWhere(v: string): void {
+  try { localStorage.setItem(WHERE_KEY, v) } catch { /* remembered for this sheet only */ }
+}
+function readPull(): boolean {
+  try { return localStorage.getItem(PULL_KEY) !== '0' } catch { return true }
+}
+function writePull(v: boolean): void {
+  try { localStorage.setItem(PULL_KEY, v ? '1' : '0') } catch { /* remembered for this sheet only */ }
 }

@@ -73,6 +73,12 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-10 — 0.98.1: voice mode can use the microphone on macOS
+
+The app and its daemon are signed with the audio-input entitlement and the
+app carries a microphone purpose string, so an agent's `/voice` in a Caprock
+terminal gets macOS's prompt instead of silence (ADR-045).
+
 ### 2026-10-10 — 0.98.0: the phone set up from the app, jump keys on tabs, each platform's keys
 
 The phone section of Settings sits under Appearance and its steps run to the

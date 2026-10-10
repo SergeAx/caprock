@@ -16,6 +16,16 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   session from its Chat, and turn phone access on again after a restart. The
   command palette has *Open Caprock on your phone*, which opens that section.
 
+- **Each tab shows its jump key.** ⌘1–⌘8 by position and ⌘9 on the last
+  tab, as iTerm shows them (Ctrl⇧1… on Windows and Linux); the keys worked
+  before, but only a tooltip said so.
+- **The status bar carries the session in front.** With an agent's tab in
+  front, the bar along the bottom shows its model, how full its context is,
+  what the next call costs to re-read it, and what the session has cost.
+- **What's new, in the app.** The version in the status bar opens the notes
+  of the release you are running, and the update card's *What's new* opens
+  the new release's notes in the app instead of a GitHub page.
+
 ### Fixed
 
 - **Windows and Linux see their own shortcuts.** Hints, tooltips and the

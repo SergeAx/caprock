@@ -1000,7 +1000,7 @@ export function AppShell() {
         * terminal; the share toast floats (lib/nudges.ts, one at a time). */}
       <StarStrip app />
       <ShareMoment />
-      <StatusStrip summary={data.summary} pane={focused ? paneStatus[focused.sessionId] : undefined} version={version} figures={!prefs.sidebar} />
+      <StatusStrip summary={data.summary} pane={focused ? paneStatus[focused.sessionId] : undefined} session={focused?.kind === 'session' && workspaceShown ? focusedSession : undefined} version={version} figures={!prefs.sidebar} />
       <AppUpdateToast />
       {isTauri() && <AppUpdateAsk />}
 

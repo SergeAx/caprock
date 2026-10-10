@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matchAppShortcut, type KeyLike, keys } from './appkeys'
+import { matchAppShortcut, type KeyLike, keys, tabDigit, tabKey } from './appkeys'
 
 const k = (key: string, mods: Partial<KeyLike> = {}): KeyLike => ({
   key,
@@ -99,5 +99,18 @@ describe('a key label off macOS', () => {
   })
   it('leaves macOS as written', () => {
     expect(keys('⇧⌘N', true)).toBe('⇧⌘N')
+  })
+})
+
+describe('the jump key on a tab', () => {
+  it('numbers the first eight and gives ⌘9 to the last, as the keys do', () => {
+    expect([0, 1, 2].map((i) => tabDigit(i, 3))).toEqual([1, 2, 3])
+    expect(tabDigit(8, 12)).toBeNull()
+    expect(tabDigit(11, 12)).toBe(9)
+    expect(tabDigit(8, 9)).toBe(9)
+  })
+  it('is short on every platform', () => {
+    expect(tabKey(3, true)).toBe('⌘3')
+    expect(tabKey(3, false)).toBe('Ctrl⇧3')
   })
 })

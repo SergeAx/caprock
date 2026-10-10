@@ -20,7 +20,7 @@ import { ChatIcon, CloseIcon, DashboardIcon, FileIcon, InspectorIcon, PlusIcon, 
 import { StatusDot, TitleAndBranch } from './ProjectRow'
 import { closeTitle, closeWord } from '@/lib/closeShell'
 import { NewMenu, type NewMenuItem } from './NewMenu'
-import { keys } from '@/lib/appkeys'
+import { keys, tabDigit, tabKey } from '@/lib/appkeys'
 
 /** The pinned Dashboard tab: the dashboard's screens, in the strip with the terminals. */
 export interface DashboardTab {
@@ -150,6 +150,7 @@ export function TabStrip(props: TabStripProps) {
           const title = label?.title ?? t.title
           const active = t.id === activeTabId
           const project = props.projectName?.(t.projectId)
+          const digit = tabDigit(i, tabs.length)
           return (
             <div
               key={t.id}
@@ -165,7 +166,7 @@ export function TabStrip(props: TabStripProps) {
               }}
               onAuxClick={(e) => { if (e.button === 1) props.onDetach(t.id) }}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') props.onActivate(t.id) }}
-              title={`${file ?? title}${label?.branch ? ` · ${label.branch}` : ''}${project ? ` · ${project}` : ''}${i < 9 ? ` — ${keys(`⌘${i + 1}`)}` : ''}`}
+              title={`${file ?? title}${label?.branch ? ` · ${label.branch}` : ''}${project ? ` · ${project}` : ''}${digit ? ` — ${keys(`⌘${digit}`)}` : ''}`}
               data-project={t.projectId}
               className={`group relative flex h-[32px] min-w-[112px] max-w-[260px] flex-1 basis-[200px] cursor-default select-none items-center gap-2 rounded-t-[9px] pl-3 pr-1.5 text-[12.5px] transition-colors duration-100 motion-reduce:transition-none ${
                 active ? (file !== undefined ? 'app-tab-front bg-bg font-medium text-fg' : 'app-tab-front app-slab font-medium text-fg') : 'app-tab-back text-fg-muted hover:text-fg'
@@ -185,6 +186,11 @@ export function TabStrip(props: TabStripProps) {
                   <span aria-hidden className="h-[6px] w-[6px] shrink-0 rounded-full" style={{ background: `hsl(${projectHue(t.projectId)} 42% 56%)` }} />
                   <span className="truncate">{project}</span>
                 </span>
+              )}
+              {/* The jump key on the tab itself, as iTerm shows it: ⌘1–⌘8 by
+                * position, ⌘9 on the last. In a tooltip nobody found it. */}
+              {digit && (
+                <kbd data-tab-key aria-hidden className="mono shrink-0 text-[10.5px] text-fg-faint">{tabKey(digit)}</kbd>
               )}
               <button
                 type="button"

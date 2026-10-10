@@ -54,6 +54,7 @@ import { FileView } from '@/components/FileView'
 import { FilePicker } from '@/components/FilePicker'
 import { NewAgentSheet } from '@/components/NewAgentSheet'
 import { CloseSettingsContext } from '@/lib/settingsClose'
+import { SetupShellContext } from '@/lib/setupShell'
 import { QuickChatSheet, quickChatRequest, rememberQuickChoice, rememberedQuickChoice, type QuickChoice } from '@/components/QuickChat'
 import { useSpawnableAgents } from '@/components/AgentPicker'
 import { AddProjectSheet } from '@/components/AddProjectSheet'
@@ -991,9 +992,12 @@ export function AppShell() {
                 <div className="app-scroll absolute inset-0 overflow-y-auto bg-bg">
                   {/* Settings' own × and Escape close it as its tab's × does (lib/settingsClose.ts). */}
                   <CloseSettingsContext.Provider value={closeDashboard}>
-                    <Suspense fallback={null}>
-                      <Dashboard route={parseHash(hash)} inApp />
-                    </Suspense>
+                    {/* Settings → Subscriptions types a sign-in into a shell tab (ADR-048). */}
+                    <SetupShellContext.Provider value={onSetupAgent}>
+                      <Suspense fallback={null}>
+                        <Dashboard route={parseHash(hash)} inApp />
+                      </Suspense>
+                    </SetupShellContext.Provider>
                   </CloseSettingsContext.Provider>
                 </div>
               )}

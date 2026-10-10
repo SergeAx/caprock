@@ -9,7 +9,8 @@
  * current project first, so Enter keeps it and a second Enter starts; typing
  * finds a project, a recent folder or a repository under the default folder,
  * and picking one that is not a project yet adds it (ProjectSearch.tsx).
- * Tab and ⇧Tab walk Project, Where, Agent, Model, Permissions,
+ * Tab and ⇧Tab walk Project, Where, Agent, Model, Subscription (when there
+ * is more than one, ADR-048), Permissions,
  * First message, Cancel, Start in that order; ↑ and ↓ change a select in
  * place; ⌘↩ starts from anywhere in the sheet, the buttons included; Esc
  * cancels. The keys are named in the footer and on Start itself.
@@ -37,6 +38,8 @@ import { stepSelect } from '@/lib/selectKeys'
 import { BypassConsentNote, useBypassConsent } from './BypassConsent'
 import { defaultWorktreeName, WORKTREE_NAME } from '@/lib/slug'
 import { isMacPlatform } from '@/lib/appmode'
+import { SubscriptionNote, SubscriptionPicker, subscriptionsFor, useSubscriptionList } from './SubscriptionPicker'
+import { rememberedSubscription, rememberSubscription } from '@/lib/subscriptions'
 
 const NEW_WORKTREE = '__new__'
 
@@ -122,6 +125,16 @@ export function NewAgentSheet({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const consent = useBypassConsent(agent, mode)
+  // The sign-in it runs on (ADR-048): remembered per project; a pick from
+  // the near-limit note holds for this session only.
+  const subscriptions = useSubscriptionList()
+  const subList = subscriptionsFor(subscriptions.all, agent)
+  const subKey = `${agent}|${pid}`
+  const [subPick, setSubPick] = useState<Record<string, string>>({})
+  const subWanted = subPick[subKey] ?? rememberedSubscription(agent, pid)
+  const subId = subList.some((s) => s.id === subWanted) ? subWanted : 'default'
+  const chooseSub = (id: string) => { rememberSubscription(agent, pid, id); setSubPick((p) => ({ ...p, [subKey]: id })) }
+  const pickSubOnce = (id: string) => setSubPick((p) => ({ ...p, [subKey]: id }))
   // The name is optional: left empty, it comes from the first message.
   const worktreeName = newBranch.trim() || defaultWorktreeName(prompt)
   const nameBad = !!newBranch.trim() && !WORKTREE_NAME.test(newBranch.trim())
@@ -149,6 +162,7 @@ export function NewAgentSheet({
       if (consent.needed) await consent.accept()
       const req: Parameters<typeof api.spawn>[0] = { cwd: where && where !== NEW_WORKTREE ? where : project.root }
       if (agent !== 'claude') req.agent = agent
+      if (subList.length > 1 && subId !== 'default') req.subscription = subId
       const model = models[agent]?.trim()
       if (model) req.model = model
       // A custom agent's flags are its own; Caprock maps no mode onto them.
@@ -275,7 +289,11 @@ export function NewAgentSheet({
                 <ModelField agent={agent} value={models[agent] ?? ''} onChange={(v) => setModels((m) => ({ ...m, [agent]: v }))} entry={entry} />
               </SheetField>
             )}
+            {/* Under Agent, on a row of its own: a third column cut both
+              * selects' text off at the sheet's width. */}
+            {canStart && <SubscriptionPicker list={subList} value={subId} onChange={chooseSub} />}
           </div>
+          {canStart && <SubscriptionNote list={subList} value={subId} onUse={pickSubOnce} />}
           {entry?.setup && <AgentSetupNote entry={entry} onSetup={onSetup && ((cmd) => { onSetup(cmd, catalog.home); onClose() })} />}
           {entry?.locked && (
             <p role="note" className="text-[12.5px] text-fg-muted">Custom agents are a Premium feature; add a licence key in Settings → Plan &amp; licence to start {entry.label}.</p>

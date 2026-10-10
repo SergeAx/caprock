@@ -30,6 +30,9 @@ export interface Session {
   /** The session this one was started to carry on, with a brief rather than
    *  its conversation (a relay). */
   relay_from?: string
+  /** The sign-in it ran on (ADR-048): a subscription id from Settings →
+   *  Subscriptions; absent for the Default sign-in. */
+  subscription?: string
   /** The repository the session's folder belongs to (a linked worktree resolves to its main repository). */
   repo_root?: string
   /** The worktree's name when the session runs in a linked worktree. */
@@ -941,6 +944,46 @@ export interface AgentCatalog { agents: CatalogEntry[]; licensed: boolean; home?
 /** A coding agent the user added by command (Settings → Agents, Premium). */
 export interface CustomAgent { id?: string; name: string; command: string; args?: string[]; models?: string[] }
 
+/** The agents that have subscriptions (ADR-048). */
+export type SubscriptionAgentId = 'claude' | 'codex'
+
+/** One plan window as last reported for a subscription. */
+export interface SubscriptionWindow {
+  window: 'five_hour' | 'seven_day'
+  used_percentage: number
+  /** Unix seconds. */
+  resets_at: number
+  /** Unix ms. */
+  observed_at: number
+}
+
+/** A sign-in to Claude Code or Codex (ADR-048). `id` is "default" for the user's own. */
+export interface Subscription {
+  id: string
+  agent: SubscriptionAgentId
+  label: string
+  default: boolean
+  dir: string
+  env_var?: string
+  signed_in: boolean
+  account?: string
+  /** The agent's own sign-in for this directory, typed into a shell tab, never run by Caprock. */
+  login_command: string
+  windows: SubscriptionWindow[]
+  sessions_7d: number
+  cost_7d_usd: number
+  /** Sessions Caprock started that are running on it. */
+  running: number
+  created_at?: number
+}
+
+export interface SubscriptionsResponse {
+  agents: { agent: SubscriptionAgentId; label: string; installed: boolean; subscriptions: Subscription[] }[]
+  licensed: boolean
+  free_per_agent: number
+  home?: string
+}
+
 export interface SpawnRequest {
   /** Which coding agent to launch: "claude" (default), "codex", "opencode",
    *  "gemini", "grok" or a custom one ("custom:<id>"). They take different
@@ -952,6 +995,9 @@ export interface SpawnRequest {
    *  worktree_pull it is fetched from its remote first. */
   worktree_base?: string; worktree_pull?: boolean
   model?: string; permission_mode?: string; args?: string[]
+  /** The sign-in to run on (ADR-048): a subscription id, or absent / "default"
+   *  for the user's own. Claude Code and Codex only; a resume keeps its own. */
+  subscription?: string
   /** Continue an existing conversation instead of starting a new one. Caprock
    *  cannot type into a process it did not start, so picking a session up
    *  means starting a second one on the same history. */
@@ -1255,6 +1301,13 @@ export const api = {
   customAgents: () => get<{ agents: CustomAgent[]; licensed: boolean }>('/v1/agents/custom'),
   /** PUT /v1/agents/custom: replaces the list; 402 without an active licence. */
   saveCustomAgents: (agents: CustomAgent[]) => post<{ agents: CustomAgent[]; licensed: boolean }>('/v1/agents/custom', { agents }, 'PUT'),
+  /** Settings → Subscriptions (ADR-048). */
+  subscriptions: () => get<SubscriptionsResponse>('/v1/subscriptions'),
+  /** 402 at the free number without a licence. */
+  addSubscription: (agent: SubscriptionAgentId, label: string) => post<Subscription>('/v1/subscriptions', { agent, label }),
+  renameSubscription: (id: string, label: string) => post<Subscription>(`/v1/subscriptions/${encodeURIComponent(id)}`, { label }, 'PATCH'),
+  /** 409 while a session Caprock started runs on it. */
+  removeSubscription: (id: string) => post<void>(`/v1/subscriptions/${encodeURIComponent(id)}`, {}, 'DELETE'),
   agentModels: (agent: string) =>
     get<{ agent: string; default?: string; models: { id: string; label: string }[] }>(`/v1/agents/models?agent=${encodeURIComponent(agent)}`),
   signal: (id: string, action: 'pause' | 'resume' | 'kill') => post<void>(`/v1/agents/${encodeURIComponent(id)}/signal`, { action }),

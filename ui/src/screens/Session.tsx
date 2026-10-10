@@ -28,6 +28,7 @@ import { toolLine } from '@/lib/chat'
 import { ChevronIcon } from '@/components/AppIcons'
 import { isAppMode } from '@/lib/appmode'
 import { MoreMenu } from '@/components/MoreMenu'
+import { SubscriptionTag } from '@/components/SubscriptionPicker'
 
 type Tab = 'chat' | 'timeline' | 'notes' | 'changes' | 'terminal'
 
@@ -212,6 +213,7 @@ export function SessionScreen({ id, tab, at }: { id: string; tab?: string; at?: 
           </span>
         )}
         {s.git_branch && <span className="mono text-[11px] text-fg-muted">{s.git_branch}</span>}
+        {s.subscription && <span className="text-[11px] text-fg-muted"><SubscriptionTag id={s.subscription} prefix="on " /></span>}
         {/* Health and the controls are about now: never from a kept copy. */}
         {!compact && !detail.stale && <Badge health={s.activity.health} />}
         {!compact && controls}

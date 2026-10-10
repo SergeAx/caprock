@@ -22,6 +22,7 @@ import { countdown, resetClock } from '@/lib/limitclock'
 import { readWindow } from './PlanLimits'
 import { SpendSpark } from './SpendScrub'
 import { AgentCharacter, agentName, characterFor } from './Characters'
+import { SubscriptionTag } from './SubscriptionPicker'
 import {
   askLine, backgroundAgents, subagentChips, backgroundLabel, cockpitState, commandGist, fmtRun, mainThread, planWindowsFor, requester, runningTool, runShare, runVerb, subagentWaiting, toolKind, toolRuns, turnCosts,
   type CockpitState, type SubagentChip, type ToolKind, type ToolRun, type TurnCost,
@@ -178,6 +179,7 @@ function Hero({ s, state, now, background, subs, permission }: { s: SessionSumma
         <p className="text-[12px] text-fg-muted">
           <span className="font-medium text-fg">{agentName(s.agent ?? 'claude')}</span>
           {s.model_display || s.model ? <span> · {s.model_display || s.model}</span> : null}
+          <SubscriptionTag id={s.subscription} />
         </p>
         <p className={`flex items-center gap-1.5 text-[12px] font-medium ${STATE_TEXT[state]}`} role="status">
           <span className={`cockpit-dot inline-block h-[7px] w-[7px] rounded-full`} data-state={state} />

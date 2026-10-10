@@ -73,6 +73,22 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-10 — unreleased: subscriptions (several sign-ins per agent)
+
+Settings → Subscriptions (ADR-048): Claude Code and Codex sign-ins in
+`<data dir>/profiles/<id>/`, selected with `CLAUDE_CONFIG_DIR` / `CODEX_HOME`;
+`/v1/subscriptions`; migration 0044 (`sessions.subscription`); each
+directory's transcripts read and its plan windows stored under `sub:<id>:`;
+a Subscription picker in New agent and Quick chat with a near-limit note
+that picks another for the next session only. Three per agent free, the
+fourth Premium (402). Verified on a preview stand with the fake claude: the
+spawned process carries the directory, the session records it, trust is
+written to the profile's `.claude.json`. Not verified: a real second
+`claude auth login` / `codex login` (opens a browser and the Keychain — the
+owner's to run), and that Claude Code writes `oauthAccount` into
+`<dir>/.claude.json` and shows no first-run screens in a directory that only
+`auth login` has touched.
+
 ### 2026-10-10 — unreleased: the Telegram bridge
 
 The alerts' bot became two-way (ADR-047, `internal/telegram`): a guided setup

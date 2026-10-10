@@ -137,6 +137,22 @@ others. Installing it: [install-app.md](install-app.md).
   models to offer. It then appears in New agent and Quick chat and opens in a
   tab. Caprock keeps its sessions in your list but does not read their cost.
   Without a licence key the section is shown with the upgrade button.
+- **Subscriptions: more than one sign-in.** Settings → *Subscriptions* keeps
+  several Claude Code or Codex accounts side by side — a work account and
+  your own, say. *Add subscription* makes a folder for it and opens a shell
+  tab with the agent's own sign-in typed (`CLAUDE_CONFIG_DIR='…' claude auth
+  login`, or `CODEX_HOME='…' codex login`); press Enter there and sign in
+  with the account you want. Caprock never sees a password or token. Each
+  one is listed with the account it is signed in to, its 5-hour and weekly
+  windows and its last seven days. With more than one, *New agent* and
+  *Quick chat* show a *Subscription* picker, remembered per project; the
+  session runs on it, and its card and inspector say which. When the chosen
+  one is at 90% of a window or more, a note says so and names one with room
+  — a click picks it for that session only; a running session never moves,
+  and Caprock never switches on its own. A new subscription starts with the
+  agent's defaults: your settings, plugins and servers are not copied.
+  Three per agent are free, your own sign-in included; more come with
+  Premium. *Remove* deletes the folder after asking.
 - **The tab strip.** The tab in front has an amber top edge; the others are
   shaded tabs of their own. The amber + opens a menu: New agent, Quick
   chat, New shell, Open file, Add project, each with its key.

@@ -39,7 +39,7 @@ import { useApi } from '@/lib/useApi'
 import { AgentCharacter } from './Characters'
 import { Benefit, Icon, MiniCard, UpsellDialog } from './UpsellDialog'
 
-export type PaidFeature = 'cap' | 'window' | 'report' | 'gemini' | 'drill' | 'agents' | 'telegram'
+export type PaidFeature = 'cap' | 'window' | 'report' | 'gemini' | 'drill' | 'agents' | 'telegram' | 'subscriptions'
 
 /**
  * `body` says what the feature is in one sentence; `points` say why you would
@@ -112,6 +112,16 @@ const FEATURES: Record<
       { icon: 'shield', text: 'Only sessions Caprock started; the one in your terminal is watched, never typed into' },
     ],
     setup: 'Setup: one message to BotFather, then a code sent to your bot.',
+  },
+  // ADR-048: three sign-ins per agent are free; a fourth and more are Premium.
+  subscriptions: {
+    title: 'More sign-ins, each a pick away',
+    body: 'Three Claude Code and three Codex subscriptions are free, your own sign-in included. Premium adds as many more as you use.',
+    points: [
+      { icon: 'user', text: 'Each sign-in in its own folder, picked per session in New agent and Quick chat' },
+      { icon: 'pie', text: 'Every sign-in’s plan windows and the last seven days of work beside it' },
+      { icon: 'key', text: 'Caprock types the agent’s own sign-in command; you run it, and Caprock never holds a token' },
+    ],
   },
   report: {
     title: 'A weekly report, sent where you are',
@@ -219,6 +229,29 @@ function Picture({ feature }: { feature: PaidFeature }) {
           <span className="font-semibold"><code className="font-mono">git diff</code> returned 41% of all Bash output</span>
           <span className="text-fg-muted"> — every byte of it read back by the model.</span>
         </p>
+      </MiniCard>
+    )
+  }
+  if (feature === 'subscriptions') {
+    const rows: [string, string, number][] = [
+      ['Default', '35%', 0.35],
+      ['Work Max', '92%', 0.92],
+      ['Personal', '12%', 0.12],
+      ['Client', '4%', 0.04],
+    ]
+    return (
+      <MiniCard label="Example: four Claude Code subscriptions with their 5-hour windows; a new session is started on the one picked">
+        <p className="wk-eyebrow" style={{ fontSize: 11 }}>Claude Code · subscriptions</p>
+        <ul className="mt-2 space-y-1.5 font-mono text-[12px]">
+          {rows.map(([name, pct, used]) => (
+            <li key={name} className="grid grid-cols-[84px_1fr_36px] items-center gap-2">
+              <span className="truncate text-fg">{name}</span>
+              <span className="h-1.5 rounded-full bg-border-strong/60"><span className={`block h-full rounded-full ${used >= 0.9 ? 'bg-danger' : 'bg-accent'}`} style={{ width: `${used * 100}%` }} /></span>
+              <span className={`text-right ${used >= 0.9 ? 'text-danger' : 'text-fg-muted'}`}>{pct}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2.5 text-[12.5px] leading-snug text-fg-muted">In New agent: <span className="text-fg">Subscription · Personal</span>, for the next session.</p>
       </MiniCard>
     )
   }

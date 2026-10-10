@@ -38,6 +38,7 @@ import { TerminalSettings } from '@/components/TerminalSettings'
 import { EditorSetting } from '@/components/EditorSetting'
 import { DefaultFolderSetting } from '@/components/DefaultFolderSetting'
 import { CustomAgentsSetting } from '@/components/CustomAgentsSetting'
+import { SubscriptionsSetting } from '@/components/SubscriptionsSetting'
 import { SpawnModeSetting } from '@/components/SpawnModeSetting'
 import { GitHubSettings } from '@/components/GitHubSettings'
 import { WindowStopSetting } from '@/components/WindowStopSetting'
@@ -100,6 +101,7 @@ export function StatusScreen() {
           <TerminalSettings />
           {owner && <EditorSetting />}
           {owner && <DefaultFolderSetting />}
+          {owner && <SubscriptionsSetting />}
           {owner && <CustomAgentsSection />}
           {owner && isTauri() && <DesktopNotifications />}
           {owner && isTauri() && <GlobalHotkey />}
@@ -120,6 +122,7 @@ export function StatusScreen() {
           {owner && <SpawnModeSetting />}
           {owner && <EditorSetting />}
           {owner && <DefaultFolderSetting />}
+          {owner && <SubscriptionsSetting />}
           {owner && <CustomAgentsSection />}
           <GitHubSettings />
           {owner && isTauri() && <GlobalHotkey />}

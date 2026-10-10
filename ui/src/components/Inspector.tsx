@@ -19,6 +19,7 @@ import { sessionPlace, type Project } from '@/lib/projects'
 import { agentName } from './Projects'
 import { PermissionPrompt } from './PermissionPrompt'
 import { StatusDot } from './ProjectRow'
+import { SubscriptionTag } from './SubscriptionPicker'
 import { branchLabel } from '@/lib/sessionLabels'
 import { dotOf, sessionTitle } from '@/lib/sidebar'
 import { href } from '@/lib/router'
@@ -120,6 +121,7 @@ function Body({ session: s, project, sessionId, hasPermission, showPrompt, onDet
           <p className="text-[12px] text-fg-muted">
             {isShell ? 'Login shell' : agentName(s.agent)}
             {!isShell && (s.model_display || s.model) ? ` · ${s.model_display || s.model}` : ''}
+            {!isShell && <SubscriptionTag id={s.subscription} />}
             {branchLabel(s.git_branch) ? <> · <span className="mono">{branchLabel(s.git_branch)}</span></> : null}
           </p>
         )}

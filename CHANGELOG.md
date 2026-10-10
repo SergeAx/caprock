@@ -45,6 +45,16 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   test* — and what happened moves to the second. Alerts carry *Mute this
   session* and, with phone access on, *Open on phone*; `/mute all` and
   `/unmute` work from the chat. Free, like the alerts.
+- **More than one sign-in.** Settings → *Subscriptions* keeps several Claude
+  Code or Codex accounts side by side, each in a folder of its own. *Add
+  subscription* types the agent's own sign-in into a shell tab for you to
+  run; Caprock never sees a password or token. Each one shows the account it
+  is signed in to, its 5-hour and weekly windows and its last seven days.
+  New agent and Quick chat get a *Subscription* picker, remembered per
+  project; the session runs on it and its card says which. Near 90% of a
+  window, the picker says so and offers one with room for the next session —
+  running sessions never move and Caprock never switches on its own. Three
+  per agent are free, your own sign-in included; more are Premium.
 - **See what your sessions cost the machine.** While Caprock is open it
   samples every live session's processes every 5 seconds: the status bar
   shows the session's CPU and memory, the inspector lists its three busiest

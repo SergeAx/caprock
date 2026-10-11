@@ -73,6 +73,14 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-11 — 0.106.1: the daemon follows the app everywhere
+
+On Windows and Linux the app now replaces its own daemon when an update
+brings a new one (`should_adopt` was macOS-only; moving a Homebrew daemon
+still is). When the two still differ, an amber dot on the version and a line
+in its panel say so. The Keep awake popover is short, large and closable; the
+session deck's button reads *Deck ⌘B* and its chart is 44px.
+
 ### 2026-10-11 — 0.106.0: folding panels, an update panel, links on Windows
 
 Dashboard panels fold to their titles (remembered); the agents row folds to

@@ -7,6 +7,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+## [0.105.0] - 2026-10-11
+
 ### Added
 
 - **The session deck under an agent's terminal.** ⌘B (Ctrl+Shift+B on
@@ -23,6 +25,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   It is closed by default, its height and whether it is open are remembered
   per machine, shell tabs have none, and closed it costs nothing: it reads
   the figures the inspector already holds, sharing one fetch with it.
+
+### Changed
 
 - **⌘0 opens the Dashboard.** It sits beside ⌘1–⌘9 like the tab before the
   first; ⇧⌘D still works, and resetting the interface size moved to ⇧⌘0

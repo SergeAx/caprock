@@ -7,6 +7,14 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Added
+
+- **Caprock keeps your computer awake while agents work.** A long run no
+  longer stops because the computer idled to sleep. It lets go once nothing
+  is working; the screen can still turn off, and closing a laptop's lid
+  still sleeps it. *awake* in the status bar says when it is holding.
+  Settings → *Keep awake*: Off, While agents work (the default), or Always.
+
 ## [0.101.3] - 2026-10-11
 
 ### Changed

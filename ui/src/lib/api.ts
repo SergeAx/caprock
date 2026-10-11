@@ -584,6 +584,23 @@ export interface TelegramStatus {
   muted?: number
 }
 
+export type KeepAwakeMode = 'off' | 'working' | 'always'
+
+/** GET /v1/keepawake: the mode, and whether the computer is being kept awake now. */
+export interface KeepAwakeStatus {
+  mode: KeepAwakeMode
+  holding: boolean
+  /** When the current hold began, Unix ms. */
+  since?: number
+  /** Sessions counted as working at the last check. */
+  working: number
+  /** False where the OS offers nothing to ask (Linux without systemd-inhibit); reason says why. */
+  available: boolean
+  reason?: string
+  /** Why the last attempt to hold failed. */
+  error?: string
+}
+
 export interface Settings {
   /** Whether Claude is told what the last session left in the same folder. */
   memory?: boolean
@@ -599,6 +616,8 @@ export interface Settings {
   editor?: string
   /** The permission mode new sessions start in, in Claude Code's words. Empty: not set. */
   spawn_permission_mode?: string
+  /** When the computer is kept from idle-sleeping (ADR-049). The daemon returns "working" when never chosen. */
+  keep_awake?: KeepAwakeMode
   /** The daily spend ceiling in USD; 0 is off. See internal/cap. */
   cap_usd_per_day?: number
   /** The share of a Claude plan window (50–99) at which Premium pauses the
@@ -1247,6 +1266,7 @@ export const api = {
   /** How many people committed to the listed repositories in 30 days (counts only). */
   teamSignal: () => get<TeamSignal>('/v1/team-signal'),
   windowStop: () => get<WindowStop>('/v1/window-stop'),
+  keepAwake: () => get<KeepAwakeStatus>('/v1/keepawake'),
   gemini: () => get<GeminiStatus>('/v1/gemini'),
   askGemini: (prompt: string, model?: string) => post<GeminiReply>('/v1/gemini/ask', { prompt, model }),
   browse: (dir = '') => get<BrowseResponse>(`/v1/browse${dir ? `?dir=${encodeURIComponent(dir)}` : ''}`),

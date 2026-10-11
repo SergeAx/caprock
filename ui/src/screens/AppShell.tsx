@@ -51,6 +51,7 @@ import { appUpdate } from '@/lib/appupdate'
 import { PermissionPrompt } from '@/components/PermissionPrompt'
 import { ChatView } from '@/components/ChatView'
 import { ChangesView } from '@/components/ChangesView'
+import { AttemptsCompare } from '@/components/AttemptsCompare'
 import { FileView } from '@/components/FileView'
 import { FilePicker } from '@/components/FilePicker'
 import { NewAgentSheet } from '@/components/NewAgentSheet'
@@ -75,6 +76,8 @@ import { CloseShellConfirm } from '@/components/CloseShellConfirm'
 import { ShortcutsSheet } from '@/components/ShortcutsSheet'
 import { worktreeSlug } from '@/lib/slug'
 import { openPhoneSettings, openSettingsAt } from '@/components/Pairing'
+import { reloadSaved, savedFor, sendPrompt, useSavedPrompts, type SavedPrompt } from '@/lib/saved'
+import { SAVED_SECTION_ID } from '@/components/SavedPromptsSetting'
 
 export { worktreeSlug }
 
@@ -140,6 +143,8 @@ type SheetState =
   | { kind: 'share' }
   /** Quick chat's vendor and model chooser (components/QuickChat.tsx). */
   | { kind: 'quick-chat' }
+  /** *Run saved…*: the palette narrowed to the saved prompts and commands (ADR-051). */
+  | { kind: 'saved' }
   /** The palette's "Open file…": the files of one worktree. */
   | { kind: 'files'; projectId: string; worktree: string; title: string }
   | null
@@ -232,6 +237,8 @@ export function AppShell() {
   // mounted behind it.
   const [chatOpen, setChatOpen] = useState<ReadonlySet<string>>(() => new Set())
   const [changesView, setChangesView] = useState<ChangesTarget | null>(null)
+  // Compare attempts (ADR-052): over the terminals, as the Changes view is.
+  const [compare, setCompare] = useState<{ group: string; title: string } | null>(null)
   const version = useDaemonVersion()
   const [, toggleTheme] = useTheme()
   const editors = useEditors()
@@ -320,12 +327,14 @@ export function AppShell() {
   /** A tab picked in the strip or in the sidebar's list. */
   const onActivateTab = useCallback((id: string) => {
     setChangesView(null)
+    setCompare(null)
     dispatch({ type: 'activate', tabId: id })
     showWorkspace()
   }, [showWorkspace])
 
   const openTab = useCallback((target: TabTarget, projectId: string, title: string) => {
     setChangesView(null)
+    setCompare(null)
     dispatch({ type: 'open', target, projectId, title })
     showWorkspace()
   }, [showWorkspace])
@@ -333,6 +342,7 @@ export function AppShell() {
   /** Beside the focused pane of the tab in front (F15); a new tab when there is none. */
   const openSplit = useCallback((target: TabTarget, projectId: string, title: string, direction: 'row' | 'column' = 'row') => {
     setChangesView(null)
+    setCompare(null)
     dispatch({ type: 'split', target, projectId, title, direction })
     showWorkspace()
   }, [showWorkspace])
@@ -514,10 +524,92 @@ export function AppShell() {
     { id: 'agent', label: 'New agent', hint: keys('⇧⌘N'), icon: <PlusIcon size={13} />, run: () => onNewAgent() },
     { id: 'quick-chat', label: 'Quick chat…', hint: keys('⌥⌘N'), icon: <ChatIcon size={13} />, run: onQuickChatChooser },
     { id: 'shell', label: 'New shell', hint: keys('⌘T'), icon: <TerminalIcon size={13} />, run: () => onNewShell() },
+    { id: 'saved', label: 'Run saved…', icon: <SparkIcon size={13} />, run: () => setSheet({ kind: 'saved' }) },
     { id: 'file', label: 'Open file…', icon: <FileIcon size={13} />, run: () => { const f = fileScopeRef.current; if (f) setSheet({ kind: 'files', ...f }); else setToast('Open a project first: files are opened from one.') } },
     { id: 'project', label: 'Add project', hint: keys('⌘O'), icon: <FolderPlusIcon size={13} />, run: onAddProject },
   ], [onNewAgent, onQuickChatChooser, onNewShell, onAddProject])
   const onSettings = useCallback(() => { location.hash = '#/settings' }, [])
+
+  /**
+   * One prompt, N attempts (ADR-052). Each attempt opens in a tab, in order,
+   * and the first comes to the front; Compare is a click away in ⌘K and the
+   * inspector. An attempt that did not start is said, beside the ones that did.
+   */
+  const onAttempts = useCallback((ids: string[], projectId: string, title: string, error?: string) => {
+    ids.forEach((id, i) => openTab({ kind: 'session', sessionId: id }, projectId, `attempt ${i + 1}/${ids.length} · ${title}`))
+    if (ids[0]) openTab({ kind: 'session', sessionId: ids[0] }, projectId, `attempt 1/${ids.length} · ${title}`)
+    refresh()
+    setToast(error
+      ? `${ids.length} attempts started; ${error}`
+      : `${ids.length} attempts started, one copy each. Compare them from ${keys('⌘K')} or the inspector.`)
+  }, [openTab, refresh])
+  /** The comparison of a session's group of attempts. */
+  const onCompare = useCallback((s: SessionSummary) => {
+    if (!s.attempt_group) return
+    setChangesView(null)
+    setCompare({ group: s.attempt_group, title: sessionTitle({ ...s, attempts: 0 }) })
+    showWorkspace()
+  }, [showWorkspace])
+  /** The project and worktree a session runs in, from the sidebar's model. */
+  const placeOf = useCallback((id: string): { node: ProjectNode; w: WorktreeNode } | undefined => {
+    for (const node of model.projects) {
+      const w = node.worktrees.find((x) => x.sessions.some((y) => y.session.session_id === id))
+      if (w) return { node, w }
+    }
+    return undefined
+  }, [model.projects])
+
+  /**
+   * Saved prompts and commands (ADR-051). A prompt goes to the session in
+   * front when Caprock started it and it runs — typed as the message field
+   * types, then Enter; otherwise New agent opens with it as the first
+   * message, never into a session Caprock did not start (rule 7). A command
+   * runs in a new shell tab in the folder in front: the focused session's
+   * worktree, else the project's root.
+   */
+  const saved = useSavedPrompts()
+  // Asked again as a list of them opens: one may have been saved in another window.
+  useEffect(() => { if (sheet?.kind === 'saved' || sheet?.kind === 'palette') void reloadSaved() }, [sheet?.kind])
+  const runSaved = useCallback(async (v: SavedPrompt) => {
+    const s = workspaceShown ? focusedSession : undefined
+    const pid = current?.projectId ?? activeProjectId
+    if (v.kind === 'command') {
+      const cwd = s?.cwd || projectsById.get(pid)?.root
+      if (!cwd) { setToast(`Open a project first: “${v.name}” runs in one.`); return }
+      try {
+        const shell = await projectsApi.startShell({ cwd, cols: 120, rows: 32, type: v.text, run: true })
+        openTab({ kind: 'shell', sessionId: shell.id }, pid, 'shell')
+        refresh()
+      } catch (e) {
+        setToast(`Could not run “${v.name}”: ${errText(e)}`)
+      }
+      return
+    }
+    if (s && s.owned && s.kind !== 'shell' && s.status !== 'ended' && !s.detached) {
+      try {
+        await sendPrompt(s.session_id, v.text)
+        setToast(`Sent “${v.name}” to ${sessionTitle(s)}.`)
+      } catch (e) {
+        setToast(`“${v.name}” was not sent: ${errText(e)}`)
+      }
+      return
+    }
+    setSheet({ kind: 'agent', projectId: pid, prompt: v.text })
+  }, [workspaceShown, focusedSession, current?.projectId, activeProjectId, projectsById, openTab, refresh])
+  const savedItems = useMemo<PaletteItem[]>(() => {
+    const scope = savedFor(saved.items, { dir: workspaceShown ? focusedSession?.cwd : undefined, projectId: current?.projectId ?? activeProjectId })
+    return scope.map((v) => ({
+      id: `saved-${v.id}`,
+      group: 'Saved' as const,
+      label: v.name,
+      detail: v.kind === 'command' ? `run: ${v.text}` : v.text.replace(/\s+/g, ' '),
+      icon: v.kind === 'command' ? <TerminalIcon size={14} /> : <ChatIcon size={14} />,
+      run: () => { void runSaved(v) },
+    }))
+  }, [saved.items, workspaceShown, focusedSession?.cwd, current?.projectId, activeProjectId, runSaved])
+  const manageSaved = useMemo<PaletteItem>(() => ({
+    id: 'a-saved-manage', group: 'Actions', label: 'Add or edit saved prompts and commands', detail: 'Settings', icon: <SettingsIcon size={14} />, run: () => openSettingsAt(SAVED_SECTION_ID),
+  }), [])
   const onPaneStatus = useCallback((sessionId: string, s: PaneStatus) => setPaneStatus((cur) => ({ ...cur, [sessionId]: s })), [])
   const onFocusPane = useCallback((tabId: string, paneId: string) => dispatch({ type: 'focus-pane', tabId, paneId }), [])
   const stopShells = useCallback((stop: readonly ClosingShell[]) => {
@@ -741,6 +833,9 @@ export function AppShell() {
       { id: 'a-share', group: 'Actions', label: 'Share my numbers', detail: 'a card of your figures: copy, save or post to X', icon: <SparkIcon size={14} />, run: () => setSheet({ kind: 'share' }) },
       ...SCREENS.map(([route, label, detail]) => ({ id: `a-screen-${route}`, group: 'Actions' as const, label, detail, icon: <DashboardIcon size={14} />, run: () => { location.hash = `#/${route}` } })),
       { id: 'a-waiting', group: 'Actions', label: 'Next session waiting on you', hint: keys('⌘J'), icon: <SparkIcon size={14} />, run: jumpToWaiting },
+      { id: 'a-saved', group: 'Actions', label: 'Run saved…', detail: 'a saved prompt or command', icon: <SparkIcon size={14} />, run: () => setSheet({ kind: 'saved' }) },
+      manageSaved,
+      ...savedItems,
     )
     // F20: the app's own updater; the answer shows in the status strip.
     if (isTauri()) items.push({ id: 'a-update', group: 'Actions', label: 'Check for updates', icon: <SparkIcon size={14} />, run: () => { void appUpdate.check() } })
@@ -761,6 +856,16 @@ export function AppShell() {
       const name = preferredName(editors)
       const folder = focusedSession?.cwd
       if (folder) items.push({ id: 'a-editor-cwd', group: 'Actions', label: `Open this folder in ${name}`, detail: folder, icon: <ExternalIcon size={14} />, run: () => openInEditor(folder, 'the folder') })
+    }
+    // Compare attempts (ADR-052): one row per group the session list holds.
+    const groups = new Map<string, SessionSummary[]>()
+    for (const x of data.sessions) {
+      if (!x.attempt_group || !x.attempts || x.attempts < 2) continue
+      groups.set(x.attempt_group, [...(groups.get(x.attempt_group) ?? []), x])
+    }
+    for (const [group, list] of groups) {
+      const first = [...list].sort((a, b) => (a.attempt ?? 0) - (b.attempt ?? 0))[0]!
+      items.push({ id: `cmp-${group}`, group: 'Actions', label: `Compare attempts: ${sessionTitle({ ...first, attempts: 0 })}`, detail: `${first.attempts} attempts${first.project ? ` · ${first.project}` : ''}`, icon: <BranchIcon size={14} />, run: () => onCompare(first) })
     }
     for (const t of ws.tabs) {
       const leaf = focusedLeaf(t)
@@ -798,7 +903,7 @@ export function AppShell() {
       }
     }
     return items
-  }, [ws.tabs, model.projects, model.inbox, sessionsById, projectsById, openSessions, prefs.inspector, current, onNewAgent, onNewShell, onQuickChat, onQuickChatChooser, onAddProject, onDashboard, toggleTheme, onSettings, run, showWorkspace, openSession, openSplit, onSelectProject, onOpenInbox, jumpToWaiting, splitShell, detach, editors, focusedSession?.cwd, openInEditor, source, onOpenChanges, fileScope, focused?.kind])
+  }, [data.sessions, onCompare, savedItems, manageSaved, ws.tabs, model.projects, model.inbox, sessionsById, projectsById, openSessions, prefs.inspector, current, onNewAgent, onNewShell, onQuickChat, onQuickChatChooser, onAddProject, onDashboard, toggleTheme, onSettings, run, showWorkspace, openSession, openSplit, onSelectProject, onOpenInbox, jumpToWaiting, splitShell, detach, editors, focusedSession?.cwd, openInEditor, source, onOpenChanges, fileScope, focused?.kind])
 
   // Every session the daemon knows, by what it was about; one that is open or
   // live is already in the list above under its own id.
@@ -997,6 +1102,28 @@ export function AppShell() {
                       className="absolute inset-0 z-20"
                     />
                   )}
+                  {compare && (
+                    <AttemptsCompare
+                      key={compare.group}
+                      group={compare.group}
+                      title={compare.title}
+                      dotFor={(id) => { const x = sessionsById.get(id); return x ? dotOf(x, data.permissions.has(id)) : undefined }}
+                      onClose={() => setCompare(null)}
+                      onOpen={(v) => {
+                        const at = placeOf(v.session_id)
+                        const s = sessionsById.get(v.session_id)
+                        if (s) openSession(s, at?.node.project.id ?? activeProjectId)
+                        else location.hash = `#/session/${encodeURIComponent(v.session_id)}`
+                      }}
+                      onReview={source === 'api' ? (v) => {
+                        const at = placeOf(v.session_id)
+                        if (!at) { setToast('Its copy is not in the sidebar any more.'); return }
+                        setCompare(null)
+                        onOpenChanges(at.node.project.id, at.w)
+                      } : undefined}
+                      className="absolute inset-0 z-20"
+                    />
+                  )}
                   {!current && (
                     <EmptyWorkspace
                       project={activeProject}
@@ -1051,6 +1178,7 @@ export function AppShell() {
                   onReviewChanges={focusedWorktree?.repo ? () => onOpenChanges(focusedWorktree.projectId, focusedWorktree.w) : undefined}
                   onOpenFile={focusedWorktree?.repo ? (p) => openFile(focusedWorktree.projectId, focusedWorktree.w.isMain ? '' : focusedWorktree.w.key, p) : undefined}
                   summary={data.summary}
+                  onCompare={focusedSession?.attempt_group ? () => onCompare(focusedSession) : undefined}
                 />
               </div>
             )}
@@ -1084,6 +1212,7 @@ export function AppShell() {
           onSetup={onSetupAgent}
           onProjectAdded={() => refresh()}
           onStarted={(id, projectId, title) => { sheet.onStarted?.(); openTab({ kind: 'session', sessionId: id }, projectId, title); data.refresh() }}
+          onAttempts={onAttempts}
         />
       )}
       {sheet?.kind === 'quick-chat' && (
@@ -1136,6 +1265,7 @@ export function AppShell() {
         />
       )}
       {sheet?.kind === 'palette' && <CommandPalette items={paletteItems} fallback={paletteFallback} search={paletteSearch} onClose={closeSheet} />}
+      {sheet?.kind === 'saved' && <CommandPalette label="Run saved" placeholder="Run a saved prompt or command…" items={[...savedItems, { ...manageSaved, group: 'Saved' }]} onClose={closeSheet} />}
     </div>
   )
 }

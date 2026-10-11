@@ -322,7 +322,7 @@ export function ChatView({ sessionId, canType, ended = false, className = '' }: 
       {showInput && (
         <div className="shrink-0">
           {sendError && <div role="alert" className="px-3 pt-1.5 text-[12px] text-danger">{sendError}</div>}
-          <TerminalKeys send={send} attach={attachPhotos} state={inputState} sessionId={sessionId} isPromptWaiting={isPromptWaiting} />
+          <TerminalKeys send={send} attach={attachPhotos} state={inputState} sessionId={sessionId} isPromptWaiting={isPromptWaiting} chips />
         </div>
       )}
     </div>

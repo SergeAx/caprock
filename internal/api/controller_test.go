@@ -41,7 +41,7 @@ var viewerMay = map[string]bool{
 	"GET /v1/window-stop": true, "GET /v1/live": true, "GET /v1/tasks": true, "GET /v1/tasks/{id}": true, "GET /v1/approvals": true,
 	"GET /v1/statusline/{id}": true, "GET /v1/pair/me": true, "GET /healthz": true,
 	"GET /v1/agents/{id}/permission": true,
-	"GET /v1/glance":                 true, "GET /v1/week": true, "GET /v1/tools/drill": true,
+	"GET /v1/glance":                 true, "GET /v1/week": true, "GET /v1/tools/drill": true, "GET /v1/saved-prompts": true, "GET /v1/attempts/{group}": true,
 	"GET /v1/projects": true, "GET /v1/projects/ops": true, "GET /v1/projects/{id}/worktrees": true,
 	"GET /v1/projects/{id}/changes": true, "GET /v1/projects/{id}/changes/diff": true,
 	"GET /v1/projects/{id}/file": true, "GET /v1/projects/{id}/files": true,

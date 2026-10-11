@@ -52,16 +52,27 @@ import { KeyChip } from './Sheet'
 const TIP = 'Report a bug, suggest an idea, or ask a question'
 
 /**
- * `header`: the labelled button in the dashboard's header. `icon`: a 26px
- * icon button for the app sidebar's bottom bar. `screen` names where the
+ * `header`: the labelled button in the dashboard's header. `row`: the
+ * labelled row in the app sidebar's bottom block. `icon`: a 26px icon button
+ * for that block when it is collapsed. `screen` names where the
  * report comes from; without it, the screen in front when the dialog opens.
  */
-export function FeedbackButton({ screen, variant = 'header' }: { screen?: string; variant?: 'header' | 'row' }) {
+export function FeedbackButton({ screen, variant = 'header' }: { screen?: string; variant?: 'header' | 'row' | 'icon' }) {
   const [open, setOpen] = useState<string | null>(null)
   const show = () => setOpen(screen ?? currentScreen(location.hash, isAppMode()))
   return (
     <>
-      {variant === 'row' ? (
+      {variant === 'icon' ? (
+        <button
+          type="button"
+          onClick={show}
+          title={TIP}
+          aria-label="Send feedback"
+          className="flex h-[26px] w-[26px] items-center justify-center rounded-[6px] text-fg-muted transition-colors hover:bg-[var(--app-row-hover)] hover:text-fg motion-reduce:transition-none"
+        >
+          <FeedbackIcon size={14} />
+        </button>
+      ) : variant === 'row' ? (
         <button
           type="button"
           onClick={show}
@@ -70,8 +81,8 @@ export function FeedbackButton({ screen, variant = 'header' }: { screen?: string
           className="app-row flex h-[28px] w-full items-center gap-2 rounded-[7px] px-2 text-left text-[12.5px] text-fg-muted hover:text-fg"
         >
           <FeedbackIcon size={14} />
-          <span className="flex-1">Send feedback</span>
-          <span className="text-[11px] text-fg-faint">bug, idea, question</span>
+          <span className="flex-1 whitespace-nowrap">Send feedback</span>
+          <span className="min-w-0 truncate text-[11px] text-fg-faint">bug, idea, question</span>
         </button>
       ) : (
         <button

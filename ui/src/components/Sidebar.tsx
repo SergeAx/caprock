@@ -43,10 +43,11 @@ import { keys } from '@/lib/appkeys'
 
 /** Project ids hidden by hand: this browser's. */
 export const HIDDEN_KEY = 'caprock.app.hidden-projects'
-/** Which of the folded groups are open. */
+/** Which of the folded groups are open, and `footer` when the bottom block is collapsed. */
 export const FOLDS_KEY = 'caprock.app.project-folds'
 
-type Fold = 'more' | 'hidden'
+/** `footer`: the bottom block (feedback, Dashboard, Settings) collapsed to one row of icons. */
+type Fold = 'more' | 'hidden' | 'footer'
 
 function loadIds(key: string): Set<string> {
   try {
@@ -329,12 +330,33 @@ export function Sidebar(props: SidebarProps) {
         )}
       </div>
 
+      {folds.has('footer') ? (
+        /* Collapsed (owner, 2026-10-11, translated: "can this block fold and
+         * unfold"): the same four actions as icons, plus the way back. */
+        <div className="flex shrink-0 items-center gap-1 border-t border-[var(--app-hairline)] px-2 py-1.5">
+          <FeedbackButton variant="icon" />
+          <IconButton label={`Dashboard (${keys('⇧⌘D')})`} onClick={props.onDashboard}>
+            <DashboardIcon size={15} />
+          </IconButton>
+          {props.onSettings && (
+            <IconButton label={`Settings: phone, Telegram (${keys('⌘,')})`} onClick={props.onSettings}>
+              <SettingsIcon size={15} />
+            </IconButton>
+          )}
+          <ThemeButton />
+          <span className="flex-1" />
+          <FooterToggle open={false} onToggle={() => toggleFold('footer')} />
+        </div>
+      ) : (
       <div className="grid shrink-0 gap-1.5 border-t border-[var(--app-hairline)] px-2 py-2">
         {/* Feedback on a labelled row of its own: on screen whatever tab is in
           * front, where the header's button is only on the dashboard. As a bare
           * icon beside Settings and the theme switch it read as a volume
           * control. */}
-        <FeedbackButton variant="row" />
+        <div className="flex items-center gap-1">
+          <div className="min-w-0 flex-1"><FeedbackButton variant="row" /></div>
+          <FooterToggle open onToggle={() => toggleFold('footer')} />
+        </div>
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -369,6 +391,7 @@ export function Sidebar(props: SidebarProps) {
           </div>
         )}
       </div>
+      )}
       {menuAt && menuNode && (
         <ProjectMenu
           at={menuAt}
@@ -498,6 +521,24 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
       className="flex h-[26px] w-[26px] items-center justify-center rounded-[6px] text-fg-muted transition-colors hover:bg-[var(--app-row-hover)] hover:text-fg motion-reduce:transition-none"
     >
       {children}
+    </button>
+  )
+}
+
+/** Folds the bottom block to one row of icons and back; remembered. */
+function FooterToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      title={open ? 'Collapse to icons' : 'Expand'}
+      aria-label={open ? 'Collapse to icons' : 'Expand'}
+      onClick={onToggle}
+      className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[6px] text-fg-faint transition-colors hover:bg-[var(--app-row-hover)] hover:text-fg motion-reduce:transition-none"
+    >
+      <span className={`flex transition-transform motion-reduce:transition-none ${open ? 'rotate-90' : '-rotate-90'}`} aria-hidden>
+        <ChevronIcon size={11} />
+      </span>
     </button>
   )
 }

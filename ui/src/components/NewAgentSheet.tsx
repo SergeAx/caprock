@@ -58,6 +58,7 @@ export function NewAgentSheet({
   cwd: initialCwd,
   prompt: initialPrompt = '',
   worktree: initialWorktree,
+  here = false,
   onClose,
   onSetup,
   onProjectAdded,
@@ -71,6 +72,8 @@ export function NewAgentSheet({
   prompt?: string
   /** A new worktree's name, proposed: the sheet opens on "New worktree…" with it filled in. */
   worktree?: string
+  /** Open on `cwd` itself — This folder when it is the project's root — rather than the way to start remembered from last time. */
+  here?: boolean
   onClose: () => void
   /** Opens a shell tab in `home` with an agent's install or sign-in typed, not run (ADR-046). */
   onSetup?: (command: string, home?: string) => void
@@ -100,7 +103,7 @@ export function NewAgentSheet({
   const worktrees = useMemo(() => (project?.worktrees ?? []).filter((w) => w.path !== project?.root), [project])
   // A new copy is remembered as the way to start: someone who starts every
   // agent from a fresh main should not pick it every time (owner, 2026-10-10).
-  const [where, setWhereRaw] = useState(initialWorktree ? NEW_WORKTREE : initialCwd && initialCwd !== project?.root ? initialCwd : readWhere())
+  const [where, setWhereRaw] = useState(initialWorktree ? NEW_WORKTREE : initialCwd && initialCwd !== project?.root ? initialCwd : here && initialCwd ? '' : readWhere())
   const setWhere = (v: string) => { setWhereRaw(v); writeWhere(v === NEW_WORKTREE ? NEW_WORKTREE : '') }
   const [branches, setBranches] = useState<BranchInfo[]>([])
   const [branchesLoading, setBranchesLoading] = useState(false)

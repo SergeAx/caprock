@@ -54,6 +54,8 @@ import { ChangesView } from '@/components/ChangesView'
 import { FileView } from '@/components/FileView'
 import { FilePicker } from '@/components/FilePicker'
 import { NewAgentSheet } from '@/components/NewAgentSheet'
+import type { HandoffTarget } from '@/components/AgentHandoff'
+import { liveOwnedSession } from '@/lib/handoff'
 import { CloseSettingsContext } from '@/lib/settingsClose'
 import { SetupShellContext } from '@/lib/setupShell'
 import { QuickChatSheet, quickChatRequest, rememberQuickChoice, rememberedQuickChoice, type QuickChoice } from '@/components/QuickChat'
@@ -124,7 +126,13 @@ export function changesTargetOf(node: ProjectNode, w?: WorktreeNode): ChangesTar
 }
 
 type SheetState =
-  | { kind: 'agent'; projectId?: string; cwd?: string; prompt?: string; worktree?: string }
+  | {
+      kind: 'agent'; projectId?: string; cwd?: string; prompt?: string; worktree?: string
+      /** Start in `cwd` itself (This folder for the main checkout), not the remembered choice. */
+      here?: boolean
+      /** Runs once the agent has started: a handed-off prompt was delivered. */
+      onStarted?: () => void
+    }
   | { kind: 'project' }
   | { kind: 'palette' }
   | { kind: 'keys' }
@@ -381,6 +389,29 @@ export function AppShell() {
     showWorkspace()
   }, [model.projects, source, showWorkspace])
   const closeSheet = useCallback(() => setSheet(null), [])
+
+  /**
+   * Where the Changes view's prompts go (components/AgentHandoff.tsx): the
+   * newest running session Caprock started in that worktree — the only kind
+   * it may type into (rule 7) — else New agent opened in the worktree with
+   * the prompt as its first message.
+   */
+  const changesHandoff = useMemo<HandoffTarget | undefined>(() => {
+    if (!changesView) return undefined
+    const node = model.projects.find((n) => n.project.id === changesView.projectId)
+    const wt = node?.worktrees.find((w) => (changesView.worktree ? !w.isMain && w.key === changesView.worktree : w.isMain))
+    if (!node || !wt) return undefined
+    const live = liveOwnedSession(wt.sessions.map((x) => x.session))
+    const projectId = node.project.id
+    return {
+      session: live ? { id: live.session_id, title: sessionTitle(live) } : undefined,
+      startAgent: (prompt, onStarted) => setSheet({ kind: 'agent', projectId, cwd: wt.path, here: true, prompt, onStarted }),
+      openSession: (id) => {
+        const s = wt.sessions.find((x) => x.session.session_id === id)?.session
+        if (s) openSession(s, projectId)
+      },
+    }
+  }, [changesView, model.projects, openSession])
   const onProjectAdded = useCallback((projectId: string, first?: { root: string; task: string }) => {
     refresh()
     dispatch({ type: 'project', projectId })
@@ -962,6 +993,7 @@ export function AppShell() {
                       sessionId={changesView.sessionId}
                       onClose={() => setChangesView(null)}
                       onOpenFile={(p) => openFile(changesView.projectId, changesView.worktree, p)}
+                      handoff={changesHandoff}
                       className="absolute inset-0 z-20"
                     />
                   )}
@@ -1047,10 +1079,11 @@ export function AppShell() {
           cwd={sheet.cwd}
           prompt={sheet.prompt}
           worktree={sheet.worktree}
+          here={sheet.here}
           onClose={() => setSheet(null)}
           onSetup={onSetupAgent}
           onProjectAdded={() => refresh()}
-          onStarted={(id, projectId, title) => { openTab({ kind: 'session', sessionId: id }, projectId, title); data.refresh() }}
+          onStarted={(id, projectId, title) => { sheet.onStarted?.(); openTab({ kind: 'session', sessionId: id }, projectId, title); data.refresh() }}
         />
       )}
       {sheet?.kind === 'quick-chat' && (

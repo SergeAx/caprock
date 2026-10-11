@@ -7,6 +7,11 @@
  * between files, s stages, u unstages, d discards (asks first), o opens
  * the file in a tab of its own (read-only), v switches the diff layout, c
  * writes the commit message, r reads git again, Esc closes. In the message box, ⌘↵ commits and ⇧⌘↵ commits and pushes.
+ *
+ * Review notes: a click on a line number of the diff starts a note on that
+ * line, a shift-click stretches it over a range; the notes are kept per
+ * worktree (lib/reviewNotes.ts) and sent to the agent as one prompt from the
+ * bar under the diff, or with ⇧⌘↵ outside a text box.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import {
@@ -14,6 +19,7 @@ import {
   entriesOf,
   failureOf,
   isLargePatch,
+  unifiedRows,
   type ChangeEntry,
   type ChangeFile,
   type DiscardPreview,
@@ -23,8 +29,14 @@ import {
 import { useChanges } from '@/lib/useChanges'
 import { BranchIcon, CloseIcon } from './AppIcons'
 import { CommitBox, OutcomeLine, RemoteActions, type CommitBoxHandle, type Outcome } from './CommitBox'
-import { DiffView, type DiffLayout } from './DiffView'
+import { DiffView, type DiffLayout, type DiffNotes } from './DiffView'
 import { GitHubStrip } from './PullRequest'
+import { clearNotes, notesKey, quoteOf, reviewPrompt, spanOf, useReviewNotes, type LineSpan, type NotesApi, type ReviewNote } from '@/lib/reviewNotes'
+import { useHandoff, type HandoffTarget } from './AgentHandoff'
+import { NotesBar } from './ReviewNotes'
+
+/** A note being written: where, its first click (a shift-click spans from it), and the note it edits. */
+type Draft = LineSpan & { path: string; anchor: number; id?: string; text: string }
 
 const LAYOUT_KEY = 'caprock.changes.layout'
 
@@ -50,10 +62,12 @@ export interface ChangesViewProps {
   onClose: () => void
   /** Opens a file of this worktree in a file tab (FileView). */
   onOpenFile?: (path: string) => void
+  /** Where review notes go: the running session Caprock started in this worktree, or a new agent here. */
+  handoff?: HandoffTarget
   className?: string
 }
 
-export function ChangesView({ target: given, title, sessionId, onClose, onOpenFile, className = '' }: ChangesViewProps) {
+export function ChangesView({ target: given, title, sessionId, onClose, onOpenFile, handoff, className = '' }: ChangesViewProps) {
   const target = useMemo<WorktreeRef>(() => ({ projectId: given.projectId, worktree: given.worktree }), [given.projectId, given.worktree])
   const { changes, error, loading, refresh, accept } = useChanges(target)
   const entries = useMemo(() => entriesOf(changes), [changes])
@@ -66,6 +80,16 @@ export function ChangesView({ target: given, title, sessionId, onClose, onOpenFi
   const list = useRef<HTMLDivElement>(null)
   const commitBox = useRef<CommitBoxHandle>(null)
   const lastIndex = useRef(0)
+  const nkey = notesKey(target.projectId, target.worktree)
+  const review = useReviewNotes(nkey)
+  const [draft, setDraft] = useState<Draft | null>(null)
+  const [focusNote, setFocusNote] = useState<{ id: string; n: number } | null>(null)
+  const hand = useHandoff(handoff, 'New agent with the notes…')
+  const sendNotes = () => {
+    if (review.notes.length === 0 || hand.busy) return
+    setDraft(null)
+    void hand.send(reviewPrompt(review.notes, title.split(' · ')[1]), () => clearNotes(nkey))
+  }
 
   useEffect(() => { try { localStorage.setItem(LAYOUT_KEY, layout) } catch { /* not kept */ } }, [layout])
   useEffect(() => { root.current?.focus() }, [])
@@ -75,6 +99,14 @@ export function ChangesView({ target: given, title, sessionId, onClose, onOpenFi
   const current = entries.find((e) => e.key === selected) ?? entries[Math.min(lastIndex.current, entries.length - 1)]
   const at = current ? entries.indexOf(current) : -1
   useEffect(() => { if (at >= 0) lastIndex.current = at }, [at])
+  // A note half written on one file is dropped when another is picked.
+  useEffect(() => { setDraft((d) => (d && d.path !== current?.file.path ? null : d)) }, [current?.file.path])
+
+  const jumpTo = (n: ReviewNote) => {
+    const e = entries.find((x) => x.file.path === n.path && x.area === 'unstaged') ?? entries.find((x) => x.file.path === n.path)
+    if (e) setSelected(e.key)
+    setFocusNote((f) => ({ id: n.id, n: (f?.n ?? 0) + 1 }))
+  }
   useEffect(() => {
     if (!current) return
     const sel = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(current.key) : current.key
@@ -127,6 +159,11 @@ export function ChangesView({ target: given, title, sessionId, onClose, onOpenFi
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const t = e.target as HTMLElement
+    if (e.key === 'Enter' && e.shiftKey && (e.metaKey || e.ctrlKey) && !t.matches('textarea, input, select') && review.notes.length > 0) {
+      e.preventDefault()
+      sendNotes()
+      return
+    }
     if (t.matches('textarea, input, select') || e.metaKey || e.ctrlKey || e.altKey) return
     if (discard) {
       if (e.key === 'Escape') { e.preventDefault(); setDiscard(null) }
@@ -233,12 +270,27 @@ export function ChangesView({ target: given, title, sessionId, onClose, onOpenFi
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           {current ? (
-            <FileDiff key={`${current.key}`} target={target} entry={current} token={changes?.token ?? ''} layout={layout} onLayout={setLayout} onChanges={accept} onError={(f) => setNotice({ ok: false, failure: f })} onOpenFile={current.file.status === 'deleted' ? undefined : onOpenFile} />
+            <FileDiff
+              key={`${current.key}`}
+              target={target}
+              entry={current}
+              token={changes?.token ?? ''}
+              layout={layout}
+              onLayout={setLayout}
+              onChanges={accept}
+              onError={(f) => setNotice({ ok: false, failure: f })}
+              onOpenFile={current.file.status === 'deleted' ? undefined : onOpenFile}
+              review={review}
+              draft={draft?.path === current.file.path ? draft : null}
+              setDraft={setDraft}
+              focusNote={focusNote}
+            />
           ) : (
             <div className="flex flex-1 items-center justify-center px-8 text-[12.5px] text-fg-faint">
               {loading ? 'Reading…' : changes && entries.length === 0 ? 'The working tree is clean.' : 'Pick a file to see its diff.'}
             </div>
           )}
+          <NotesBar notes={review.notes} handoff={hand} target={handoff} onSend={sendNotes} onClear={review.clear} onJump={jumpTo} onRemove={review.remove} />
         </div>
       </div>
     </div>
@@ -362,7 +414,7 @@ function DiscardConfirm({ d, busy, onKeep, onDiscard }: { d: { preview: DiscardP
 }
 
 /** The selected file's diff, read again whenever the worktree's status moves. */
-function FileDiff({ target, entry, token, layout, onLayout, onChanges, onError, onOpenFile }: {
+function FileDiff({ target, entry, token, layout, onLayout, onChanges, onError, onOpenFile, review, draft, setDraft, focusNote }: {
   target: WorktreeRef
   entry: ChangeEntry
   token: string
@@ -371,6 +423,10 @@ function FileDiff({ target, entry, token, layout, onLayout, onChanges, onError, 
   onChanges: (c: NonNullable<ReturnType<typeof useChanges>['changes']>) => void
   onError: (f: ReturnType<typeof failureOf>) => void
   onOpenFile?: (path: string) => void
+  review: NotesApi
+  draft: Draft | null
+  setDraft: (d: Draft | null | ((d: Draft | null) => Draft | null)) => void
+  focusNote: { id: string; n: number } | null
 }) {
   const [patch, setPatch] = useState<FilePatch | null>(null)
   const [err, setErr] = useState('')
@@ -397,6 +453,34 @@ function FileDiff({ target, entry, token, layout, onLayout, onChanges, onError, 
       .finally(() => setBusy(false))
   }, [patch, path, staged, target, onChanges, onError])
 
+  const fileNotes = useMemo(() => review.notes.filter((n) => n.path === path), [review.notes, path])
+  const diffNotes = useMemo<DiffNotes | undefined>(() => {
+    if (!patch || patch.binary || patch.too_large) return undefined
+    const { add, update, remove } = review
+    return {
+      notes: fileNotes,
+      draft,
+      focus: focusNote ?? undefined,
+      onLine: (side, n, extend) => setDraft((d) => (
+        extend && d && d.side === side
+          ? { ...d, ...spanOf(side, d.anchor, n) }
+          : { path, side, start: n, end: n, anchor: n, text: d && !d.id ? d.text : '' }
+      )),
+      onEdit: (note) => setDraft({ path, side: note.side, start: note.start, end: note.end, anchor: note.start, id: note.id, text: note.text }),
+      onRemove: remove,
+      onDraftText: (text) => setDraft((d) => (d ? { ...d, text } : d)),
+      onSave: () => {
+        if (!draft || !draft.text.trim()) return
+        const span = { side: draft.side, start: draft.start, end: draft.end }
+        const quote = quoteOf(unifiedRows(patch.patch), span)
+        if (draft.id) update(draft.id, { ...span, quote, text: draft.text.trim() })
+        else add({ path, ...span, quote, text: draft.text.trim() })
+        setDraft(null)
+      },
+      onCancel: () => setDraft(null),
+    }
+  }, [patch, review, fileNotes, draft, focusNote, path, setDraft])
+
   const f = entry.file
   const large = patch ? isLargePatch(patch) : false
   const canHunk = !!patch && f.status === 'modified' && entry.area !== 'conflicted' && !patch.binary && !patch.truncated
@@ -413,7 +497,8 @@ function FileDiff({ target, entry, token, layout, onLayout, onChanges, onError, 
           </span>
         )}
         <span className="shrink-0 text-[11px] text-fg-faint">{staged ? 'staged' : entry.area === 'conflicted' ? 'in conflict' : f.status === 'untracked' ? 'new file' : 'not staged'}</span>
-        <div className="ml-auto flex shrink-0 items-center rounded-[7px] border border-[var(--app-hairline-strong)] p-0.5" role="group" aria-label="Diff layout (v)">
+        {diffNotes && <span className="ml-auto hidden min-w-0 shrink-[4] truncate text-[11px] text-fg-faint lg:inline">Click a line number to add a note</span>}
+        <div className={`${diffNotes ? 'lg:ml-0 ml-auto' : 'ml-auto'} flex shrink-0 items-center rounded-[7px] border border-[var(--app-hairline-strong)] p-0.5`} role="group" aria-label="Diff layout (v)">
           {(['unified', 'split'] as const).map((l) => (
             <button
               key={l}
@@ -452,6 +537,7 @@ function FileDiff({ target, entry, token, layout, onLayout, onChanges, onError, 
                 layout={layout}
                 resetKey={`${entry.key}`}
                 hunkAction={canHunk ? { label: staged ? 'Unstage hunk' : 'Stage hunk', run: hunk, busy } : undefined}
+                notes={diffNotes}
               />
             </div>
           </div>

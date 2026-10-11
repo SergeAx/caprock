@@ -73,6 +73,17 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-11 — unreleased: review notes on the diff
+
+Changes view: a note on a line or range of the diff, kept per worktree in
+localStorage, sent to the agent as one prompt (`ReviewNotes.tsx`,
+`lib/reviewNotes.ts`, `AgentHandoff.tsx`, `lib/handoff.ts`). It types only
+into a running session Caprock started in that worktree, and not while a
+permission prompt waits; otherwise New agent opens there with the prompt.
+No API change. Verified on a preview stand with the fake claude: notes in
+both layouts and both themes, the prompt arriving in the session's terminal,
+and a new agent started in the worktree with it as the first message.
+
 ### 2026-10-11 — 0.101.3: hide a project in one click, Outside projects
 
 A project hides in one click from its hover actions, and Hidden now wins

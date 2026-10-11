@@ -372,6 +372,9 @@ func promptBytes(text string) string {
 // (hookd.Handler.AfterMain).
 func (q *msgQueue) afterMain(ev *event.Event, continued bool) {
 	id := ev.SessionID
+	if _, ok := q.owned(id); !ok {
+		return // not Caprock's, or gone: nothing here types into it (its exit clears the rest)
+	}
 	q.mu.Lock()
 	delete(q.typed, id)
 	if ev.Kind == event.KindAgentStop {

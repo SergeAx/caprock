@@ -218,9 +218,10 @@ function DeckBody({ s, sessionId, hasPermission, summary, changed, onReviewChang
         right={windowEvents(pulse) > 0 ? <span className="num" title={`What this session spent in the last ${minutes} minutes`}>{fmtUSD(windowCost(pulse))}</span> : <span>one bar per minute</span>}
         grow
       >
-        <div className="min-h-[22px] flex-1">
-          <PulseCanvas pulse={pulse} now={minute} sessionID={sessionId} fill />
-        </div>
+        {/* As tall as the figures beside it, not the whole deck: the bars
+            are one cell among several (owner, 2026-10-11: the big chart
+            distracts). */}
+        <PulseCanvas pulse={pulse} now={minute} sessionID={sessionId} />
       </Cell>
       <div className="flex shrink-0 items-start pr-1.5 pt-1.5">
         <button

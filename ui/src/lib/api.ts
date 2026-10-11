@@ -1411,6 +1411,18 @@ export const api = {
    */
   paste: (file: { name: string; type: string; data: string }) => post<{ path: string }>('/v1/paste', file),
   agentInput: (id: string, data: string) => post<void>(`/v1/agents/${encodeURIComponent(id)}/input`, { data }),
+  /** The messages waiting for an owned session's turn to end, and why (ADR-053). */
+  queue: (id: string) => get<QueueView>(`/v1/agents/${encodeURIComponent(id)}/queue`),
+  /** The chat field's send: typed in now at the prompt, otherwise queued. */
+  queueSend: (id: string, text: string) => post<QueueSendResult>(`/v1/agents/${encodeURIComponent(id)}/queue`, { text }),
+  queueEdit: (id: string, qid: number, text: string) => post<QueueView>(`/v1/agents/${encodeURIComponent(id)}/queue/${qid}`, { text }, 'PATCH'),
+  queueCancel: (id: string, qid: number) => post<QueueView>(`/v1/agents/${encodeURIComponent(id)}/queue/${qid}`, {}, 'DELETE'),
+  /** Type one in now, whatever the turn is doing; 409 while a prompt is on the screen. */
+  queueSendNow: (id: string, qid: number) => post<QueueView>(`/v1/agents/${encodeURIComponent(id)}/queue/${qid}/send`, {}),
+  /** The `/` picker: the session's slash commands. */
+  sessionCommands: (id: string) => get<{ agent: string; commands: SlashCommand[] }>(`/v1/sessions/${encodeURIComponent(id)}/commands`),
+  /** The `@` picker: the files in the session's working directory. */
+  sessionFiles: (id: string) => get<{ files: string[]; truncated?: boolean }>(`/v1/sessions/${encodeURIComponent(id)}/files`),
   /** The permission prompt an owned session is waiting on, or null (ADR-035). */
   permission: (id: string) => get<{ permission: Permission | null }>(`/v1/agents/${encodeURIComponent(id)}/permission`),
   /** Answer it: the daemon presses the key, while `promptId` is still the one waiting (409 otherwise). */
@@ -1466,6 +1478,38 @@ export interface SubagentsNow {
   recent?: SubagentDone[]
   /** What every subagent of the session has cost; absent when any is unknown. */
   cost_usd?: number
+}
+
+/** One message waiting for a session's turn to end (ADR-053). */
+export interface QueuedMessage {
+  id: number
+  session_id: string
+  text: string
+  created_at: number
+  updated_at: number
+}
+
+/** What holds a queued message: the turn, a permission prompt, a question; '' nothing. */
+export type QueueWaiting = '' | 'turn' | 'permission' | 'question'
+
+export interface QueueView {
+  session_id: string
+  messages: QueuedMessage[] | null
+  waiting: QueueWaiting
+}
+
+export interface QueueSendResult {
+  sent: boolean
+  queued?: QueuedMessage
+  queue: QueueView
+}
+
+/** One entry of the chat field's `/` picker. */
+export interface SlashCommand {
+  name: string
+  description?: string
+  hint?: string
+  source: 'builtin' | 'project' | 'user' | 'project skill' | 'user skill'
 }
 
 /** A permission prompt an owned Claude Code session is showing (ADR-035). */

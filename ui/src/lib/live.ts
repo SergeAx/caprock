@@ -7,7 +7,7 @@
 // a ping every 10 s, and 25 s of silence means the socket is dead.
 // Retries follow lib/reconnect.ts, the policy every socket shares (WP-13).
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import type { Event, LoopAlert, Permission, Session, Stats, TaskFrame } from './api'
+import type { Event, LoopAlert, Permission, QueueView, Session, Stats, TaskFrame } from './api'
 import { deviceToken } from './api'
 import type { OpFrame, ProjectFrame } from './projects'
 import type { GitHubFrame } from './github'
@@ -41,6 +41,8 @@ export type Frame = (
   | { type: 'task'; data: TaskFrame }
   | { type: 'stats'; data: unknown }
   | { type: 'permission'; data: { session_id: string; permission: Permission | null } }
+  // An owned session's message queue after any change (ADR-053).
+  | { type: 'queue'; data: QueueView }
   // The app's projects (.ai/21-app.md § Projects): git state, and long operations.
   | { type: 'project'; data: ProjectFrame }
   | { type: 'op'; data: OpFrame }

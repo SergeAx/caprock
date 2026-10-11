@@ -73,6 +73,30 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-11 — unreleased: queued messages and the `/` and `@` pickers
+
+The chat field's two Orca gaps, phone first ([ADR-053](08-decisions.md)).
+Send goes to `POST /v1/agents/{id}/queue`: typed in at once at the prompt,
+otherwise held in `queued_messages` (migration 0047) and typed in after the
+session's own `Stop` hook (main thread, not continued by the Stop-loop,
+700 ms settle, state read again), one per turn, never into a permission
+prompt or a question; Edit, Cancel and Send now on each bubble; a `queue`
+frame on every change; cleared when the process exits. Only Claude Code
+with hooks recording says when a turn ends, so other agents are typed into
+at once. `hookd.Handler.AfterMain` is the new hook-in. Pickers:
+`GET /v1/sessions/{id}/commands` (`internal/slashcmd`: built-ins, the
+folder's, repository root's and `~/.claude`'s commands and skills; Codex
+prompts) and `GET /v1/sessions/{id}/files` (`projects.ListDirFiles`).
+Verified on a preview stand (fake claude, turns driven through
+`/v1/hook`) at 1400×900 and 390×844 in both themes: the `/` and `@` lists,
+keyboard and tap picks, two messages queued mid-turn, the first in the
+terminal only after `Stop` and the second only after the next one, a
+permission prompt holding the queue with Send now refused (409), and the
+queue dropped when the session was killed. Not built: reordering the
+queue, delivery after a turn interrupted with Esc (no hook says so; Send
+now covers it), the queue for the terminal's own keys bar (it answers
+what is on the screen), and commands of plugins.
+
 ### 2026-10-11 — 0.103.0: start from GitHub, lighter terminals
 
 New agent starts from a GitHub issue or pull request (picker, branch

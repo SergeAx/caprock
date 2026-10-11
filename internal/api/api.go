@@ -130,6 +130,9 @@ type Deps struct {
 	AskGemini func(ctx context.Context, model, prompt string) (any, error)
 	// Agents is the Phase 1 owned-session manager (nil ⇒ endpoints return 501).
 	Agents AgentController
+	// Queue holds what the chat field sends while a turn runs (ADR-053).
+	// nil ⇒ /v1/agents/{id}/queue returns 501.
+	Queue Queuer
 	// Catalog answers the agent pickers and keeps the custom agents
 	// (ADR-046). nil ⇒ /v1/agents/catalog and /v1/agents/custom return 501.
 	Catalog AgentCatalog
@@ -515,6 +518,13 @@ func New(d Deps) *Server {
 	m.HandleFunc("PATCH /v1/subscriptions/{id}", s.handleRenameSubscription)
 	m.HandleFunc("DELETE /v1/subscriptions/{id}", s.handleRemoveSubscription)
 	m.HandleFunc("POST /v1/agents/{id}/input", s.handleAgentInput)
+	m.HandleFunc("GET /v1/agents/{id}/queue", s.handleQueue)
+	m.HandleFunc("POST /v1/agents/{id}/queue", s.handleQueueSend)
+	m.HandleFunc("PATCH /v1/agents/{id}/queue/{qid}", s.handleQueueEdit)
+	m.HandleFunc("DELETE /v1/agents/{id}/queue/{qid}", s.handleQueueCancel)
+	m.HandleFunc("POST /v1/agents/{id}/queue/{qid}/send", s.handleQueueSendNow)
+	m.HandleFunc("GET /v1/sessions/{id}/commands", s.handleSessionCommands)
+	m.HandleFunc("GET /v1/sessions/{id}/files", s.handleSessionFiles)
 	m.HandleFunc("POST /v1/agents/{id}/signal", s.handleAgentSignal)
 	m.HandleFunc("GET /v1/agents/{id}/permission", s.handlePermission)
 	m.HandleFunc("POST /v1/agents/{id}/permission", s.handleAnswerPermission)

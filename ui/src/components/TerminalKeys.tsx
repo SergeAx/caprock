@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { TermState } from '@/lib/termv2'
 import { useSavedPromptsFor } from '@/lib/saved'
+import { ChatPickerList, useChatPicker } from './ChatPicker'
 
 /** A newline inside the prompt: ESC CR, what a terminal sends for Alt+Enter
  *  (see Terminal.tsx — a bare line feed submits once text is typed). */
@@ -28,6 +29,11 @@ interface Held {
   text: string
   /** Set once it was not sent on reconnect: why, and it waits for Send now. */
   draft?: string
+}
+
+/** A message ending in an @file mention, with a space after it (see deliver). */
+export function endMention(message: string): string {
+  return /(^|\s)@\S+$/.test(message) ? `${message} ` : message
 }
 
 /** How long a "not sent" notice for a raw key stays up. */
@@ -65,7 +71,7 @@ function saveHeld(sessionId: string | undefined, held: readonly Held[]): void {
  * keys are buttons, and the text goes in a field big enough to read what is
  * being sent before sending it, rather than letter by letter into a canvas.
  */
-export function TerminalKeys({ send, attach, initial = '', state, isPromptWaiting, sessionId, chips = false }: {
+export function TerminalKeys({ send, attach, initial = '', state, isPromptWaiting, sessionId, chips = false, submitText, pickers = false }: {
   send: (bytes: string) => void
   /** Attaches photos; the paths it returns, if any, go into the field (the chat). */
   attach?: (files: File[]) => Promise<void | readonly string[]>
@@ -78,6 +84,11 @@ export function TerminalKeys({ send, attach, initial = '', state, isPromptWaitin
   sessionId?: string
   /** Show the saved prompts for this session as chips above the field (ADR-051). */
   chips?: boolean
+  /** Sends a message instead of typing it here: the chat's queue (ADR-053).
+   *  False when it was not sent; the text goes back into an empty field. */
+  submitText?: (text: string) => Promise<boolean>
+  /** The `/` and `@` pickers over the field (ADR-053); needs sessionId. */
+  pickers?: boolean
 }) {
   const [text, setText] = useState(initial)
   const live = state === undefined || state === 'live'
@@ -144,6 +155,24 @@ export function TerminalKeys({ send, attach, initial = '', state, isPromptWaitin
   }, [initial])
   const picker = useRef<HTMLInputElement>(null)
 
+  // The `/` and `@` pickers. A pick sets the text; the caret goes after
+  // what was inserted once the field has it.
+  const caretAfter = useRef<number | null>(null)
+  const chooser = useChatPicker(sessionId, pickers, (t, caret) => {
+    caretAfter.current = caret
+    setText(t)
+  })
+  useLayoutEffect(() => {
+    const el = field.current
+    const at = caretAfter.current
+    if (!el || at === null) return
+    caretAfter.current = null
+    el.focus()
+    el.setSelectionRange(at, at)
+  }, [text])
+  const trackCaret = (el: HTMLTextAreaElement) => chooser.track(el.value, el.selectionStart ?? el.value.length)
+  const listId = `chat-picker-${sessionId ?? 'field'}`
+
   // The picked photos' paths are typed into the session, as a drop's are;
   // what to say about them goes in the field and is sent after. Where attach
   // returns the paths instead (the chat), they go into the field, quoted.
@@ -163,11 +192,20 @@ export function TerminalKeys({ send, attach, initial = '', state, isPromptWaitin
     }
   }
 
-  // The text, then Enter on its own after a pause.
-  const deliver = (message: string) => new Promise<void>((resolve) => {
-    send(message.replace(/\r?\n/g, NEWLINE))
-    window.setTimeout(() => { send('\r'); resolve() }, SUBMIT_DELAY_MS)
-  })
+  // The text, then Enter on its own after a pause. A message ending in an
+  // @file mention gets a space first: Claude Code's file menu is open after
+  // it, and Enter would pick from the menu rather than send.
+  const deliver = (message: string): Promise<void> => {
+    if (submitText) {
+      return submitText(message).then((ok) => {
+        if (!ok) setText((t) => (t ? t : message))
+      })
+    }
+    return new Promise<void>((resolve) => {
+      send(endMention(message).replace(/\r?\n/g, NEWLINE))
+      window.setTimeout(() => { send('\r'); resolve() }, SUBMIT_DELAY_MS)
+    })
+  }
 
   const sendKey = (bytes: string, label: string) => {
     if (live) { send(bytes); return }
@@ -184,6 +222,7 @@ export function TerminalKeys({ send, attach, initial = '', state, isPromptWaitin
       sendKey('\r', 'Enter')
     }
     setText('')
+    chooser.track('', 0)
     field.current?.focus()
   }
 
@@ -244,24 +283,33 @@ export function TerminalKeys({ send, attach, initial = '', state, isPromptWaitin
       )}
       {/* The field on a row of its own, full width: beside Photo and Send it
         * was a third of a 320px screen. */}
-      <div className="grid gap-2">
+      <div className="relative grid gap-2">
         {/* 16px: iOS zooms the page into any field set smaller, and the
           * terminal above would be cut off when it did. Inline, because
           * .input's own 12px outranked the text-[16px] utility; the padding
           * likewise, and it makes one line a 44px target. */}
+        {pickers && <ChatPickerList p={chooser} listId={listId} />}
         <textarea
           ref={field}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => { setText(e.target.value); trackCaret(e.target) }}
+          onSelect={(e) => trackCaret(e.currentTarget)}
           onKeyDown={(e) => {
+            if (chooser.onKeyDown(e)) return
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
               submit()
             }
           }}
           rows={1}
-          placeholder="Type to the session…"
+          placeholder={pickers ? 'Type · / commands · @ files' : 'Type to the session…'}
           aria-label="Type to the session"
+          {...(pickers ? {
+            'aria-autocomplete': 'list' as const,
+            'aria-expanded': chooser.open,
+            'aria-controls': listId,
+            'aria-activedescendant': chooser.open && chooser.rows.length > 0 ? `${listId}-${chooser.active}` : undefined,
+          } : {})}
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}

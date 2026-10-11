@@ -18,12 +18,14 @@
  *   bottom, next to the field, as in a messenger.
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, errText, type Event } from '@/lib/api'
+import { api, errText, type Event, type QueueView } from '@/lib/api'
 import { downscalePhoto } from '@/lib/downscale'
 import { compareEvents, isMessageEvent, mergeEvents, toMessages, toolInputText, type ChatMessage } from '@/lib/chat'
 import { live, useLiveConn, useLiveLink } from '@/lib/live'
 import type { TermState } from '@/lib/termv2'
 import { useStickToBottom } from '@/lib/useStickToBottom'
+import { useQueue } from '@/lib/queue'
+import { QueuedList } from './QueuedList'
 import { NewPill } from './NewPill'
 import { Prose } from './Prose'
 import { TerminalKeys } from './TerminalKeys'
@@ -254,10 +256,40 @@ export function ChatView({ sessionId, canType, ended = false, className = '' }: 
   // HTTP, and the live socket is what says the daemon is reachable now.
   const link = useLiveLink()
   const inputState: TermState = ended ? 'ended' : link.phase
-  const isPromptWaiting = useCallback(
-    () => api.permission(sessionId).then((r) => r.permission !== null),
-    [sessionId],
-  )
+
+  // The message queue (ADR-053): a message sent while the agent works is held
+  // by the daemon and typed in when the turn ends. The daemon decides — it is
+  // the one that sees the turn end — so what is sent goes to it, and a
+  // message held while offline reaches it on reconnect the same way.
+  const msgQueue = useQueue(sessionId, canType)
+  const applyQueue = msgQueue.apply
+  const jumpToEnd = stick.jump
+  const submitText = useCallback(async (text: string): Promise<boolean> => {
+    try {
+      const r = await api.queueSend(sessionId, text)
+      applyQueue(r.queue)
+      setSendError('')
+      // What you just sent is at the bottom, as in a messenger: a queued
+      // bubble lands there while the field shrinks back to one line, and the
+      // two moving at once could leave the view a few pixels off the edge.
+      nextFrame(jumpToEnd)
+      return true
+    } catch (e) {
+      setSendError(`Not sent: ${errText(e)}`)
+      return false
+    }
+  }, [sessionId, applyQueue, jumpToEnd])
+  const [queueError, setQueueError] = useState('')
+  const queueAct = useCallback(async (act: () => Promise<QueueView>): Promise<boolean> => {
+    try {
+      applyQueue(await act())
+      setQueueError('')
+      return true
+    } catch (e) {
+      setQueueError(errText(e))
+      return false
+    }
+  }, [applyQueue])
   // Typed while it was live, then it ended: the field stays, so what waited
   // to be sent shows as a draft rather than vanishing with it.
   const [typable, setTypable] = useState(canType)
@@ -314,6 +346,16 @@ export function ChatView({ sessionId, canType, ended = false, className = '' }: 
             </div>
           </div>
           {shown.map((m) => <Message key={m.id} m={m} />)}
+          {showInput && msgQueue.messages.length > 0 && (
+            <QueuedList
+              messages={msgQueue.messages}
+              waiting={msgQueue.waiting}
+              error={queueError}
+              onEdit={(m, text) => queueAct(() => api.queueEdit(sessionId, m.id, text))}
+              onCancel={(m) => queueAct(() => api.queueCancel(sessionId, m.id))}
+              onSendNow={(m) => queueAct(() => api.queueSendNow(sessionId, m.id))}
+            />
+          )}
         </div>
         <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center">
           <NewPill count={stick.newCount} onJump={stick.jump} />
@@ -322,7 +364,7 @@ export function ChatView({ sessionId, canType, ended = false, className = '' }: 
       {showInput && (
         <div className="shrink-0">
           {sendError && <div role="alert" className="px-3 pt-1.5 text-[12px] text-danger">{sendError}</div>}
-          <TerminalKeys send={send} attach={attachPhotos} state={inputState} sessionId={sessionId} isPromptWaiting={isPromptWaiting} chips />
+          <TerminalKeys send={send} attach={attachPhotos} state={inputState} sessionId={sessionId} submitText={submitText} chips pickers />
         </div>
       )}
     </div>

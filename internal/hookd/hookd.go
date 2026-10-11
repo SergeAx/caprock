@@ -209,6 +209,17 @@ type Handler struct {
 	// permission prompt is stored before the hook is answered, so a crash
 	// cannot lose it (ADR-035) — and must not otherwise block.
 	Observe func(p Payload)
+	// AfterMain sees every main-thread event once it is recorded, with
+	// continued set on a Stop that the Decide reply turned back into a
+	// running turn. The message queue (ADR-053) reads a turn's end from it.
+	// It must not block: the shim is waiting for this answer.
+	AfterMain func(ev *event.Event, continued bool)
+}
+
+func (h *Handler) afterMain(ev *event.Event, continued bool) {
+	if h.AfterMain != nil && ev.AgentID == "" {
+		h.AfterMain(ev, continued)
+	}
 }
 
 // ServeHTTP implements the contract: bearer-token gated, 204 on success,
@@ -303,6 +314,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var p Payload
 		_ = json.Unmarshal(body, &p)
 		if reply := h.Handoff(r.Context(), p); len(reply) > 0 {
+			h.afterMain(ev, false)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write(reply)
@@ -313,12 +325,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var p Payload
 		_ = json.Unmarshal(body, &p)
 		if reply := h.Decide(r.Context(), p); len(reply) > 0 {
+			// The turn goes on: the task runner told the session to continue.
+			h.afterMain(ev, true)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write(reply)
 			return
 		}
 	}
+	h.afterMain(ev, false)
 	w.WriteHeader(http.StatusNoContent)
 }
 

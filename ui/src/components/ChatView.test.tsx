@@ -13,8 +13,13 @@ import type { Event } from '@/lib/api'
 import { live } from '@/lib/live'
 import type { LinkPhase } from '@/lib/reconnect'
 import { ChatView, CHAT_GAP_PAGES, CHAT_PAGE_EVENTS, CHAT_WINDOW } from './ChatView'
+import { resetPickerCache } from './ChatPicker'
 
-const store = vi.hoisted(() => ({ events: [] as Event[], inputs: [] as string[], before: 0, prompt: false }))
+const store = vi.hoisted(() => ({
+  events: [] as Event[], inputs: [] as string[], before: 0, prompt: false, busy: false,
+  queued: [] as { id: number; session_id: string; text: string; created_at: number; updated_at: number }[],
+  calls: [] as string[],
+}))
 
 vi.mock('@/lib/api', async (orig) => {
   const actual = await orig<typeof import('@/lib/api')>()
@@ -33,9 +38,48 @@ vi.mock('@/lib/api', async (orig) => {
       agentInput: async (_id: string, data: string) => { store.inputs.push(data) },
       permission: async () => ({ permission: store.prompt ? { id: 'p', tool: 'Bash', detail: 'ls', since: '' } : null }),
       paste: async (f: { name: string }) => ({ path: `/data/paste/${f.name}` }),
+      // The daemon's queue (ADR-053): typed at once at the prompt, held mid-turn
+      // or while a prompt waits.
+      queue: async (id: string) => view(id),
+      queueSend: async (id: string, text: string) => {
+        if (!store.busy && !store.prompt && store.queued.length === 0) {
+          store.inputs.push(text, '\r')
+          return { sent: true, queue: view(id) }
+        }
+        const m = { id: store.queued.length + 100, session_id: id, text, created_at: 0, updated_at: 0 }
+        store.queued.push(m)
+        return { sent: false, queued: m, queue: view(id) }
+      },
+      queueEdit: async (id: string, qid: number, text: string) => {
+        store.calls.push(`edit ${qid} ${text}`)
+        store.queued = store.queued.map((m) => (m.id === qid ? { ...m, text } : m))
+        return view(id)
+      },
+      queueCancel: async (id: string, qid: number) => {
+        store.calls.push(`cancel ${qid}`)
+        store.queued = store.queued.filter((m) => m.id !== qid)
+        return view(id)
+      },
+      queueSendNow: async (id: string, qid: number) => {
+        store.calls.push(`now ${qid}`)
+        const m = store.queued.find((x) => x.id === qid)
+        store.queued = store.queued.filter((x) => x.id !== qid)
+        if (m) store.inputs.push(m.text, '\r')
+        return view(id)
+      },
+      sessionCommands: async () => ({ agent: 'claude', commands: [
+        { name: 'clear', description: 'Clear the conversation', source: 'builtin' },
+        { name: 'compact', description: 'Compact the conversation', source: 'builtin' },
+        { name: 'ship', description: 'Ship it', source: 'project' },
+      ] }),
+      sessionFiles: async () => ({ files: ['README.md', 'src/main.go', 'src/queue.go', 'ui/src/App.tsx'] }),
     },
   }
 })
+
+function view(id: string) {
+  return { session_id: id, messages: store.queued.slice(), waiting: store.prompt ? 'permission' : store.busy ? 'turn' : '' }
+}
 
 const BASE = Date.UTC(2026, 9, 5, 12, 0, 0)
 const ROW = 20
@@ -75,6 +119,10 @@ beforeEach(() => {
   store.inputs = []
   store.before = 0
   store.prompt = false
+  store.busy = false
+  store.queued = []
+  store.calls = []
+  resetPickerCache()
   sessionStorage.clear()
   setPhase('live')
   Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get(this: Element) { return isLog(this) ? VIEW : 0 } })
@@ -309,15 +357,84 @@ describe('ChatView', () => {
     expect(store.inputs).toEqual([])
   })
 
-  it('back with a permission prompt waiting, the held message stays a draft', async () => {
+  it('back with a permission prompt waiting, the held message goes to the queue, never into the prompt', async () => {
     store.prompt = true
     render(<ChatView sessionId="s" canType />)
     setPhase('reconnecting')
     fireEvent.change(screen.getByLabelText('Type to the session'), { target: { value: 'yes do it' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     act(() => { live.handle({ type: 'hello', data: { server_time: Date.now() } }) })
-    expect(await screen.findByText('Not sent — a permission prompt is waiting')).toBeInTheDocument()
+    expect(await screen.findByText(/a permission prompt is waiting; answer it first/)).toBeInTheDocument()
+    expect(screen.getByText('yes do it')).toBeInTheDocument()
+    // Send now is not offered while the prompt is on the screen.
+    expect(screen.queryByRole('button', { name: 'Send now' })).toBeNull()
     expect(store.inputs).toEqual([])
+  })
+
+  it('mid-turn, a message is queued as a bubble; edit, cancel and send now reach the daemon', async () => {
+    store.busy = true
+    render(<ChatView sessionId="s" canType />)
+    const field = screen.getByLabelText('Type to the session')
+    for (const text of ['first', 'second']) {
+      fireEvent.change(field, { target: { value: text } })
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+      await screen.findByText(text)
+    }
+    expect(store.inputs).toEqual([])
+    expect(screen.getByText('Queued — sends when the agent finishes this turn')).toBeInTheDocument()
+    expect(screen.getByText('Queued · 1 of 2')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit the queued message: first' }))
+    fireEvent.change(screen.getByLabelText('Edit the queued message'), { target: { value: 'first, better' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await screen.findByText('first, better')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel the queued message: second' }))
+    await waitFor(() => expect(screen.queryByText('second')).toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: 'Send now' }))
+    await waitFor(() => expect(store.inputs).toEqual(['first, better', '\r']))
+    expect(store.calls).toEqual(['edit 100 first, better', 'cancel 101', 'now 100'])
+    await waitFor(() => expect(screen.queryByText(/^Queued/)).toBeNull())
+  })
+
+  it('the queue follows the live socket: a frame from the other device redraws it', async () => {
+    render(<ChatView sessionId="s" canType />)
+    // The first read of the queue lands first; the frames come after it.
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)) })
+    act(() => {
+      live.handle({ type: 'queue', data: { session_id: 's', waiting: 'turn', messages: [{ id: 7, session_id: 's', text: 'from the phone', created_at: 0, updated_at: 0 }] } })
+    })
+    expect(await screen.findByText('from the phone')).toBeInTheDocument()
+    act(() => { live.handle({ type: 'queue', data: { session_id: 'other', waiting: '', messages: [] } }) })
+    expect(screen.getByText('from the phone')).toBeInTheDocument()
+    act(() => { live.handle({ type: 'queue', data: { session_id: 's', waiting: '', messages: [] } }) })
+    await waitFor(() => expect(screen.queryByText('from the phone')).toBeNull())
+  })
+
+  it('/ at the start lists the commands; ↓ and Enter put one in the field, nothing is sent', async () => {
+    render(<ChatView sessionId="s" canType />)
+    const field = screen.getByLabelText('Type to the session') as HTMLTextAreaElement
+    fireEvent.change(field, { target: { value: '/c', selectionStart: 2, selectionEnd: 2 } })
+    expect(await screen.findByRole('option', { name: /\/clear/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /\/ship/ })).toBeNull()
+    fireEvent.keyDown(field, { key: 'ArrowDown' })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(field.value).toBe('/compact ')
+    expect(screen.queryByRole('listbox')).toBeNull()
+    expect(store.inputs).toEqual([])
+  })
+
+  it('@ lists the folder\'s files, fuzzy; a tap inserts the path; Esc closes without changing the text', async () => {
+    render(<ChatView sessionId="s" canType />)
+    const field = screen.getByLabelText('Type to the session') as HTMLTextAreaElement
+    fireEvent.change(field, { target: { value: 'look at @qu', selectionStart: 11, selectionEnd: 11 } })
+    const opt = await screen.findByRole('option', { name: /queue\.go/ })
+    fireEvent.click(opt)
+    expect(field.value).toBe('look at @src/queue.go ')
+    fireEvent.change(field, { target: { value: 'mail me@x and @', selectionStart: 15, selectionEnd: 15 } })
+    expect(await screen.findByRole('listbox', { name: 'Files' })).toBeInTheDocument()
+    fireEvent.keyDown(field, { key: 'Escape' })
+    expect(screen.queryByRole('listbox')).toBeNull()
+    expect(field.value).toBe('mail me@x and @')
   })
 
   it('the session ending while a message waits turns it into a draft, still on screen', () => {

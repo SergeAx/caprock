@@ -129,7 +129,8 @@ machine must carry a device token** ([ADR-029](08-decisions.md)).
   `/v1/stats/summary`, `/v1/stats/daily`, `/v1/window-stop`, `/v1/events`, `/v1/history`,
   `/v1/status`, `/v1/storage`, `/v1/update`, `/v1/settings`, `/v1/premium`, `/v1/gemini`,
   `/v1/pricing`, `/v1/live`, `/v1/tasks`, `/v1/tasks/{id}`, `/v1/approvals`,
-  `/v1/statusline/{id}`, `/v1/agents/{id}/permission`, `/v1/projects`,
+  `/v1/statusline/{id}`, `/v1/agents/{id}/permission`, `/v1/agents/{id}/queue`,
+  `/v1/sessions/{id}/commands`, `/v1/sessions/{id}/files`, `/v1/projects`,
   `/v1/projects/ops`, `/v1/projects/{id}/worktrees`, `/v1/projects/{id}/changes`,
   `/v1/projects/{id}/changes/diff`, `/v1/projects/{id}/file` and
   `/v1/projects/{id}/files`. Everything else is `403` — every `POST`, `PUT` and
@@ -152,7 +153,8 @@ machine must carry a device token** ([ADR-029](08-decisions.md)).
   `POST /v1/agents`, `GET /v1/agents/models`, `GET /v1/agents/catalog`, `GET /v1/recent-dirs`,
   `GET /v1/browse`, `GET /v1/browse/stat` and `GET /v1/browse/repos` (rooted inside home, see below), `GET /v1/sessions/{id}/relay`, `GET /v1/agents/{id}/term`,
   `POST /v1/agents/{id}/input`, `POST /v1/agents/{id}/signal`,
-  `POST /v1/agents/{id}/permission`,
+  `POST /v1/agents/{id}/permission`, the message queue (`POST /v1/agents/{id}/queue`,
+  `PATCH` and `DELETE /v1/agents/{id}/queue/{qid}`, `POST /v1/agents/{id}/queue/{qid}/send`),
   `POST /v1/paste`, `POST /v1/tasks/{id}/approve` and `/reject`, and — to
   start work from the phone (2026-10-05, [21-app.md](21-app.md) decision 8) —
   `POST /v1/projects`, `PATCH` and `DELETE /v1/projects/{id}`, and `POST` and
@@ -335,7 +337,7 @@ Every output byte has an offset and every input frame a sequence number, so a re
 
 Every `/v1/live` frame carries a `seq`, so a client that reconnects gets exactly the frames it missed, or is told to refetch ([21-app.md § Phase A](21-app.md#phase-a--resilience-and-starting-work-p0), WP-12). It mirrors [protocol v2](#terminal-socket-protocol-v2) with frames in the `{type, seq, data}` envelope. Code: `internal/bus` (numbering and the ring), `internal/api/ws.go`, `ui/src/lib/live.ts`.
 
-- **Seq.** One counter per daemon, raised by one for every frame published (`event`, `session`, `alert`, `permission`, `task`, `project`, `op`, WP-09's `notify`, and the resource meter's `resources`, § Resources). It starts at the daemon's start time in microseconds, so a seq handed out by an earlier daemon is never inside a later one's range, and stays below 2^53 (exact in JavaScript). Clients compare seqs only for order within one daemon.
+- **Seq.** One counter per daemon, raised by one for every frame published (`event`, `session`, `alert`, `permission`, `queue`, `task`, `project`, `op`, WP-09's `notify`, and the resource meter's `resources`, § Resources). It starts at the daemon's start time in microseconds, so a seq handed out by an earlier daemon is never inside a later one's range, and stays below 2^53 (exact in JavaScript). Clients compare seqs only for order within one daemon.
 - **Ring.** The daemon keeps the last **2,000 frames or 10 minutes**, whichever is fewer.
 - **Resume.** Query `?since=<seq>`, the seq of the last frame the client applied (decimal; malformed is **400**). Omitted on a first connect, and by every client that predates replay: those get the stream as before, each frame now also carrying `seq`, which they ignore.
 - **Hello.** The first frame is `{type:"hello", seq, data:{server_time, reset}}`. `reset:false` with a `since`: `seq` equals it, and the frames after it follow, in order, then the live stream with no gap and no duplicate. `reset:true` (the ring no longer holds `since`, or never did — another daemon, a seq from the future): `seq` is the newest frame and `{type:"reset", seq, data:{seq}}` follows; the client refetches what it shows and continues from `seq`. Without `since`, `reset` is false and `seq` is the newest frame.
@@ -555,7 +557,7 @@ POST /v1/shutdown                      → 200 (bearer-token gated; `caprock dow
 POST /v1/statusline                    → 204 (bearer-token gated) {session_id, five_hour?, seven_day?} — records rate-limit windows, then runs the plan-window stop's check
 GET  /v1/statusline/{id}               → 200 (bearer-token gated) session counters for the status line; zeros for an unknown session
 GET  /healthz                          → {status:"ok", version}
-WS   /v1/live[?since=<seq>]            → every frame is {type, seq, data} (§ Live socket, replay); first frame is {type:"hello", seq, data:{server_time, reset}}; a "session" frame carries {session, stats}; a "permission" frame carries {session_id, permission | null}; a "project" frame carries a Project and an "op" frame an Op (§ Projects and shells); a "notify" frame an alert for the app (§ Notify frame)
+WS   /v1/live[?since=<seq>]            → every frame is {type, seq, data} (§ Live socket, replay); first frame is {type:"hello", seq, data:{server_time, reset}}; a "session" frame carries {session, stats}; a "permission" frame carries {session_id, permission | null}; a "queue" frame carries an owned session's QueueView after any change (§ Queued messages); a "project" frame carries a Project and an "op" frame an Op (§ Projects and shells); a "notify" frame an alert for the app (§ Notify frame)
 ```
 
 **Permission prompts** ([ADR-035](08-decisions.md)). `permission` is the
@@ -1026,6 +1028,8 @@ POST   /v1/subscriptions             {agent: claude|codex, label} → Subscripti
 PATCH  /v1/subscriptions/{id}        {label} → Subscription
 DELETE /v1/subscriptions/{id}        → 204; 409 while a session Caprock started runs on it
 POST   /v1/agents/{id}/input         {data}            → 204   (owned PTYs only)
+GET    /v1/agents/{id}/queue         → QueueView; the messages waiting for the turn to end (§ Queued messages)
+POST   /v1/agents/{id}/queue         {text} → {sent, queued?, queue: QueueView}; typed in now at the prompt, otherwise queued
 POST   /v1/agents/{id}/signal        {action: pause|resume|kill} → 204 (owned PTYs only)
 GET    /v1/agents/{id}/permission    → {permission: {id, tool, detail, always?, since, queued?, agent_id?, agent_type?, waiting?} | null}; the oldest prompt an owned session waits on, queued = how many more are outstanding, waiting = all of them when two or more
 POST   /v1/agents/{id}/permission    {id, choice: allow|always|deny|dismiss} → 204; 409 when that prompt is not the oldest outstanding, or no permission menu is on screen at all (the prompt is dropped); 422 {error} when the menu on screen has no such option, or more than one prompt is outstanding (nothing typed); dismiss types nothing and drops that prompt, any of them
@@ -1652,6 +1656,84 @@ DELETE /v1/saved-prompts/{id}              → 204
   started with `POST /v1/agents/{id}/input` — the text with each line break as
   ESC CR, then `\r` on its own 80 ms later, as the message field does; a
   command is `POST /v1/shells {cwd, type: <text>, run: true}`.
+
+### Queued messages
+
+What the chat field sends to a session Caprock started ([ADR-053](08-decisions.md)).
+Code: `internal/daemon/queue.go`, `internal/api/queue.go`,
+`internal/store/queued.go`, `ui/src/lib/queue.ts`, `ui/src/components/QueuedList.tsx`.
+
+```
+GET    /v1/agents/{id}/queue                → QueueView
+POST   /v1/agents/{id}/queue                {text} → {sent: bool, queued?: QueuedMessage, queue: QueueView}
+PATCH  /v1/agents/{id}/queue/{qid}          {text} → QueueView
+DELETE /v1/agents/{id}/queue/{qid}          → QueueView
+POST   /v1/agents/{id}/queue/{qid}/send     → QueueView; 409 while a prompt or a question is on the screen
+```
+
+- **`QueueView`** — `{session_id, messages: [QueuedMessage], waiting}`;
+  `QueuedMessage` is `{id, session_id, text, created_at, updated_at}` (unix
+  ms), oldest first. `waiting` says what holds a message: `"turn"` (the
+  agent is working), `"permission"` (a permission prompt is on the screen),
+  `"question"` (AskUserQuestion), or `""` (nothing; the session is at its
+  prompt).
+- **Send or queue.** `POST …/queue` types the text in at once — control
+  characters dropped, a tab as two spaces, each line break as ESC CR, a
+  space after a trailing `@file`, then `\r` 200 ms later — when `waiting` is
+  `""` and nothing is queued; otherwise it appends the text (`sent: false`,
+  `queued` set). A message typed in counts as a running turn for 15 s or
+  until the session's next hook.
+- **Delivery.** On the session's own `Stop` hook — main thread, recorded,
+  and not answered with "keep going" by the task runner's Stop-loop — the
+  daemon waits 700 ms, reads `waiting` again, and when it is `""` types the
+  oldest message in and deletes it: one message per turn. Nothing else
+  delivers: not silence, not `StopFailure`. On start the daemon delivers to
+  a surviving session that sits at its prompt.
+- **When `waiting` is known.** Only for Claude Code sessions whose hooks
+  record: the newest main-thread hook event among `turn.user`, `tool.pre`,
+  `tool.post`, `permission.prompt`, `context.compact` (trigger `auto`),
+  `agent.stop`, `agent.spawn` (not source `compact`), `context.clear`,
+  `session.continue`, `throttle` and `session.end`, plus the manager's
+  pending prompt. Another agent, or Claude Code without hooks, is always
+  `""`: the message is typed in at once, as before.
+- **Limits.** `text` has trailing whitespace trimmed, must have something
+  left, be valid UTF-8 without NUL, at most 16 KiB (`400` otherwise). At
+  most 20 per session (`409`). An id the session does not hold is `404`.
+- **Rule 7.** Only sessions Caprock started and that still run: anything
+  else is `409` for a write and an empty queue for a read. A session's rows
+  are deleted when its process exits, on `SessionEnd` with an exit reason,
+  and on start for sessions that did not survive.
+- **Who.** `GET` is open to every paired device; the writes to a
+  controller, as `POST /v1/agents/{id}/input` is.
+- **Frames.** Every change publishes a `queue` frame with the QueueView.
+
+### Chat field pickers
+
+The chat field's `/` and `@` pickers ([ADR-053](08-decisions.md)). Code:
+`internal/slashcmd`, `internal/api/pickers.go`, `ui/src/lib/pickers.ts`,
+`ui/src/components/ChatPicker.tsx`.
+
+```
+GET /v1/sessions/{id}/commands   → {agent, commands: [{name, description?, hint?, source}]}
+GET /v1/sessions/{id}/files      → {files: [string], truncated?}
+```
+
+- **Commands.** `source` is `builtin`, `project`, `user`, `project skill` or
+  `user skill`. Claude Code (`agent` empty or `claude`): its built-in
+  commands that make sense typed from a chat, then `.claude/commands/**/*.md`
+  (named by file; a subfolder does not rename) and `.claude/skills/*/SKILL.md`
+  (front matter `name`, else the folder) of the session's `cwd` and of its
+  repository root, then the same under `~/.claude`. A name already listed is
+  not listed again. `description` is the front matter's, else the first
+  line; `hint` is `argument-hint`. Codex: its built-ins and
+  `~/.codex/prompts/*.md` as `prompts:<name>`. Any other agent: none. At
+  most 400 files read, 4 KiB of each. `404` for an unknown session.
+- **Files.** The files under the session's `cwd`, relative to it, listed as
+  `GET /v1/projects/{id}/files` lists a project's (tracked and
+  untracked-not-ignored files in a repository, a walk otherwise; at most
+  20,000). `404` when the folder is gone; `501` without the projects service.
+- **Who.** Both are reads open to every paired device. A pick only puts
+  text in the field.
 
 ### Changes: a worktree's status, diff, commit and push
 
@@ -2325,6 +2407,23 @@ CREATE INDEX IF NOT EXISTS idx_saved_prompts_project ON saved_prompts(project_id
 Saved prompts and commands ([ADR-051](08-decisions.md), § Saved prompts and
 commands). No foreign key: unlisting a project (`archived_at`) keeps its
 rows, and nothing deletes a project row.
+
+### Queued messages DDL (migration 0047)
+
+```sql
+CREATE TABLE IF NOT EXISTS queued_messages (
+  id         INTEGER PRIMARY KEY,
+  session_id TEXT    NOT NULL,
+  text       TEXT    NOT NULL,
+  created_at INTEGER NOT NULL,       -- unix ms
+  updated_at INTEGER NOT NULL        -- unix ms
+);
+CREATE INDEX IF NOT EXISTS idx_queued_messages_session ON queued_messages(session_id, id);
+```
+
+Messages waiting for an owned session's turn to end ([ADR-053](08-decisions.md),
+§ Queued messages), sent oldest `id` first. No foreign key: a session's rows
+are deleted when its process exits.
 
 ### Attempts DDL (migration 0046)
 

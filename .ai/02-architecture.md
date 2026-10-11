@@ -288,6 +288,7 @@ internal/agents/      # owned-session manager: spawn/stream/input/signal/exit, p
 internal/sessionlink/ # joins a spawned Codex/OpenCode session to the id the agent gives it — Control
 internal/wtsetup/     # a new worktree made ready: .worktreeinclude copies, the setup wrapper `caprock worktree-setup` (ADR-050) — Control
 internal/relay/       # the brief that carries a session on in a new one, any agent (ADR-032) — Control
+internal/slashcmd/    # the slash commands an agent offers in a folder, for the chat field's / picker (ADR-053)
 internal/alerts/      # when the phone hears about a session, and the message it reads (ADR-036)
 internal/telegram/    # the owner's own bot: Bot API client, long-poll reader, paced outbox, the two-way bridge (ADR-047) — Control
 internal/ptyhost/     # `caprock pty-host`: one process per owned session holding its PTY, so it outlives the daemon (ADR-033); orphan verdicts — Control

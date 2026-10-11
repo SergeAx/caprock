@@ -489,6 +489,7 @@ export function TerminalView({
           sessionId={sessionId}
           isPromptWaiting={() => api.permission(sessionId).then((r) => r.permission !== null)}
           chips
+          pickers
         />
       </div>
       <div className="hidden border-t border-border px-3 py-1.5 text-[11px] text-fg-faint sm:block">

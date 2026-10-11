@@ -7,6 +7,24 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Added
+
+- **Queued messages in the chat.** Send while the agent is still working
+  and the message waits under the conversation as a *Queued* bubble;
+  Caprock types it in when the turn ends — one message per turn, in order,
+  and never into a permission prompt or a question. Each bubble has
+  **Edit**, **Cancel** and **Send now**. The computer holds the queue, so
+  the phone and the Mac show the same one and a phone going to sleep loses
+  nothing; it is dropped when the session ends. For Claude Code sessions
+  Caprock started, with its hooks on; other agents are typed into at once,
+  as before.
+- **`/` and `@` in the chat field.** `/` at the start lists the agent's
+  commands — Claude Code's own, your project's `.claude/commands` and
+  skills, and yours in `~/.claude` (Codex: its own and `~/.codex/prompts`);
+  `@` lists the files in the session's folder, filtered as you type.
+  ↑ ↓ Enter and Esc on a keyboard, big rows to tap on a phone. Picking
+  only fills the field.
+
 ### Changed
 
 - **The desktop app no longer reads its daemon whole to see whether it

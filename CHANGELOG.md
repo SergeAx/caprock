@@ -16,6 +16,12 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 - **app:** the session deck's top edge is a plain hairline; the accent
   line with its glow was too bright.
 
+### Added
+
+- **app:** ⇧⌘G (Ctrl+Shift+G) opens the diff of the session in front — its
+  worktree's Changes view — from anywhere in the workspace; the session
+  deck's *Review changes* shows the key.
+
 ## [0.107.3] - 2026-10-11
 
 ### Changed

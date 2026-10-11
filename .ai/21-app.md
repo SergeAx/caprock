@@ -339,11 +339,7 @@ One window, three regions:
   that's comfortable — and in this new area show data useful to me while I
   work"). A full-width terminal puts Claude Code's prompt on the window's
   bottom edge; the deck is a band under the terminal of the agent in front
-  that lifts it. One dense row, every figure the workspace already holds
-  and none estimated: *Now* (the cockpit's state and the call running or
-  *Thinking after …* with its clock; taller, the last three calls), *Spent*
-  (`stats.cost_usd`, the last priced call; taller, turns and tool calls),
-  *Context* (`context.pct`, the bar, `next_call_usd`; taller, tokens of the
+  that lifts it. One dense row, none of it estimated: *Context* (`context.pct`, the bar, `next_call_usd`; taller, tokens of the
   window), *Branch* (the sidebar's branch for the session's checkout, how
   many files are not committed and commits not pushed, *Review changes*)
   and *Pull requests* — the session's latest three (`session_prs`) with
@@ -355,9 +351,13 @@ One window, three regions:
   connected the rows show what the session recorded (open, merged) and
   *connect GitHub for CI* turns the integration on through the `gh` login
   in one click (ADR-047: this click is the user turning it on), else opens
-  Settings. The minute chart and the plan windows left the deck on
-  2026-10-11 (owner, translated: "we already have charts everywhere"; the
-  sidebar carries the plan windows). A figure the agent does not report is
+  Settings. The minute chart, the plan windows, *Now* and *Spent* left the
+  deck on 2026-10-11 (owner, translated: "we already have charts
+  everywhere", "Spent doesn't help", "Working now is debatable"); the
+  sidebar and the inspector carry them, and the deck holds no session
+  events and no clock. Its top edge is an accent rule with a soft glow
+  upward, framing the line above it where the prompt sits, and *Hide ⌘B*
+  sits at its right. A figure the agent does not report is
   left out, never drawn as zero. As the terminal narrows the Branch cell
   gives way first, below 720px (a container query). ⌘B (Ctrl+Shift+B off macOS), a strip
   button beside the inspector's — labelled *Deck* with its key, since an
@@ -367,7 +367,7 @@ One window, three regions:
   the terminal at the new height and the terminal's box changes once, on
   release, so a drag is one fit and one PTY resize, not one per frame; ↑ ↓,
   Page Up/Down, Home and End move it and settle after 250 ms the same way;
-  double-click restores the default (260px). Clamped between 72px and 60%
+  double-click restores the default (176px; a height kept before 0.107.1 is lowered by a third once). Clamped between 72px and 60%
   of the pane, the CSS height capped at 60% too, so a window made smaller
   never leaves the terminal a sliver. Closed by default; open and height
   in `caprock.app.deck` (`lib/deck.ts`). A shell tab has no deck and no

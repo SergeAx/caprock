@@ -23,36 +23,16 @@
  * box changes once, on release — one fit and one PTY resize, not one per
  * frame. Arrow keys on the divider settle the same way.
  */
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { api, type SessionPRLive, type SessionSummary, type Summary } from '@/lib/api'
-import { useSessionEvents } from '@/lib/sessionEvents'
-import { useNow } from '@/lib/useNow'
 import { fmtPct, fmtTokens, fmtUSD } from '@/lib/format'
-import { cockpitState, fmtRun, runningTool, toolRuns, turnCosts, type CockpitState, type ToolRun } from '@/lib/cockpit'
 import { DECK_DEFAULT, DECK_MAX_SHARE, DECK_TALL, clampDeck, deckKeyStep } from '@/lib/deck'
 import { githubApi, prTone, type PRTone } from '@/lib/github'
 import { openExternal } from '@/lib/nudges'
-import { CloseIcon } from './AppIcons'
 import { keys } from '@/lib/appkeys'
 
 /** How long arrow keys on the divider rest before the terminal is fitted to the new height. */
 export const KEY_SETTLE_MS = 250
-
-const STATE_LABEL: Record<CockpitState, string> = {
-  working: 'Working',
-  waiting: 'Waiting on you',
-  looping: 'Looping?',
-  idle: 'Idle',
-  ended: 'Ended',
-}
-
-const STATE_TEXT: Record<CockpitState, string> = {
-  working: 'text-ok',
-  waiting: 'text-accent',
-  looping: 'text-danger',
-  idle: 'text-fg-muted',
-  ended: 'text-fg-faint',
-}
 
 export interface SessionDeckProps {
   s: SessionSummary
@@ -140,7 +120,7 @@ export function SessionDeck(props: SessionDeckProps) {
     >
       <section
         aria-label="Session deck"
-        className="absolute inset-x-0 bottom-0 z-30 flex flex-col border-t border-[var(--app-hairline-strong)] bg-[var(--app-chrome-bg)]"
+        className="deck-band absolute inset-x-0 bottom-0 z-30 flex flex-col bg-[var(--app-chrome-bg)]"
         style={{ height: draft !== null ? `${draft}px` : '100%' }}
       >
         <div
@@ -150,7 +130,7 @@ export function SessionDeck(props: SessionDeckProps) {
           aria-valuenow={Math.round(shown)}
           aria-valuemin={0}
           tabIndex={0}
-          title="Drag to resize · double-click for the default height"
+          title={`Drag to resize · double-click for the default height · ${keys('⌘B')} hides it`}
           onPointerDown={drag}
           onKeyDown={nudge}
           onDoubleClick={() => onResize(clampDeck(DECK_DEFAULT, pane()))}
@@ -165,46 +145,27 @@ export function SessionDeck(props: SessionDeckProps) {
   )
 }
 
-function DeckBody({ s, sessionId, hasPermission, changed, branch, ahead, onReviewChanges, onClose, tall }: SessionDeckProps & { tall: boolean }) {
-  const main = useSessionEvents(sessionId)
-  const now = useNow(1000)
-  const runs = useMemo(() => toolRuns(main), [main])
-  const turns = useMemo(() => turnCosts(main), [main])
-  const state = cockpitState(s, hasPermission)
-  const running = state === 'working' || state === 'looping' ? runningTool(runs, now) : undefined
-  const st = s.stats
-  const last = turns[turns.length - 1]
+function DeckBody({ s, sessionId, changed, branch, ahead, onReviewChanges, onClose, tall }: SessionDeckProps & { tall: boolean }) {
   const ctx = s.context
   return (
-    // A container, so the cells that matter least give way first as the
-    // terminal narrows (the sidebar and the inspector both open): the changed
-    // files, then the plan windows, which the sidebar's Today strip and the
-    // cockpit also carry. The bars and what it is doing never go.
+    // A container, so the branch gives way first as the terminal narrows
+    // (the sidebar and the inspector both open). No clock and no event
+    // subscription: what it is doing and what it cost are the sidebar's and
+    // the inspector's (owner, 2026-10-11: "Spent doesn't help", "Working
+    // now is debatable").
     <div className="@container flex min-h-0 flex-1 items-stretch overflow-hidden">
-      <Cell label="Now" className="min-w-[180px] flex-[1.3_1_0]">
-        <Doing s={s} state={state} running={running} last={runs[runs.length - 1]} hasPermission={hasPermission} now={now} />
-        {tall && runs.length > 0 && <RecentTools runs={runs} now={now} />}
-      </Cell>
-      {st && (
-        <Cell label="Spent" className="w-[132px] shrink-0">
-          <p className="num text-[20px] font-semibold leading-none tracking-[-0.02em] text-fg" aria-label={`Cost ${fmtUSD(st.cost_usd)}`}>{fmtUSD(st.cost_usd)}</p>
-          {last && <p className="num truncate text-[11px] text-fg-muted" title="What the newest model call cost">last call <span className="text-fg">{fmtUSD(last.cost)}</span></p>}
-          {tall && <p className="num truncate text-[11px] text-fg-faint">{st.turns} turns</p>}
-          {tall && <p className="num truncate text-[11px] text-fg-faint">{st.tool_calls} tool calls</p>}
-        </Cell>
-      )}
       {ctx && <Context ctx={ctx} tall={tall} />}
       <Branch branch={branch || s.git_branch} changed={changed} ahead={ahead} onReview={onReviewChanges} />
       <PRs sessionId={sessionId} />
-      <div className="flex shrink-0 items-start pr-1.5 pt-1.5">
+      <div className="flex shrink-0 items-start pr-2 pt-1.5">
         <button
           type="button"
           onClick={onClose}
           aria-label={`Close the session deck (${keys('⌘B')})`}
-          title={`Close (${keys('⌘B')})`}
-          className="flex h-[22px] w-[22px] items-center justify-center rounded-[6px] text-fg-faint hover:bg-[var(--app-row-hover)] hover:text-fg"
+          title="Hide the deck; the same key brings it back"
+          className="flex h-[24px] items-center gap-1.5 rounded-[6px] px-1.5 text-[11.5px] text-fg-muted hover:bg-[var(--app-row-hover)] hover:text-fg"
         >
-          <CloseIcon size={12} />
+          Hide <kbd aria-hidden className="app-kbd-key">{keys('⌘B')}</kbd>
         </button>
       </div>
     </div>
@@ -227,67 +188,6 @@ function Cell({ label, right, className = '', grow = false, below, children }: {
       {children}
     </div>
   )
-}
-
-/** The state, and what the agent is doing this second — the cockpit's Now line, in one row. */
-function Doing({ s, state, running, last, hasPermission, now }: { s: SessionSummary; state: CockpitState; running?: ToolRun; last?: ToolRun; hasPermission: boolean; now: number }) {
-  const subs = s.live_subagents ?? 0
-  let verb = ''
-  let detail = ''
-  let since = ''
-  if (hasPermission && state !== 'ended') {
-    verb = 'Asks your permission'
-    detail = 'answer in the terminal'
-  } else if (running) {
-    verb = running.tool.startsWith('mcp__') ? running.tool.replace(/^mcp__(.+?)__/, '$1·') : running.tool
-    detail = running.detail
-    since = fmtRun(Math.max(0, now - running.startMs))
-  } else if (state === 'working' && last?.endMs !== undefined) {
-    verb = 'Thinking'
-    detail = `after ${last.tool}`
-    since = fmtRun(Math.max(0, now - last.endMs))
-  } else if (s.activity?.phrase && state !== 'ended') {
-    verb = s.activity.phrase[0]!.toUpperCase() + s.activity.phrase.slice(1)
-  }
-  const model = s.model_display || s.model
-  return (
-    <>
-      <p className={`flex min-w-0 items-center gap-1.5 text-[12.5px] font-medium ${STATE_TEXT[state]}`} role="status">
-        <span className="cockpit-dot inline-block h-[7px] w-[7px] shrink-0 rounded-full" data-state={state} />
-        <span className="shrink-0">{STATE_LABEL[state]}</span>
-        {subs > 0 && state !== 'ended' && <span className="shrink-0 font-normal text-fg-muted">· {subs} {subs === 1 ? 'subagent' : 'subagents'}</span>}
-        {model && <span className="min-w-0 truncate font-normal text-fg-faint">· {model}</span>}
-      </p>
-      {verb && (
-        <p className="flex min-w-0 items-baseline gap-1.5 text-[12px]" title={detail ? `${verb} ${detail}` : verb}>
-          <span className="shrink-0 text-fg">{verb}</span>
-          {detail && <span className="mono min-w-0 truncate text-[11.5px] text-fg-muted">{detail}</span>}
-          {since && <span className="num ml-auto shrink-0 text-[11px] text-ok">{since}</span>}
-        </p>
-      )}
-    </>
-  )
-}
-
-/** The last few calls, newest first, one line each: what a taller deck has room for. */
-function RecentTools({ runs, now }: { runs: ToolRun[]; now: number }) {
-  const rows = runs.slice(-3, running(runs) ? -1 : undefined).reverse()
-  if (rows.length === 0) return null
-  return (
-    <ol aria-label="Recent tool calls" className="mt-0.5 grid gap-px">
-      {rows.map((r) => (
-        <li key={r.id} className="flex min-w-0 items-baseline gap-1.5 text-[11px]" title={`${r.tool}${r.detail ? ` — ${r.detail}` : ''}`}>
-          <span className={`shrink-0 ${r.failed ? 'text-danger' : 'text-fg-muted'}`}>{r.tool.startsWith('mcp__') ? r.tool.replace(/^mcp__(.+?)__/, '$1·') : r.tool}</span>
-          {r.detail && <span className="mono min-w-0 truncate text-fg-faint">{r.detail}</span>}
-          <span className="num ml-auto shrink-0 text-fg-faint">{r.failed ? 'failed' : fmtRun(Math.max(0, (r.endMs ?? now) - r.startMs))}</span>
-        </li>
-      ))}
-    </ol>
-  )
-}
-
-function running(runs: ToolRun[]): boolean {
-  return runs.length > 0 && runs[runs.length - 1]!.endMs === undefined
 }
 
 function Context({ ctx, tall }: { ctx: NonNullable<SessionSummary['context']>; tall: boolean }) {
@@ -344,18 +244,19 @@ function prStatus(p: SessionPRLive): { text: string; tone: PRTone } {
     if (p.closed_at) return { text: 'closed', tone: 'closed' }
     return { text: 'open', tone: 'none' }
   }
-  const tone = prTone(pr)
-  if (pr.state !== 'open') return { text: pr.state, tone }
   const c = pr.checks
   const total = c.items.length
   let ci = ''
   if (c.state === 'fail') {
     const failed = c.items.filter((i) => i.state === 'fail').map((i) => i.name)
-    ci = `CI failed: ${failed.slice(0, 1).join('')}${failed.length > 1 ? ` +${failed.length - 1}` : ''}`
+    ci = `CI ✗ ${failed[0] ?? ''}${failed.length > 1 ? ` +${failed.length - 1}` : ''}`
   } else if (c.state === 'pending') ci = `CI ${total - c.pending}/${total}`
-  else if (c.state === 'pass') ci = 'CI passed'
-  const review = pr.review === 'approved' ? 'approved' : pr.review === 'changes_requested' ? 'changes requested' : ''
-  return { text: [pr.draft ? 'draft' : '', ci || 'no CI', review].filter(Boolean).join(' · '), tone }
+  else if (c.state === 'pass') ci = `CI ✓ ${total}`
+  const review = pr.state === 'open' ? (pr.review === 'approved' ? 'approved' : pr.review === 'changes_requested' ? 'changes requested' : '') : ''
+  const state = pr.state !== 'open' ? pr.state : pr.draft ? 'draft' : ''
+  // While open the CI decides the colour; once merged or closed, the state.
+  const tone = pr.state !== 'open' ? prTone(pr) : c.state === 'fail' || pr.review === 'changes_requested' ? 'fail' : prTone(pr)
+  return { text: [ci || (pr.state === 'open' ? 'no CI' : ''), review, state].filter(Boolean).join(' · '), tone }
 }
 
 const STATUS_TEXT: Record<PRTone, string> = {

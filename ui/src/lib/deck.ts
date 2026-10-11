@@ -10,13 +10,15 @@
  */
 
 export const DECK_KEY = 'caprock.app.deck'
+/** Bumped when the kept height means something else: 2 is after the chart left. */
+const DECK_VERSION = 2
 
 /** The lowest height the deck is useful at: one line of figures over the bars. */
 export const DECK_MIN = 72
 /** The highest share of the pane it may take: the terminal keeps the rest. */
 export const DECK_MAX_SHARE = 0.6
 /** Where it opens the first time: high enough to lift the prompt off the window's edge. */
-export const DECK_DEFAULT = 260
+export const DECK_DEFAULT = 176
 /** One arrow-key step on the divider. */
 export const DECK_STEP = 16
 /** From this height the deck has room for a second line in each cell. */
@@ -40,18 +42,19 @@ export function readDeck(): DeckPrefs {
   try {
     const v = JSON.parse(localStorage.getItem(DECK_KEY) ?? 'null') as unknown
     if (!v || typeof v !== 'object') return { open: false, height: DECK_DEFAULT }
-    const o = v as { open?: unknown; height?: unknown }
-    return {
-      open: o.open === true,
-      height: typeof o.height === 'number' && Number.isFinite(o.height) ? clampDeck(o.height) : DECK_DEFAULT,
-    }
+    const o = v as { open?: unknown; height?: unknown; v?: unknown }
+    if (typeof o.height !== 'number' || !Number.isFinite(o.height)) return { open: o.open === true, height: DECK_DEFAULT }
+    // A height kept before the chart left the deck is a third lower now
+    // (owner, 2026-10-11: "cut it by about a third"), once.
+    const height = o.v === DECK_VERSION ? o.height : o.height * (2 / 3)
+    return { open: o.open === true, height: clampDeck(height) }
   } catch {
     return { open: false, height: DECK_DEFAULT }
   }
 }
 
 export function saveDeck(p: DeckPrefs): void {
-  try { localStorage.setItem(DECK_KEY, JSON.stringify({ open: p.open, height: clampDeck(p.height) })) } catch { /* not kept */ }
+  try { localStorage.setItem(DECK_KEY, JSON.stringify({ open: p.open, height: clampDeck(p.height), v: DECK_VERSION })) } catch { /* not kept */ }
 }
 
 /**

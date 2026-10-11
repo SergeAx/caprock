@@ -293,6 +293,20 @@ others. Installing it: [install-app.md](install-app.md).
   Your git hooks run, and when one refuses, what it printed is shown. The
   commit is made as the author your git config names. **o**, the ↗ on a
   file's row or its name above the diff opens the file itself in a tab.
+- **Review notes for the agent.** In the Changes view, click a line number
+  of the diff to write a note on that line; ⇧-click another line number to
+  stretch it over a range. Enter keeps the note under its line (⇧Enter for
+  a new line, Esc cancels); *Edit* and *Delete* sit on each note. Notes
+  stay with the worktree until you send them, through tab switches and
+  restarts. The bar under the diff counts them (*Show* lists them; click
+  one to go to it) and **Send to agent** (⇧⌘↵) types them all into the
+  agent working in that worktree as one message: each note with its file
+  and lines, and the code it is on. Caprock types only into a session it
+  started that is still running, and not while that session waits on a
+  permission prompt — answer it first. With no such session the button
+  reads **New agent with the notes…** and opens New agent in that worktree
+  with the notes as the first message. The notes are cleared once they
+  are sent or the new agent starts.
 - **Files.** Read any file of a project without leaving the app, in a tab
   named after it (hover for its path). ⌘K → *Open file…* lists the files of
   the worktree you are in — what git tracks and new files it does not

@@ -31,6 +31,12 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   is working; the screen can still turn off, and closing a laptop's lid
   still sleeps it. *awake* in the status bar says when it is holding.
   Settings → *Keep awake*: Off, While agents work (the default), or Always.
+- **Review notes on the diff, sent to the agent.** In the Changes view,
+  click a line number to leave a note on it (⇧-click for a range); notes sit
+  under their lines and stay with the worktree. **Send to agent** types them
+  all, each with its file, lines and code, into the session Caprock started
+  in that worktree as one message — or starts a new agent there with them
+  when none is running.
 
 - **New copies are ready to run.** A new copy of a branch from *New agent*
   (or the sidebar) gets the ignored files your repository lists in

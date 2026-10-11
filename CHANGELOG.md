@@ -7,6 +7,13 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Changed
+
+- **app:** the session deck's pull requests line up in columns — CI, then
+  state — and a click on the CI opens the run on GitHub: the failing or
+  running job when GitHub links it, else the PR's Checks tab. The deck's
+  top edge glows less.
+
 ## [0.107.2] - 2026-10-11
 
 ### Changed

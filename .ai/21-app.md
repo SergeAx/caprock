@@ -345,7 +345,7 @@ One window, three regions:
   and *Pull requests* — the session's latest three (`session_prs`) with
   their CI and review from `GET /v1/sessions/{id}/prs`, a dot per PR
   (green passed, amber running, red failed or changes requested, violet
-  merged), a click opens it on GitHub. Asked every 20 s while a check runs,
+  merged), in columns (CI, then state); a click on the title opens the PR, a click on the CI opens the failing or running job, else the PR's Checks tab. Asked every 20 s while a check runs,
   else every minute, never while the window is hidden; the daemon keeps
   each PR as long, so a poll costs GitHub nothing. While GitHub is not
   connected the rows show what the session recorded (open, merged) and
@@ -355,8 +355,8 @@ One window, three regions:
   deck on 2026-10-11 (owner, translated: "we already have charts
   everywhere", "Spent doesn't help", "Working now is debatable"); the
   sidebar and the inspector carry them, and the deck holds no session
-  events and no clock. Its top edge is an accent rule with a soft glow
-  upward, framing the line above it where the prompt sits, and *Hide ⌘B*
+  events and no clock. Its top edge is a faint accent rule with a low glow
+  upward (the first, brighter one distracted), framing the line above it where the prompt sits, and *Hide ⌘B*
   sits at its right. A figure the agent does not report is
   left out, never drawn as zero. As the terminal narrows the Branch cell
   gives way first, below 720px (a container query). ⌘B (Ctrl+Shift+B off macOS), a strip

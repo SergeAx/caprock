@@ -76,9 +76,15 @@ describe('the session deck', () => {
       { session_id: 's1', number: 7, url: 'https://github.com/a/b/pull/7', title: 'PR 7', last_at: now, live: pr(7, { state: 'pass', passed: 1, failed: 0, pending: 0, items: [{}] }, 'merged') },
     ] }
     show()
-    expect(await screen.findByText('CI 2/5')).toBeInTheDocument()
+    expect(await screen.findByText('CI 2/5 running')).toBeInTheDocument()
     expect(screen.getByText('CI ✗ windows')).toBeInTheDocument()
-    expect(screen.getByText('CI ✓ 1 · merged')).toBeInTheDocument()
+    expect(screen.getByText('CI ✓ 1 passed')).toBeInTheDocument()
+    expect(screen.getByText('merged')).toBeInTheDocument()
+    // The CI opens the failing job when GitHub gave its link, else the PR's checks.
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+    fireEvent.click(screen.getByText('CI 2/5 running'))
+    expect(String(open.mock.calls.at(-1)?.[0] ?? '')).toBe('https://github.com/a/b/pull/9/checks')
+    open.mockRestore()
     h.prs = { connected: true, prs: [] }
   })
 

@@ -237,26 +237,47 @@ function Branch({ branch, changed, ahead, onReview }: { branch?: string; changed
 }
 
 /** One PR's state in a few characters: CI first, then the review. */
-function prStatus(p: SessionPRLive): { text: string; tone: PRTone } {
+interface PRStatus {
+  /** The CI in a few characters, '' when there is none to show. */
+  ci: string
+  ciTone: PRTone
+  /** Where the CI is looked at: the failing or running job, else the PR's checks. */
+  ciUrl?: string
+  /** merged, closed, draft, approved…; '' for a plain open PR. */
+  state: string
+  tone: PRTone
+}
+
+/** One PR's CI and state, in two columns that line up row to row. */
+function prStatus(p: SessionPRLive): PRStatus {
   const pr = p.live
   if (!pr) {
-    if (p.merged_at) return { text: 'merged', tone: 'merged' }
-    if (p.closed_at) return { text: 'closed', tone: 'closed' }
-    return { text: 'open', tone: 'none' }
+    if (p.merged_at) return { ci: '', ciTone: 'none', state: 'merged', tone: 'merged' }
+    if (p.closed_at) return { ci: '', ciTone: 'none', state: 'closed', tone: 'closed' }
+    return { ci: '', ciTone: 'none', state: 'open', tone: 'none' }
   }
   const c = pr.checks
   const total = c.items.length
   let ci = ''
+  let ciTone: PRTone = 'none'
+  let ciUrl: string | undefined = total ? `${pr.url}/checks` : undefined
   if (c.state === 'fail') {
-    const failed = c.items.filter((i) => i.state === 'fail').map((i) => i.name)
-    ci = `CI ✗ ${failed[0] ?? ''}${failed.length > 1 ? ` +${failed.length - 1}` : ''}`
-  } else if (c.state === 'pending') ci = `CI ${total - c.pending}/${total}`
-  else if (c.state === 'pass') ci = `CI ✓ ${total}`
-  const review = pr.state === 'open' ? (pr.review === 'approved' ? 'approved' : pr.review === 'changes_requested' ? 'changes requested' : '') : ''
-  const state = pr.state !== 'open' ? pr.state : pr.draft ? 'draft' : ''
-  // While open the CI decides the colour; once merged or closed, the state.
-  const tone = pr.state !== 'open' ? prTone(pr) : c.state === 'fail' || pr.review === 'changes_requested' ? 'fail' : prTone(pr)
-  return { text: [ci || (pr.state === 'open' ? 'no CI' : ''), review, state].filter(Boolean).join(' · '), tone }
+    const failed = c.items.filter((i) => i.state === 'fail')
+    ci = `✗ ${failed[0]?.name ?? 'failed'}${failed.length > 1 ? ` +${failed.length - 1}` : ''}`
+    ciTone = 'fail'
+    ciUrl = failed.find((i) => i.url)?.url ?? ciUrl
+  } else if (c.state === 'pending') {
+    ci = `${total - c.pending}/${total} running`
+    ciTone = 'pending'
+    ciUrl = c.items.find((i) => i.state === 'pending' && i.url)?.url ?? ciUrl
+  } else if (c.state === 'pass') {
+    ci = `✓ ${total} passed`
+    ciTone = 'ok'
+  } else if (pr.state === 'open') ci = 'no CI'
+  const review = pr.state === 'open' ? (pr.review === 'approved' ? 'approved' : pr.review === 'changes_requested' ? 'changes' : '') : ''
+  const state = pr.state !== 'open' ? pr.state : pr.draft ? 'draft' : review
+  const tone: PRTone = pr.state !== 'open' ? prTone(pr) : pr.review === 'changes_requested' ? 'fail' : pr.review === 'approved' ? 'ok' : 'none'
+  return { ci, ciTone, ciUrl, state, tone }
 }
 
 const STATUS_TEXT: Record<PRTone, string> = {
@@ -320,14 +341,19 @@ function PRs({ sessionId }: { sessionId: string }) {
         {prs.map((p) => {
           const st = prStatus(p)
           return (
-            <li key={p.url} data-deck-pr={p.number} className="min-w-0">
-              <button type="button" onClick={() => openExternal(p.live?.url || p.url)} title={`${p.live?.title || p.title || ''}\nOpen on GitHub`}
-                className="flex w-full min-w-0 items-center gap-2 rounded-[5px] text-left text-[12.5px] hover:bg-[var(--app-row-hover)]">
-                <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${PR_DOT[st.tone]}`} />
-                <span className="num shrink-0 text-fg">#{p.number}</span>
-                <span className="min-w-0 flex-1 truncate text-fg-muted">{p.live?.title || p.title}</span>
-                <span className={`shrink-0 whitespace-nowrap font-medium ${STATUS_TEXT[st.tone]}`}>{st.text}</span>
+            <li key={p.url} data-deck-pr={p.number}
+              className="grid min-w-0 grid-cols-[8px_auto_minmax(0,1fr)_112px_56px] items-center gap-x-2 rounded-[5px] text-[12.5px] hover:bg-[var(--app-row-hover)]">
+              <span aria-hidden className={`h-2 w-2 rounded-full ${PR_DOT[st.ciTone === 'none' ? st.tone : st.ciTone]}`} />
+              <button type="button" onClick={() => openExternal(p.live?.url || p.url)} title={`${p.live?.title || p.title || ''}\nOpen the pull request on GitHub`}
+                className="col-span-2 grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-2 text-left">
+                <span className="num text-fg">#{p.number}</span>
+                <span className="truncate text-fg-muted">{p.live?.title || p.title}</span>
               </button>
+              {st.ci && st.ciUrl
+                ? <button type="button" data-deck-ci onClick={() => openExternal(st.ciUrl!)} title="Open the CI run on GitHub"
+                    className={`truncate text-left font-medium underline-offset-2 hover:underline ${STATUS_TEXT[st.ciTone]}`}>CI {st.ci}</button>
+                : <span className={`truncate font-medium ${STATUS_TEXT[st.ciTone]}`}>{st.ci && `CI ${st.ci}`}</span>}
+              <span className={`truncate font-medium ${STATUS_TEXT[st.tone]}`}>{st.state}</span>
             </li>
           )
         })}

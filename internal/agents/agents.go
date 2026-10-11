@@ -132,6 +132,11 @@ type Agent struct {
 
 	// fg is a shell's foreground program, as last read (shell.go).
 	fg fgCache
+
+	// setupDone is closed when a fresh worktree's setup, run in this
+	// terminal before the agent, is over (worktreesetup.go); nil when the
+	// session had none.
+	setupDone chan struct{}
 }
 
 // Manager owns the set of running agents.
@@ -161,6 +166,13 @@ type Manager struct {
 	// permission prompt (p is nil when it stops), or the one it shows
 	// changes. See permission.go.
 	OnPermission func(sessionID string, p *Permission)
+	// ProjectSetup returns the setup command set for the project a directory
+	// is in (projects' defaults.setup_command), or "". It runs in a fresh
+	// worktree's terminal before the agent starts (ADR-050). Nil means none.
+	ProjectSetup func(dir string) string
+	// SetupExe is the Caprock binary whose `worktree-setup` runs that
+	// command and then becomes the agent. Empty skips the command.
+	SetupExe string
 	// ProjectPrompt returns the instructions the user set for the project a
 	// directory is in (projects' defaults.system_prompt), or "". A Claude Code
 	// session started there gets them through --append-system-prompt, a Codex
@@ -442,12 +454,16 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Agent, error) {
 	sessionID := m.NewSessionID()
 	cwd := req.Cwd
 	worktree := ""
+	var setup worktreeSetup
 	if req.Worktree != "" {
-		wt, err := createWorktree(ctx, req.Cwd, req.Worktree, req.WorktreeBase, req.WorktreePull)
+		wt, err := makeWorktree(ctx, req.Cwd, req.Worktree, req.WorktreeBase, req.WorktreePull)
 		if err != nil {
 			return nil, err
 		}
-		cwd, worktree = wt, req.Worktree
+		cwd, worktree = wt.Dir, req.Worktree
+		if wt.Fresh {
+			setup = m.prepareWorktree(ctx, req.Cwd, wt)
+		}
 	}
 	agent := req.Agent
 	if agent == "" {
@@ -577,6 +593,13 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Agent, error) {
 	}
 	spec := ptyman.Spec{ID: sessionID, Command: command, Args: args, Dir: cwd, Env: env, Cols: req.Cols, Rows: req.Rows,
 		Meta: map[string]string{metaKind: agent}}
+	// A fresh worktree with a setup command runs it in this terminal first,
+	// through the wrapper, which then becomes the agent (worktreesetup.go).
+	setupPending := setup.wrap(&spec, m.SetupExe)
+	if setup.command != "" && !setupPending {
+		m.log.Warn("the project has a setup command, but no Caprock binary to run it from; starting the agent without it",
+			"component", "agents", "worktree", cwd)
+	}
 	if port > 0 {
 		spec.Meta[metaPort] = strconv.Itoa(port)
 	}
@@ -598,6 +621,9 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Agent, error) {
 		rows = 40
 	}
 	a.setSize(cols, rows)
+	if setupPending {
+		a.setupDone = make(chan struct{})
+	}
 	m.mu.Lock()
 	m.agents[sessionID] = a
 	m.mu.Unlock()
@@ -854,7 +880,13 @@ func (a *Agent) pump(onOutput func(string)) {
 			chunk := make([]byte, n)
 			copy(chunk, buf[:n])
 			a.ring.write(chunk)
-			a.outAt.Store(time.Now().UnixNano())
+			if a.setupDone != nil && a.sawSetupMarker(chunk) {
+				// What is drawn next is the agent's: "ready" is measured
+				// from here, not from the setup's last line.
+				a.outAt.Store(0)
+			} else {
+				a.outAt.Store(time.Now().UnixNano())
+			}
 			a.mu.Lock()
 			for ch := range a.subs {
 				select {

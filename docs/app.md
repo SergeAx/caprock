@@ -187,6 +187,15 @@ others. Installing it: [install-app.md](install-app.md).
   (`--append-system-prompt`), and every Codex session as its developer
   instructions (`-c developer_instructions=…`), a resumed one too. OpenCode
   and Gemini do not get them yet.
+- **New copies are ready to run.** When *New agent* makes a new copy of a
+  branch (a git worktree), the ignored files your repository lists in
+  `.worktreeinclude` — `.env`, local config — are copied into it from the
+  project's folder, the way Claude Code's own `--worktree` does. Under
+  *Setup* in the same sheet you can give the project a command such as
+  `npm install`: it runs in the agent's terminal before the agent starts, and
+  you watch its output there. Ctrl+C skips it; if it fails or runs past ten
+  minutes, the agent starts anyway. It never runs in a copy that already
+  exists. A paired phone can see the command but not change it.
 - **A project with no tab open** shows its recent agent sessions under
   *New agent* and *New shell*: what they cost and when they were last worked
   on. *Continue* carries an ended one on in a new tab, in the permission mode

@@ -27,6 +27,7 @@ import (
 	"github.com/dspv/caprock/internal/agents"
 	"github.com/dspv/caprock/internal/bus"
 	"github.com/dspv/caprock/internal/store"
+	"github.com/dspv/caprock/internal/wtsetup"
 )
 
 // Defaults for the service's knobs.
@@ -767,17 +768,33 @@ func (s *Service) ProjectFor(dir string) (store.Project, bool) {
 // SystemPrompt is the instructions set for the project dir is in — its
 // defaults.system_prompt — or "" when there are none or dir is in no project.
 func (s *Service) SystemPrompt(dir string) string {
+	return defaultsOf(s, dir).SystemPrompt
+}
+
+// SetupCommand is the command set to run in a fresh worktree of the project
+// dir is in before its agent starts — its defaults.setup_command — or "".
+func (s *Service) SetupCommand(dir string) string {
+	return defaultsOf(s, dir).SetupCommand
+}
+
+// defaultsOf reads the defaults of the project dir is in; zero when none.
+func defaultsOf(s *Service, dir string) projectDefaults {
+	var d projectDefaults
 	p, ok := s.ProjectFor(dir)
 	if !ok || p.Defaults == "" {
+		return d
+	}
+	_ = json.Unmarshal([]byte(p.Defaults), &d)
+	return d
+}
+
+// SetupCommandOf is defaults' setup_command, "" when absent or unreadable.
+func SetupCommandOf(defaults string) string {
+	var d projectDefaults
+	if defaults == "" || json.Unmarshal([]byte(defaults), &d) != nil {
 		return ""
 	}
-	var d struct {
-		SystemPrompt string `json:"system_prompt"`
-	}
-	if json.Unmarshal([]byte(p.Defaults), &d) != nil {
-		return ""
-	}
-	return d.SystemPrompt
+	return d.SetupCommand
 }
 
 // ListedAt is the listed project that adding dir would return: the one whose
@@ -861,21 +878,34 @@ func checkFolderName(name string) error {
 // well under any argv limit, since it is passed on the command line.
 const SystemPromptMax = 16 << 10
 
-// checkDefaults accepts {agent?, model?, permission_mode?, system_prompt?}
-// with string values, and returns it compacted.
+// projectDefaults is a project's defaults column.
+type projectDefaults struct {
+	Agent          string `json:"agent,omitempty"`
+	Model          string `json:"model,omitempty"`
+	PermissionMode string `json:"permission_mode,omitempty"`
+	// SystemPrompt is appended to the system prompt of every Claude Code
+	// session started in the project (--append-system-prompt).
+	SystemPrompt string `json:"system_prompt,omitempty"`
+	// SetupCommand runs in a fresh worktree's terminal before the agent
+	// starts there, e.g. `npm install` (ADR-050).
+	SetupCommand string `json:"setup_command,omitempty"`
+}
+
+// checkDefaults accepts {agent?, model?, permission_mode?, system_prompt?,
+// setup_command?} with string values, and returns it compacted.
 func checkDefaults(raw json.RawMessage) (string, error) {
-	var d struct {
-		Agent          string `json:"agent,omitempty"`
-		Model          string `json:"model,omitempty"`
-		PermissionMode string `json:"permission_mode,omitempty"`
-		// SystemPrompt is appended to the system prompt of every Claude Code
-		// session started in the project (--append-system-prompt).
-		SystemPrompt string `json:"system_prompt,omitempty"`
-	}
+	var d projectDefaults
 	dec := json.NewDecoder(strings.NewReader(string(raw)))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&d); err != nil {
-		return "", errors.New("defaults is {agent?, model?, permission_mode?, system_prompt?}, each a string")
+		return "", errors.New("defaults is {agent?, model?, permission_mode?, system_prompt?, setup_command?}, each a string")
+	}
+	d.SetupCommand = strings.TrimSpace(d.SetupCommand)
+	if len(d.SetupCommand) > wtsetup.MaxCommand {
+		return "", fmt.Errorf("setup_command is longer than %d bytes", wtsetup.MaxCommand)
+	}
+	if strings.ContainsRune(d.SetupCommand, 0) {
+		return "", errors.New("setup_command has a NUL byte")
 	}
 	d.SystemPrompt = strings.TrimSpace(d.SystemPrompt)
 	if len(d.SystemPrompt) > SystemPromptMax {

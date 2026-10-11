@@ -205,6 +205,16 @@ func (s *Server) handlePatchProject(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body is {name?, pinned?, sort?, defaults?}"})
 		return
 	}
+	// A setup command is a command this machine will run (ADR-050). A
+	// controller may start agents, but not decide what runs before them:
+	// that is set on the machine, like a shell (ADR-034).
+	if p.Defaults != nil && s.fromPairedDevice(r) {
+		cur, _ := s.d.Projects.Project(id)
+		if strings.TrimSpace(projects.SetupCommandOf(string(*p.Defaults))) != projects.SetupCommandOf(cur.Defaults) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "a project's setup command is set on the computer Caprock runs on"})
+			return
+		}
+	}
 	v, err := s.d.Projects.Update(r.Context(), id, p)
 	if err != nil {
 		projectErr(w, err)

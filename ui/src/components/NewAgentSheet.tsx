@@ -32,6 +32,7 @@ import { projectsApi, type BranchInfo, type Project } from '@/lib/projects'
 import { ProjectCombobox } from './ProjectSearch'
 import { BranchPicker } from './BranchPicker'
 import type { Candidate } from '@/lib/projectSearch'
+import { ProjectSetupCommand } from './ProjectSetupCommand'
 import { ProjectInstructions } from './ProjectInstructions'
 import { Sheet, SheetButton, SheetField } from './Sheet'
 import { stepSelect } from '@/lib/selectKeys'
@@ -283,6 +284,7 @@ export function NewAgentSheet({
               <p className="text-[12px] leading-snug text-fg-faint" title={WHERE_TOOLTIP}>
                 A separate folder, so this agent doesn’t collide with others: <span className="mono text-fg-muted">caprock/{worktreeName}</span>{base ? <> from <span className="mono text-fg-muted">{base}</span></> : null}.
               </p>
+              {project && <ProjectSetupCommand key={project.id} project={project} />}
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">

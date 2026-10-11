@@ -80,13 +80,15 @@ export interface ApiProject {
 /**
  * A project's defaults (`PATCH /v1/projects/{id}` replaces them whole).
  * `system_prompt` is the project's instructions, appended to the system prompt
- * of every Claude Code session started in it.
+ * of every Claude Code session started in it. `setup_command` runs in a new
+ * copy's terminal before its agent starts (ADR-050).
  */
 export interface ProjectDefaults {
   agent?: string
   model?: string
   permission_mode?: string
   system_prompt?: string
+  setup_command?: string
 }
 
 /** A shell tab (`POST`/`GET /v1/shells`). It has no session row. */
@@ -262,6 +264,13 @@ export function instructionsPatch(defaults: ProjectDefaults | undefined, text: s
   const { system_prompt: _old, ...rest } = defaults ?? {}
   const t = text.trim()
   return { defaults: t ? { ...rest, system_prompt: t } : rest }
+}
+
+/** The PATCH that sets a project's setup command, keeping its other defaults; "" clears it. */
+export function setupPatch(defaults: ProjectDefaults | undefined, command: string): { defaults: ProjectDefaults } {
+  const { setup_command: _old, ...rest } = defaults ?? {}
+  const t = command.trim()
+  return { defaults: t ? { ...rest, setup_command: t } : rest }
 }
 
 /** A branch a new copy can start from (agents.Branch on the wire). */

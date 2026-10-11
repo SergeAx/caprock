@@ -18,6 +18,8 @@ import {
 import { live } from '@/lib/live'
 import { PullRequestIcon } from './AppIcons'
 import { CreateRepoSheet } from './CreateRepoSheet'
+import { FixWithAgent, type HandoffTarget } from './AgentHandoff'
+import { checksFixPrompt, prConflictsFixPrompt } from '@/lib/fixPrompts'
 import { Sheet } from './Sheet'
 
 const TONE_DOT: Record<PRTone, string> = {
@@ -123,7 +125,13 @@ function summaryLine(pr: PullRequest): string {
 }
 
 /** The pull request's state: link, checks, reviews, mergeability, and its checks one by one. */
-export function PRStatus({ pr, compact = false, onRefresh }: { pr: PullRequest; compact?: boolean; onRefresh?: () => Promise<void> }) {
+export function PRStatus({ pr, compact = false, onRefresh, fix }: {
+  pr: PullRequest
+  compact?: boolean
+  onRefresh?: () => Promise<void>
+  /** Where "Fix with agent" sends failing checks or conflicts: the worktree's agent (the app only). */
+  fix?: HandoffTarget
+}) {
   const [open, setOpen] = useState(pr.checks.state === 'fail')
   const [busy, setBusy] = useState(false)
   const tone = prTone(pr)
@@ -177,6 +185,8 @@ export function PRStatus({ pr, compact = false, onRefresh }: { pr: PullRequest; 
           ))}
         </ul>
       )}
+      {fix && pr.state === 'open' && failing.length > 0 && <FixWithAgent target={fix} prompt={() => checksFixPrompt(pr, failing)} />}
+      {fix && pr.state === 'open' && !pr.draft && (pr.mergeable === false || pr.mergeable_state === 'dirty') && <FixWithAgent target={fix} prompt={() => prConflictsFixPrompt(pr)} />}
       {pr.error && <p role="alert" className="text-[11.5px] leading-snug text-danger [overflow-wrap:anywhere]">Could not read it again: {pr.error.doing}: {pr.error.message}</p>}
     </div>
   )
@@ -291,7 +301,7 @@ function reasonText(i: WorktreeGitHub): string | null {
  * The strip in the app's Changes view: the pull request's state, or the
  * button that opens one, or the one that puts the project on GitHub.
  */
-export function GitHubStrip({ target, title, sessionId }: { target: WorktreeRef; title: string; sessionId?: string }) {
+export function GitHubStrip({ target, title, sessionId, fix }: { target: WorktreeRef; title: string; sessionId?: string; fix?: HandoffTarget }) {
   const { info, error, refresh, reload } = useWorktreeGitHub(target)
   const [creating, setCreating] = useState(false)
   const [publishing, setPublishing] = useState(false)
@@ -317,7 +327,7 @@ export function GitHubStrip({ target, title, sessionId }: { target: WorktreeRef;
       <Strip>
         <div className="min-w-0 flex-1">
           {opened && <p role="status" className="mb-1 text-[12px] text-ok">{opened.pushed ? `Pushed ${info.branch} and opened` : 'Opened'} #{opened.pr.number}.</p>}
-          <PRStatus pr={info.pr} onRefresh={info.connected ? refresh : undefined} />
+          <PRStatus pr={info.pr} onRefresh={info.connected ? refresh : undefined} fix={fix} />
         </div>
         {info.pr.state !== 'open' && info.draft && (
           <button type="button" onClick={() => setCreating(true)} className="shrink-0 rounded-[6px] px-1.5 text-[12px] text-accent hover:bg-[var(--app-row-hover)]">New pull request…</button>

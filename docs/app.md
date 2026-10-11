@@ -307,6 +307,16 @@ others. Installing it: [install-app.md](install-app.md).
   reads **New agent with the notes…** and opens New agent in that worktree
   with the notes as the first message. The notes are cleared once they
   are sent or the new agent starts.
+- **Fix with agent.** Where the Changes view shows something that failed,
+  **Fix with agent** hands it to the agent working in that worktree, with
+  a short instruction to find the cause and fix it: a commit or push your
+  git hook refused (with the end of what the hook printed), files left in
+  conflict by a merge, rebase or stash (the list of them), and the pull
+  request's failing checks (by name and link) or its conflicts with the
+  base branch. It goes where review notes go — typed into the session
+  Caprock started there, or, with none running, **Fix with a new agent…**
+  opens New agent in that worktree with it as the first message. The agent
+  is asked to leave committing, pushing and finishing a merge to you.
 - **Files.** Read any file of a project without leaving the app, in a tab
   named after it (hover for its path). ⌘K → *Open file…* lists the files of
   the worktree you are in — what git tracks and new files it does not
@@ -541,7 +551,9 @@ error word for word), *Tell me when CI fails or a review arrives*, and
   shows a pull-request icon on the worktree, green, amber or red. Caprock
   reads each repository at most once a minute, less often while nothing
   changes, and right after you push. With the switch on, the app notifies
-  you when a check fails or a review arrives.
+  you when a check fails or a review arrives. Failing checks and a pull
+  request that conflicts with its base have **Fix with agent** (see
+  [Fix with agent](#the-window) above).
 - **From the phone** you can read all of it; a phone you let control
   sessions can also open a pull request. Connecting, disconnecting and
   creating repositories happen on the computer.

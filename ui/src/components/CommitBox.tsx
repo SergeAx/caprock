@@ -8,6 +8,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type Reac
 import { api } from '@/lib/api'
 import { changesApi, changedCount, failureOf, messageFromSummary, type ChangeFailure, type Changes, type WorktreeRef } from '@/lib/changes'
 import { keys } from '@/lib/appkeys'
+import { plainText } from '@/lib/handoff'
 
 const DRAFT_PREFIX = 'caprock.changes.message.'
 
@@ -29,7 +30,7 @@ function saveDraft(ref: WorktreeRef, text: string): void {
 /** What the last action said: done, or failed with git's words. */
 export type Outcome = { ok: true; text: string; output?: string } | { ok: false; failure: ChangeFailure }
 
-export function OutcomeLine({ outcome, onDismiss, compact }: { outcome: Outcome; onDismiss?: () => void; compact?: boolean }) {
+export function OutcomeLine({ outcome, onDismiss, compact, action }: { outcome: Outcome; onDismiss?: () => void; compact?: boolean; action?: ReactNode }) {
   const output = outcome.ok ? outcome.output : outcome.failure.output
   return (
     <div
@@ -47,9 +48,10 @@ export function OutcomeLine({ outcome, onDismiss, compact }: { outcome: Outcome;
       {output && (
         <details open={!outcome.ok}>
           <summary className="cursor-pointer text-[11px] text-fg-muted">{outcome.ok ? 'Output' : outcome.failure.kind === 'hook' ? 'What the hook said' : 'What git said'}</summary>
-          <pre className="app-scroll mono mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded-[6px] bg-[var(--app-row-hover,rgba(127,127,127,0.08))] p-2 text-[11px] text-fg-muted [overflow-wrap:anywhere]">{output}</pre>
+          <pre className="app-scroll mono mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded-[6px] bg-[var(--app-row-hover,rgba(127,127,127,0.08))] p-2 text-[11px] text-fg-muted [overflow-wrap:anywhere]">{plainText(output)}</pre>
         </details>
       )}
+      {action}
     </div>
   )
 }
@@ -68,6 +70,8 @@ export interface CommitBoxProps {
   compact?: boolean
   /** Shown above the buttons, e.g. a hint. */
   footer?: ReactNode
+  /** Drawn under a failure, e.g. "Fix with agent" for a hook's refusal. */
+  failureAction?: (f: ChangeFailure, doing: 'commit' | 'push') => ReactNode
 }
 
 /**
@@ -75,10 +79,12 @@ export interface CommitBoxProps {
  * commits that; with nothing staged, it commits every change (the button
  * says so). ⌘↵ commits, ⇧⌘↵ commits and pushes.
  */
-export const CommitBox = forwardRef<CommitBoxHandle, CommitBoxProps>(function CommitBox({ target, changes, onChanges, sessionId, compact }, handle) {
+export const CommitBox = forwardRef<CommitBoxHandle, CommitBoxProps>(function CommitBox({ target, changes, onChanges, sessionId, compact, failureAction }, handle) {
   const [message, setMessage] = useState(() => loadDraft(target))
   const [busy, setBusy] = useState<'' | 'commit' | 'push' | 'summary'>('')
   const [outcome, setOutcome] = useState<Outcome | null>(null)
+  // What failed: the commit, or the push after it.
+  const [failed, setFailed] = useState<'commit' | 'push'>('commit')
   const box = useRef<HTMLTextAreaElement>(null)
   useImperativeHandle(handle, () => ({ focus: () => box.current?.focus() }), [])
 
@@ -126,12 +132,14 @@ export const CommitBox = forwardRef<CommitBoxHandle, CommitBoxProps>(function Co
           output = [output, p.result.output].filter(Boolean).join('\n')
         } catch (e) {
           const f = failureOf(e)
+          setFailed('push')
           setOutcome({ ok: false, failure: { ...f, message: `Committed ${r.commit.short}, but the push failed: ${f.message}` } })
           return
         }
       }
       setOutcome({ ok: true, text, output })
     } catch (e) {
+      setFailed('commit')
       setOutcome({ ok: false, failure: failureOf(e) })
     } finally {
       setBusy('')
@@ -191,7 +199,7 @@ export const CommitBox = forwardRef<CommitBoxHandle, CommitBoxProps>(function Co
           {busy === 'push' ? 'Committing and pushing…' : 'Commit & Push'}
         </button>
       </div>
-      {outcome && <OutcomeLine outcome={outcome} onDismiss={() => setOutcome(null)} compact={compact} />}
+      {outcome && <OutcomeLine outcome={outcome} onDismiss={() => setOutcome(null)} compact={compact} action={!outcome.ok && failureAction ? failureAction(outcome.failure, failed) : undefined} />}
     </div>
   )
 })

@@ -32,7 +32,8 @@ import { CommitBox, OutcomeLine, RemoteActions, type CommitBoxHandle, type Outco
 import { DiffView, type DiffLayout, type DiffNotes } from './DiffView'
 import { GitHubStrip } from './PullRequest'
 import { clearNotes, notesKey, quoteOf, reviewPrompt, spanOf, useReviewNotes, type LineSpan, type NotesApi, type ReviewNote } from '@/lib/reviewNotes'
-import { useHandoff, type HandoffTarget } from './AgentHandoff'
+import { FixWithAgent, useHandoff, type HandoffTarget } from './AgentHandoff'
+import { conflictsFixPrompt, hookFixPrompt, opName } from '@/lib/fixPrompts'
 import { NotesBar } from './ReviewNotes'
 
 /** A note being written: where, its first click (a shift-click spans from it), and the note it edits. */
@@ -210,12 +211,21 @@ export function ChangesView({ target: given, title, sessionId, onClose, onOpenFi
           </button>
         </div>
       </header>
-      <GitHubStrip target={target} title={title} sessionId={sessionId} />
-      {notice && <div className="shrink-0 border-b border-[var(--app-hairline)] px-4 py-2"><OutcomeLine outcome={notice} onDismiss={() => setNotice(null)} /></div>}
-      {changes?.state && (
-        <p className="shrink-0 border-b border-[var(--app-hairline)] bg-warn/[0.07] px-4 py-1.5 text-[12px] text-fg">
-          A {changes.state.replace(/ing$/, '')} is under way in this worktree; finish or abort it in a terminal.
-        </p>
+      <GitHubStrip target={target} title={title} sessionId={sessionId} fix={handoff} />
+      {notice && (
+        <div className="shrink-0 border-b border-[var(--app-hairline)] px-4 py-2">
+          {/* Only a push runs a hook among the header's and the list's actions. */}
+          <OutcomeLine outcome={notice} onDismiss={() => setNotice(null)} action={!notice.ok && notice.failure.kind === 'hook' ? <FixWithAgent target={handoff} prompt={() => hookFixPrompt('push', notice.failure.message, notice.failure.output, changes?.branch)} /> : undefined} />
+        </div>
+      )}
+      {(changes?.state || conflicted.length > 0) && (
+        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--app-hairline)] bg-warn/[0.07] px-4 py-1.5 text-[12px] text-fg">
+          <p>
+            {changes?.state ? `A ${opName(changes.state)} is under way in this worktree; finish or abort it in a terminal.` : ''}
+            {conflicted.length > 0 ? `${changes?.state ? ' ' : ''}${conflicted.length === 1 ? 'A file is' : `${conflicted.length} files are`} in conflict.` : ''}
+          </p>
+          {conflicted.length > 0 && <FixWithAgent target={handoff} prompt={() => conflictsFixPrompt(conflicted.map((e) => e.file.path), changes?.state, changes?.branch)} />}
+        </div>
       )}
 
       <div className="flex min-h-0 flex-1">
@@ -264,7 +274,14 @@ export function ChangesView({ target: given, title, sessionId, onClose, onOpenFi
             {discard ? (
               <DiscardConfirm d={discard} busy={busy} onKeep={() => setDiscard(null)} onDiscard={confirmDiscard} />
             ) : (
-              <CommitBox ref={commitBox} target={target} changes={changes} onChanges={accept} sessionId={sessionId} />
+              <CommitBox
+                ref={commitBox}
+                target={target}
+                changes={changes}
+                onChanges={accept}
+                sessionId={sessionId}
+                failureAction={(f, doing) => (f.kind === 'hook' ? <FixWithAgent target={handoff} prompt={() => hookFixPrompt(doing, f.message, f.output, changes?.branch)} /> : null)}
+              />
             )}
           </div>
         </div>

@@ -9,6 +9,23 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Changed
 
+- **⌘0 opens the Dashboard.** It sits beside ⌘1–⌘9 like the tab before the
+  first; ⇧⌘D still works, and resetting the interface size moved to ⇧⌘0
+  (and ⌘K). Keys on the tabs and the Dashboard's key in the sidebar are drawn
+  as keys, larger, and from five open tabs the Dashboard tab folds to its
+  icon and key.
+- **Charts and exact numbers, both drawn.** Model mix, What it went on and
+  Per project on the Cost screen each open with a donut, and every table
+  row's share is a bar in its slice's colour. On Lifetime the Charts / Numbers
+  switch is larger, the numbers carry the same bars, and Daily cost sits
+  right under the totals instead of at the bottom.
+- **Keep awake says whether it is on right now.** The cup in the status bar
+  is in colour with a green dot while Caprock holds the computer awake and
+  reads *may sleep*, faint, while it does not; a click explains it and
+  switches the mode there.
+- **The full breakdown is a row of its own.** *Every tool, model and
+  project* under the All time panel on Now is a full-width row instead of a
+  faint link in the corner.
 - **The daemon starts lighter.** Shortly after a start Caprock counts a
   whole-history report for the share dialog, and that count used to read
   every tool call's full payload — an edit's payload carries the whole file

@@ -5,7 +5,7 @@
  * daemon could not complete must be visible rather than silently inflating the
  * "no tool call" row into a finding (rule 6).
  */
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { WorkMix, WorkMixStrip } from './WorkMix'
 import type { Summary, WorkShare } from '@/lib/api'
@@ -30,7 +30,7 @@ describe('WorkMix', () => {
     // been reasoning, planning, or answering a question; naming it any one of
     // those asserts something the capture does not record.
     render(<WorkMix summary={summary({ work: [work({ kind: 'none', cost_usd: 8, cost_pct: 80 })] })} />)
-    expect(screen.getByText('no tool call')).toBeTruthy()
+    expect(within(screen.getByRole('table')).getByText('no tool call')).toBeTruthy()
     for (const flattering of ['conversation', 'thinking', 'planning', 'reasoning']) {
       expect(screen.queryByText(new RegExp(`^${flattering}$`, 'i'))).toBeNull()
     }
@@ -48,10 +48,10 @@ describe('WorkMix', () => {
         })}
       />,
     )
-    expect(screen.getByText('writing code')).toBeTruthy()
+    expect(within(screen.getByRole('table')).getByText('writing code')).toBeTruthy()
     expect(screen.getByText('running commands')).toBeTruthy()
     expect(screen.getByText('reading and searching')).toBeTruthy()
-    expect(screen.getByText('50%')).toBeTruthy()
+    expect(within(screen.getByRole('table')).getByText('50%')).toBeTruthy()
   })
 
   it('warns when tool calls could not be matched to their turns', () => {

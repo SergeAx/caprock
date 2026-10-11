@@ -335,7 +335,7 @@ export function Sidebar(props: SidebarProps) {
          * unfold"): the same four actions as icons, plus the way back. */
         <div className="flex shrink-0 items-center gap-1 border-t border-[var(--app-hairline)] px-2 py-1.5">
           <FeedbackButton variant="icon" />
-          <IconButton label={`Dashboard (${keys('⇧⌘D')})`} onClick={props.onDashboard}>
+          <IconButton label={`Dashboard (${keys('⌘0')})`} onClick={props.onDashboard}>
             <DashboardIcon size={15} />
           </IconButton>
           {props.onSettings && (
@@ -367,7 +367,7 @@ export function Sidebar(props: SidebarProps) {
           >
             <DashboardIcon size={15} className="text-fg-muted" />
             <span className="flex-1">Dashboard</span>
-            <kbd className="app-kbd">{keys('⇧⌘D')}</kbd>
+            <kbd className="app-kbd-key">{keys('⌘0')}</kbd>
           </button>
           {!props.onSettings && <ThemeButton />}
         </div>

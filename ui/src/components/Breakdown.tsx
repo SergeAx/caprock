@@ -58,9 +58,6 @@ export function BreakdownPanel() {
             * posting is the reader's call, not ours. The nudge beside it is
             * the part that waits for an occasion — now a toast (ShareMoment). */}
           <ShareCard />
-          <a href="#/history" className="text-fg-faint hover:text-accent no-underline">
-            every tool, model and project →
-          </a>
         </span>
       }
     >
@@ -154,6 +151,15 @@ export function BreakdownPanel() {
           <span className="ml-auto text-fg-faint">re-sending the conversation on every call</span>
         </div>
       )}
+      {/* The way into the whole breakdown, as a block of its own: as a faint
+        * link in the corner the owner called it "very, very important" and
+        * nearly missed it (2026-10-11, translated). */}
+      <a href="#/history" data-full-breakdown
+        className="group flex items-center gap-3 border-t border-border px-3 py-2.5 no-underline hover:bg-panel-2">
+        <span className="text-[13px] font-medium text-fg group-hover:text-accent">Every tool, model and project</span>
+        <span className="text-[12px] text-fg-muted">charts and exact numbers, for any range</span>
+        <span className="ml-auto text-[13px] text-accent">Open →</span>
+      </a>
     </Panel>
   )
 }

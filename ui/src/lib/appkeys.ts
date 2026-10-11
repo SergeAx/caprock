@@ -77,6 +77,8 @@ export function matchAppShortcut(e: KeyLike, isMac: boolean): AppCommand | null 
       switch (k) {
         case 'n': return { kind: 'new-agent' }
         case 'd': return { kind: 'dashboard' }
+        // ⌘0 is the Dashboard, so the interface's default size moved here.
+        case '0': return { kind: 'zoom', step: 0 }
         case '[': return { kind: 'prev-tab' }
         case ']': return { kind: 'next-tab' }
         case 'e': return { kind: 'split', direction: 'column' }
@@ -120,7 +122,9 @@ function plain(k: string): AppCommand | null {
     case 'f': return { kind: 'find' }
     case '=': return { kind: 'zoom', step: 1 }
     case '-': return { kind: 'zoom', step: -1 }
-    case '0': return { kind: 'zoom', step: 0 }
+    // ⌘0, beside ⌘1–⌘9: the Dashboard is the tab before the first (owner,
+    // 2026-10-11: ⇧⌘D was awkward to reach). ⇧⌘D still works.
+    case '0': return { kind: 'dashboard' }
     default:
       if (/^[1-9]$/.test(k)) return { kind: 'tab', index: Number(k) - 1 }
       return null
@@ -188,8 +192,8 @@ export const SHORTCUTS: [keys: string, does: string][] = [
   ['⌘F', 'Find in the terminal'],
   ['⌘I', 'Inspector'],
   ['⌘\\', 'Hide or show the sidebar'],
-  ['⇧⌘D', 'Dashboard'],
+  ['⌘0, ⇧⌘D', 'Dashboard'],
   ['⌘,', 'Settings'],
-  ['⌘+, ⌘−, ⌘0', 'Interface size: bigger, smaller, back to the default'],
+  ['⌘+, ⌘−, ⇧⌘0', 'Interface size: bigger, smaller, back to the default'],
   ['⌘R', 'Reload the window'],
 ]

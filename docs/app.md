@@ -91,10 +91,11 @@ others. Installing it: [install-app.md](install-app.md).
   Both groups stay closed until you open them, and the app remembers which
   are open. A project shows in the list again while something runs or
   waits in it, or while it is the one in front, hidden or not.
-- **Dashboard.** At the bottom of the sidebar, *Dashboard* (⇧⌘D) opens Now,
+- **Dashboard.** At the bottom of the sidebar, *Dashboard* (⌘0, or ⇧⌘D) opens Now,
   Cost, Lifetime and the other screens in a *Dashboard* tab pinned at the
   left of the tab strip; your terminals stay in the strip beside it, one click
   away, and the tab brings back the screen you left it on until you close it.
+  With five or more tabs open the Dashboard tab shows only its icon and key.
   The arrow beside *Send feedback* folds that bottom block to one row of
   icons and back; the app remembers which way you left it.
   The sliders beside it open Settings (⌘,) in the same tab, where the app puts
@@ -406,10 +407,10 @@ On macOS:
 | ⌘F          | Find in the terminal or the file         |
 | ⌘K          | Command palette                          |
 | ⌘,          | Settings                                 |
-| ⌘+ ⌘− ⌘0    | Interface size: bigger, smaller, default |
+| ⌘+ ⌘− ⇧⌘0   | Interface size: bigger, smaller, default |
 | ⌘I          | Agent cockpit (the inspector)            |
 | ⌘\          | Hide or show the sidebar                 |
-| ⇧⌘D         | Dashboard tab, and back                  |
+| ⌘0, ⇧⌘D     | Dashboard tab, and back                  |
 | ⌘R          | Reload the window (View → Reload)        |
 
 On Windows and Linux each is Ctrl+Shift with the same letter (Quick chat is
@@ -473,8 +474,9 @@ it: nothing that updates behind the sheet takes it from the field you are in.
   your approval, Caprock stops the computer from falling asleep for
   inactivity, and lets it sleep again once nothing works (or after half an
   hour without a word from a session). The screen can still turn off, and
-  closing a laptop's lid still sleeps it. *awake* with a cup in the status
-  bar says it is happening. Settings → *Keep awake* turns it off or keeps the
+  closing a laptop's lid still sleeps it. In the status
+  bar *awake* with a cup, in colour, says it is happening, and *may sleep*,
+  faint, that it is not; click it to see why and to switch the mode. Settings → *Keep awake* turns it off or keeps the
   computer awake for as long as Caprock runs. On Linux it needs
   `systemd-inhibit`.
 - **Closing the window.** On macOS Caprock stays in the menu bar; ⌘Q quits.

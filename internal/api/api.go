@@ -399,8 +399,8 @@ type Server struct {
 	weekLong *answerCache
 	// today caches today's summary for the moments nothing was written; see
 	// rangeSummary.
-	today *answerCache
-	glance   *answerCache
+	today  *answerCache
+	glance *answerCache
 	// drill holds the tool drill-downs (drillTTL).
 	drill *answerCache
 	// repos answers "which repository, on which host" per directory.

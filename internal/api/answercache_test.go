@@ -281,10 +281,9 @@ func TestAnswerCacheRenewsWhileNothingWasWritten(t *testing.T) {
 	c := newAnswerCache(3*time.Second, 30*time.Minute, func() time.Time { return now }).
 		versioned(func(context.Context) (int64, error) { return ver.Load(), nil }, 10*time.Minute)
 	var calls atomic.Int64
-	fn := func() (any, error) { return calls.Add(1), nil }
 	get := func() any {
 		t.Helper()
-		v, err := c.get(context.Background(), "all", fn)
+		v, err := c.get(context.Background(), "all", func() (any, error) { return calls.Add(1), nil })
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -330,15 +329,14 @@ func TestAnswerCacheTodayIsNeverServedStale(t *testing.T) {
 	c := newAnswerCache(todayTTL, todayTTL, func() time.Time { return now }).
 		versioned(func(context.Context) (int64, error) { return ver.Load(), nil }, time.Minute)
 	var calls atomic.Int64
-	fn := func() (any, error) { return calls.Add(1), nil }
-	_, _ = c.get(context.Background(), "today", fn)
+	_, _ = c.get(context.Background(), "today", func() (any, error) { return calls.Add(1), nil })
 	now = now.Add(5 * time.Second)
-	if v, _ := c.get(context.Background(), "today", fn); v != int64(1) {
+	if v, _ := c.get(context.Background(), "today", func() (any, error) { return calls.Add(1), nil }); v != int64(1) {
 		t.Fatalf("got %v with nothing written, want the cached answer", v)
 	}
 	ver.Add(1)
 	now = now.Add(5 * time.Second)
-	if v, _ := c.get(context.Background(), "today", fn); v != int64(2) {
+	if v, _ := c.get(context.Background(), "today", func() (any, error) { return calls.Add(1), nil }); v != int64(2) {
 		t.Fatalf("got %v after a write, want the new count", v)
 	}
 }

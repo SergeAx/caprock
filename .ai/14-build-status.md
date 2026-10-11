@@ -73,6 +73,13 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-11 — 0.107.0: pull requests and CI in the session deck
+
+The session deck shows the session's latest three PRs with CI and review
+(`GET /v1/sessions/{id}/prs`, `github.PullByURL` kept per PR) and the branch
+with what is not committed or pushed; one click connects GitHub through `gh`.
+The minute chart and the plan windows left the deck.
+
 ### 2026-10-11 — 0.106.1: the daemon follows the app everywhere
 
 On Windows and Linux the app now replaces its own daemon when an update

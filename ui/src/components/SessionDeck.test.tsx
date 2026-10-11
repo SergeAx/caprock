@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Event, SessionSummary, Summary } from '@/lib/api'
 import { heldSessions } from '@/lib/sessionEvents'
@@ -42,14 +42,16 @@ function show(p: Partial<Parameters<typeof SessionDeck>[0]> = {}) {
 afterEach(() => { vi.useRealTimers(); h.asked = 0 })
 
 describe('the session deck', () => {
-  it('reads what the session is doing, what it cost and its context', async () => {
+  it('reads the session’s context, and asks nothing of its events', async () => {
     show()
-    expect(screen.getByRole('status')).toHaveTextContent('Working')
-    expect(screen.getByLabelText('Cost $1.84')).toBeInTheDocument()
-    expect(await screen.findByText('go test ./internal/...')).toBeInTheDocument()
-    expect(screen.getByText(/last call/)).toHaveTextContent('$0.07')
     expect(screen.getByRole('meter', { name: 'Context used' })).toHaveAttribute('aria-valuenow', '62')
     expect(screen.getByText(/next call/)).toHaveTextContent('$0.03')
+    // What it is doing and what it cost are the sidebar's and the inspector's.
+    expect(screen.queryByText('Spent')).toBeNull()
+    expect(screen.queryByText('Now')).toBeNull()
+    await new Promise((r) => setTimeout(r, 20))
+    expect(h.asked).toBe(0)
+    expect(heldSessions()).toBe(0)
   })
 
   it('leaves out what the agent does not report rather than drawing a zero', () => {
@@ -61,7 +63,6 @@ describe('the session deck', () => {
 
   it('shows the branch with what is not committed and not pushed', async () => {
     show({ branch: 'feat/deck', changed: 3, ahead: 2, onReviewChanges: () => {} })
-    await screen.findByText('go test ./internal/...')
     expect(screen.getByText('feat/deck')).toBeInTheDocument()
     expect(screen.getByText('3 not committed · 2 not pushed')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Review changes' })).toBeInTheDocument()
@@ -76,8 +77,8 @@ describe('the session deck', () => {
     ] }
     show()
     expect(await screen.findByText('CI 2/5')).toBeInTheDocument()
-    expect(screen.getByText('CI failed: windows')).toBeInTheDocument()
-    expect(screen.getByText('merged')).toBeInTheDocument()
+    expect(screen.getByText('CI ✗ windows')).toBeInTheDocument()
+    expect(screen.getByText('CI ✓ 1 · merged')).toBeInTheDocument()
     h.prs = { connected: true, prs: [] }
   })
 
@@ -87,15 +88,6 @@ describe('the session deck', () => {
     expect(await screen.findByText('connect GitHub for CI')).toBeInTheDocument()
     expect(screen.getByText('merged')).toBeInTheDocument()
     h.prs = { connected: true, prs: [] }
-  })
-
-  it('has room for the recent calls only when tall', async () => {
-    const { rerender } = show()
-    await screen.findByText('go test ./internal/...')
-    expect(screen.queryByText('12 turns')).toBeNull()
-    rerender(<SessionDeck s={agent()} sessionId="s1" hasPermission={false} summary={summary} height={220} onResize={() => {}} onClose={() => {}} />)
-    expect(screen.getByText('12 turns')).toBeInTheDocument()
-    expect(screen.getByText('40 tool calls')).toBeInTheDocument()
   })
 
   it('resizes the terminal once, on release, however far the divider is dragged', () => {
@@ -121,11 +113,12 @@ describe('the session deck', () => {
     expect(onResize.mock.calls[0]![0]).toBeGreaterThanOrEqual(5 * DECK_STEP)
   })
 
-  it('lets go of the session’s events when it closes', async () => {
-    const { unmount } = show()
-    await waitFor(() => expect(h.asked).toBe(1))
-    expect(heldSessions()).toBe(1)
-    unmount()
-    expect(heldSessions()).toBe(0)
+  it('hides with a labelled button that names its key', () => {
+    const onClose = vi.fn()
+    show({ onClose })
+    const b = screen.getByRole('button', { name: /Close the session deck/ })
+    expect(b).toHaveTextContent('Hide')
+    fireEvent.click(b)
+    expect(onClose).toHaveBeenCalled()
   })
 })

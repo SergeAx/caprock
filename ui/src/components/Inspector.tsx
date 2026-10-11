@@ -71,7 +71,7 @@ export function Inspector({
 }) {
   const isAgent = !!sessionId && !!session && session.kind !== 'shell'
   return (
-    <aside aria-label="Inspector" className="app-scroll flex h-full min-h-0 flex-col overflow-y-auto border-l border-[var(--app-hairline)] bg-[var(--app-chrome-bg)]">
+    <aside aria-label="Inspector" className="app-scroll flex h-full min-h-0 flex-col overflow-y-auto overflow-x-hidden border-l border-[var(--app-hairline)] bg-[var(--app-chrome-bg)]">
       <div className="flex h-[40px] shrink-0 items-center gap-2 border-b border-[var(--app-hairline)] pl-4 pr-2">
         <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-faint">{isAgent ? 'Agent' : 'Inspector'}</h2>
         <button type="button" onClick={onClose} aria-label={`Close the inspector (${keys('⌘I')})`} title={`Close (${keys('⌘I')})`} className="ml-auto flex h-[26px] w-[26px] items-center justify-center rounded-[6px] text-fg-muted hover:bg-[var(--app-row-hover)] hover:text-fg">
@@ -95,7 +95,7 @@ function Body({ session: s, project, sessionId, hasPermission, showPrompt, onDet
   const ended = s?.status === 'ended'
   if (s && !isShell) {
     return (
-      <div className="grid gap-[18px] px-4 pb-4 pt-3.5">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-[18px] px-4 pb-4 pt-3.5">
         <header className="grid gap-1">
           <h3 className="line-clamp-2 text-[14.5px] font-semibold leading-snug tracking-[-0.01em] text-fg" title={sessionTitle(s)}>{sessionTitle(s)}</h3>
           {s.cwd && <Place place={sessionPlace(s, project)} />}
@@ -120,7 +120,7 @@ function Body({ session: s, project, sessionId, hasPermission, showPrompt, onDet
     )
   }
   return (
-    <div className="grid gap-5 px-4 py-4">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5 px-4 py-4">
       <header className="grid gap-1">
         <div className="flex items-center gap-2">
           {s && <StatusDot dot={dotOf(s, hasPermission)} />}

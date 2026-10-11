@@ -34,6 +34,13 @@ describe('the session deck height', () => {
     expect(readDeck()).toEqual({ open: true, height: DECK_MIN })
   })
 
+  it('lowers a height kept before the chart left by a third, once', () => {
+    localStorage.setItem(DECK_KEY, JSON.stringify({ open: true, height: 300 }))
+    expect(readDeck()).toEqual({ open: true, height: 200 })
+    saveDeck(readDeck())
+    expect(readDeck()).toEqual({ open: true, height: 200 })
+  })
+
   it('survives storage that throws', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked') })
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked') })

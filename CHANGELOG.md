@@ -7,6 +7,19 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Changed
+
+- **app:** the session deck is a third lower and keeps only what helps
+  while typing: context, branch, and pull requests with CI — a merged one
+  now says *CI ✓ 12 · merged*. *Now* and *Spent* left it (the sidebar and
+  the inspector carry them), so it no longer follows the session's events.
+  Its top edge is an accent line that frames the prompt above it, and a
+  *Hide ⌘B* button sits on it.
+
+### Fixed
+
+- **app:** the inspector's content no longer runs past its right edge.
+
 ## [0.107.0] - 2026-10-11
 
 ### Added

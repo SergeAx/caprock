@@ -96,24 +96,22 @@ describe('the session deck in the app', () => {
     expect(deck()).toBeNull()
   })
 
-  it('holds nothing while closed: with the inspector closed too, no session’s events are fetched or followed', async () => {
+  it('never holds a session’s events: with the inspector closed, the open deck fetches and follows none', async () => {
     await openAgent()
     fireEvent.click(screen.getByRole('button', { name: /^Inspector/ }))
     await waitFor(() => expect(heldSessions()).toBe(0))
     const before = h.asked
     cmdB()
-    expect(heldSessions()).toBe(1)
-    await waitFor(() => expect(h.asked).toBe(before + 1))
-    cmdB()
+    expect(deck()).toBeInTheDocument()
     expect(heldSessions()).toBe(0)
+    expect(h.asked).toBe(before)
   })
 
-  it('shares one fetch with the cockpit beside it', async () => {
+  it('adds no fetch to the cockpit beside it', async () => {
     await openAgent()
     await waitFor(() => expect(h.asked).toBe(1))
     cmdB()
     expect(deck()).toBeInTheDocument()
-    expect(heldSessions()).toBe(1)
     expect(h.asked).toBe(1)
   })
 

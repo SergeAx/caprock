@@ -50,6 +50,14 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   1.9 GB database, measured 2026-10-11, the daemon's memory footprint 90
   seconds after a start fell from 678 MB to 85 MB, and the report's figures
   are byte for byte the same.
+- **The dashboard costs less to keep open.** Five parts of it ask for your
+  whole history once a minute and the cost strip asks for today's summary
+  every few seconds; each ask counted it all again even when no agent had
+  written anything. Caprock now checks whether anything was written since
+  the last count and reuses the answer when nothing was. Measured 2026-10-11
+  on a copy of a 1.9 GB database with the Now screen open and no agent
+  working, the daemon used 11.5 s of CPU over two minutes before and 4.7 s
+  after.
 
 - **The block at the bottom of the sidebar folds.** The arrow beside
   *Send feedback* collapses feedback, Dashboard, Settings and the theme

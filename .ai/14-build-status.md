@@ -73,6 +73,11 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-11 — 0.107.2: a large Tasks page before the runner is on
+
+Tasks with the task runner off is a headline, three big numbered steps and a
+filled *Turn on the task runner* button.
+
 ### 2026-10-11 — 0.107.1: a lower, plainer session deck
 
 The deck is a third lower and shows context, branch and PRs with CI (CI on

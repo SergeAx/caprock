@@ -490,3 +490,43 @@ describe('the subscription picker', () => {
     }
   })
 })
+
+/** One prompt, N attempts (ADR-052): several copies of one branch, one agent each. */
+describe('attempts', () => {
+  it('starts N copies on one message and hands every session back', async () => {
+    spawn.mockResolvedValue({ session_id: 'a-1', cwd: '/w/app/.caprock-worktrees/fix-1', session_ids: ['a-1', 'a-2', 'a-3'], attempt_group: 'g1' } as never)
+    const onAttempts = vi.fn()
+    const onStarted = vi.fn()
+    render(<NewAgentSheet projects={projects} projectId="1" onClose={vi.fn()} onStarted={onStarted} onAttempts={onAttempts} />)
+    fireEvent.change(await screen.findByLabelText<HTMLSelectElement>('Where'), { target: { value: '' } })
+    // Only a new copy offers attempts.
+    expect(screen.queryByLabelText(/^Attempts/)).toBeNull()
+    fireEvent.change(screen.getByLabelText<HTMLSelectElement>('Where'), { target: { value: '__new__' } })
+    const attempts = screen.getByLabelText<HTMLSelectElement>(/^Attempts/)
+    expect(attempts.value).toBe('1')
+    fireEvent.change(attempts, { target: { value: '3' } })
+    // A message is what each one works on: without one nothing starts.
+    fireEvent.click(screen.getByRole('button', { name: /^Start 3/ }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Attempts need a first message')
+    expect(spawn).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByPlaceholderText('What should it do?'), { target: { value: 'Fix the login bug' } })
+    expect(screen.getByText('caprock/fix-the-login-bug-1')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /^Start 3/ }))
+    await waitFor(() => expect(spawn).toHaveBeenCalledOnce())
+    expect(spawn.mock.calls[0]![0]).toMatchObject({ worktree: 'fix-the-login-bug', attempts: 3, prompt: 'Fix the login bug' })
+    expect(onAttempts).toHaveBeenCalledWith(['a-1', 'a-2', 'a-3'], '1', 'Fix the login bug', undefined)
+    expect(onStarted).not.toHaveBeenCalled()
+  })
+
+  it('sends no attempts for a folder that is not a new copy', async () => {
+    open()
+    fireEvent.change(await screen.findByLabelText<HTMLSelectElement>('Where'), { target: { value: '__new__' } })
+    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(/^Attempts/), { target: { value: '2' } })
+    fireEvent.change(screen.getByLabelText<HTMLSelectElement>('Where'), { target: { value: '' } })
+    fireEvent.change(screen.getByPlaceholderText('What should it do?'), { target: { value: 'hello' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Start/ }))
+    await waitFor(() => expect(spawn).toHaveBeenCalledOnce())
+    expect(spawn.mock.calls[0]![0]).not.toHaveProperty('attempts')
+  })
+})

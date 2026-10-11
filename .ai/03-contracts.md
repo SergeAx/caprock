@@ -1015,7 +1015,8 @@ machine, never from a forge's API (rule 4):
   guarded recent folder without checking that it still exists.
 
 ```
-POST   /v1/agents                    {cwd?, chat?, create?, worktree?, worktree_base?, worktree_pull?, agent?, subscription?, model?, permission_mode?, resume?, fork?, command?, args?} → {session_id, cwd}
+POST   /v1/agents                    {cwd?, chat?, create?, worktree?, worktree_base?, worktree_pull?, agent?, subscription?, model?, permission_mode?, resume?, fork?, command?, args?, attempts?} → {session_id, cwd, session_ids?, attempt_group?, error?}
+GET    /v1/attempts/{group}          → {group, base?, attempts: [AttemptView]}; 404 for an unknown group
 GET    /v1/agents/models?agent=      {agent, default?, models:[{id,label}]}
 GET    /v1/agents/catalog            → {agents: [CatalogEntry], licensed, home?}
 GET    /v1/agents/custom             → {agents: [CustomAgent], licensed}
@@ -1109,6 +1110,31 @@ who wants an unattended run turns the setting off.
 The endpoints answer 501 only when
 **no** agent can be started (`claude_available`, `codex_available`,
 `opencode_available` and `gemini_available` all false on `/v1/status`).
+
+**`attempts` on `POST /v1/agents`** — one prompt, N attempts
+([ADR-052](08-decisions.md)). A whole number from 1 to 4; absent or 1 is an
+ordinary start. From 2 it needs `worktree` and refuses `resume`,
+`relay_from` and `chat` (`400`). The daemon starts the same request once per
+attempt, in order, with `worktree` = `<worktree>-1` … `<worktree>-N`;
+`worktree_pull` applies to the first only, and the rest get `worktree_base`
+= the commit the first copy started from, so every attempt starts from the
+same code. Each started session gets an `attempts` row. The first failure
+stops the rest: with none started it is `400 {error}`; otherwise `200` with
+`session_ids` (in order), `session_id` (the first), `attempt_group`, and
+`error` naming the attempt that did not start, and the group's total is what
+started. Bypass consent and a controller's limits are checked once, before
+any start.
+
+- **`AttemptView`** — `{session_id, group_id, n, total, base?, base_commit?,
+  created_at, session: Session, stats: Stats, changes?: {files, additions,
+  deletions, binary?}, changes_error?}`. `changes` is what the copy changed
+  since `base_commit` (`gitdiff.Since`): committed, uncommitted and untracked
+  files git does not ignore, an untracked file's lines read from its first
+  1 MiB, at most 2000 of them read; absent with `changes_error` when the
+  folder is gone (*its copy has been removed*), is not a repository, or git
+  failed. Read concurrently, 10 s each. Open to every paired device.
+- **`Session`** carries `attempt_group`, `attempt` and `attempts` (omitted
+  when not one of a group), on every list, detail and `session` frame.
 
 **`prompt` and `relay_from` on `POST /v1/agents`** — a relay ([ADR-032](08-decisions.md)).
 `prompt` is the new session's first message, passed on the agent's command
@@ -2243,6 +2269,28 @@ CREATE INDEX IF NOT EXISTS idx_saved_prompts_project ON saved_prompts(project_id
 Saved prompts and commands ([ADR-051](08-decisions.md), § Saved prompts and
 commands). No foreign key: unlisting a project (`archived_at`) keeps its
 rows, and nothing deletes a project row.
+
+### Attempts DDL (migration 0046)
+
+```sql
+CREATE TABLE IF NOT EXISTS attempts (
+  session_id  TEXT    PRIMARY KEY,
+  group_id    TEXT    NOT NULL,
+  n           INTEGER NOT NULL,
+  total       INTEGER NOT NULL,
+  base        TEXT    NOT NULL DEFAULT '',
+  base_commit TEXT    NOT NULL DEFAULT '',
+  created_at  INTEGER NOT NULL          -- unix ms
+);
+CREATE INDEX IF NOT EXISTS idx_attempts_group ON attempts(group_id);
+```
+
+One prompt, N attempts ([ADR-052](08-decisions.md)). `group_id` is 16 hex
+characters from the daemon; `base` the branch asked for (empty for HEAD);
+`base_commit` the commit the copy's HEAD named when it started. Sessions read
+it with a correlated subquery in `sessionCols` (one primary-key lookup per
+row). Nothing deletes a row: removing a session or its copy leaves the
+record of what was tried.
 
 ### Pending permission DDL (migrations 0039, 0042, 0043)
 

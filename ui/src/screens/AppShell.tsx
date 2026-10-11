@@ -51,6 +51,7 @@ import { appUpdate } from '@/lib/appupdate'
 import { PermissionPrompt } from '@/components/PermissionPrompt'
 import { ChatView } from '@/components/ChatView'
 import { ChangesView } from '@/components/ChangesView'
+import { AttemptsCompare } from '@/components/AttemptsCompare'
 import { FileView } from '@/components/FileView'
 import { FilePicker } from '@/components/FilePicker'
 import { NewAgentSheet } from '@/components/NewAgentSheet'
@@ -228,6 +229,8 @@ export function AppShell() {
   // mounted behind it.
   const [chatOpen, setChatOpen] = useState<ReadonlySet<string>>(() => new Set())
   const [changesView, setChangesView] = useState<ChangesTarget | null>(null)
+  // Compare attempts (ADR-052): over the terminals, as the Changes view is.
+  const [compare, setCompare] = useState<{ group: string; title: string } | null>(null)
   const version = useDaemonVersion()
   const [, toggleTheme] = useTheme()
   const editors = useEditors()
@@ -316,12 +319,14 @@ export function AppShell() {
   /** A tab picked in the strip or in the sidebar's list. */
   const onActivateTab = useCallback((id: string) => {
     setChangesView(null)
+    setCompare(null)
     dispatch({ type: 'activate', tabId: id })
     showWorkspace()
   }, [showWorkspace])
 
   const openTab = useCallback((target: TabTarget, projectId: string, title: string) => {
     setChangesView(null)
+    setCompare(null)
     dispatch({ type: 'open', target, projectId, title })
     showWorkspace()
   }, [showWorkspace])
@@ -329,6 +334,7 @@ export function AppShell() {
   /** Beside the focused pane of the tab in front (F15); a new tab when there is none. */
   const openSplit = useCallback((target: TabTarget, projectId: string, title: string, direction: 'row' | 'column' = 'row') => {
     setChangesView(null)
+    setCompare(null)
     dispatch({ type: 'split', target, projectId, title, direction })
     showWorkspace()
   }, [showWorkspace])
@@ -492,6 +498,35 @@ export function AppShell() {
     { id: 'project', label: 'Add project', hint: keys('⌘O'), icon: <FolderPlusIcon size={13} />, run: onAddProject },
   ], [onNewAgent, onQuickChatChooser, onNewShell, onAddProject])
   const onSettings = useCallback(() => { location.hash = '#/settings' }, [])
+
+  /**
+   * One prompt, N attempts (ADR-052). Each attempt opens in a tab, in order,
+   * and the first comes to the front; Compare is a click away in ⌘K and the
+   * inspector. An attempt that did not start is said, beside the ones that did.
+   */
+  const onAttempts = useCallback((ids: string[], projectId: string, title: string, error?: string) => {
+    ids.forEach((id, i) => openTab({ kind: 'session', sessionId: id }, projectId, `attempt ${i + 1}/${ids.length} · ${title}`))
+    if (ids[0]) openTab({ kind: 'session', sessionId: ids[0] }, projectId, `attempt 1/${ids.length} · ${title}`)
+    refresh()
+    setToast(error
+      ? `${ids.length} attempts started; ${error}`
+      : `${ids.length} attempts started, one copy each. Compare them from ${keys('⌘K')} or the inspector.`)
+  }, [openTab, refresh])
+  /** The comparison of a session's group of attempts. */
+  const onCompare = useCallback((s: SessionSummary) => {
+    if (!s.attempt_group) return
+    setChangesView(null)
+    setCompare({ group: s.attempt_group, title: sessionTitle({ ...s, attempts: 0 }) })
+    showWorkspace()
+  }, [showWorkspace])
+  /** The project and worktree a session runs in, from the sidebar's model. */
+  const placeOf = useCallback((id: string): { node: ProjectNode; w: WorktreeNode } | undefined => {
+    for (const node of model.projects) {
+      const w = node.worktrees.find((x) => x.sessions.some((y) => y.session.session_id === id))
+      if (w) return { node, w }
+    }
+    return undefined
+  }, [model.projects])
 
   /**
    * Saved prompts and commands (ADR-051). A prompt goes to the session in
@@ -791,6 +826,16 @@ export function AppShell() {
       const folder = focusedSession?.cwd
       if (folder) items.push({ id: 'a-editor-cwd', group: 'Actions', label: `Open this folder in ${name}`, detail: folder, icon: <ExternalIcon size={14} />, run: () => openInEditor(folder, 'the folder') })
     }
+    // Compare attempts (ADR-052): one row per group the session list holds.
+    const groups = new Map<string, SessionSummary[]>()
+    for (const x of data.sessions) {
+      if (!x.attempt_group || !x.attempts || x.attempts < 2) continue
+      groups.set(x.attempt_group, [...(groups.get(x.attempt_group) ?? []), x])
+    }
+    for (const [group, list] of groups) {
+      const first = [...list].sort((a, b) => (a.attempt ?? 0) - (b.attempt ?? 0))[0]!
+      items.push({ id: `cmp-${group}`, group: 'Actions', label: `Compare attempts: ${sessionTitle({ ...first, attempts: 0 })}`, detail: `${first.attempts} attempts${first.project ? ` · ${first.project}` : ''}`, icon: <BranchIcon size={14} />, run: () => onCompare(first) })
+    }
     for (const t of ws.tabs) {
       const leaf = focusedLeaf(t)
       const s = sessionsById.get(leaf.target.sessionId)
@@ -827,7 +872,7 @@ export function AppShell() {
       }
     }
     return items
-  }, [savedItems, manageSaved, ws.tabs, model.projects, model.inbox, sessionsById, projectsById, openSessions, prefs.inspector, current, onNewAgent, onNewShell, onQuickChat, onQuickChatChooser, onAddProject, onDashboard, toggleTheme, onSettings, run, showWorkspace, openSession, openSplit, onSelectProject, onOpenInbox, jumpToWaiting, splitShell, detach, editors, focusedSession?.cwd, openInEditor, source, onOpenChanges, fileScope, focused?.kind])
+  }, [data.sessions, onCompare, savedItems, manageSaved, ws.tabs, model.projects, model.inbox, sessionsById, projectsById, openSessions, prefs.inspector, current, onNewAgent, onNewShell, onQuickChat, onQuickChatChooser, onAddProject, onDashboard, toggleTheme, onSettings, run, showWorkspace, openSession, openSplit, onSelectProject, onOpenInbox, jumpToWaiting, splitShell, detach, editors, focusedSession?.cwd, openInEditor, source, onOpenChanges, fileScope, focused?.kind])
 
   // Every session the daemon knows, by what it was about; one that is open or
   // live is already in the list above under its own id.
@@ -1025,6 +1070,28 @@ export function AppShell() {
                       className="absolute inset-0 z-20"
                     />
                   )}
+                  {compare && (
+                    <AttemptsCompare
+                      key={compare.group}
+                      group={compare.group}
+                      title={compare.title}
+                      dotFor={(id) => { const x = sessionsById.get(id); return x ? dotOf(x, data.permissions.has(id)) : undefined }}
+                      onClose={() => setCompare(null)}
+                      onOpen={(v) => {
+                        const at = placeOf(v.session_id)
+                        const s = sessionsById.get(v.session_id)
+                        if (s) openSession(s, at?.node.project.id ?? activeProjectId)
+                        else location.hash = `#/session/${encodeURIComponent(v.session_id)}`
+                      }}
+                      onReview={source === 'api' ? (v) => {
+                        const at = placeOf(v.session_id)
+                        if (!at) { setToast('Its copy is not in the sidebar any more.'); return }
+                        setCompare(null)
+                        onOpenChanges(at.node.project.id, at.w)
+                      } : undefined}
+                      className="absolute inset-0 z-20"
+                    />
+                  )}
                   {!current && (
                     <EmptyWorkspace
                       project={activeProject}
@@ -1079,6 +1146,7 @@ export function AppShell() {
                   onReviewChanges={focusedWorktree?.repo ? () => onOpenChanges(focusedWorktree.projectId, focusedWorktree.w) : undefined}
                   onOpenFile={focusedWorktree?.repo ? (p) => openFile(focusedWorktree.projectId, focusedWorktree.w.isMain ? '' : focusedWorktree.w.key, p) : undefined}
                   summary={data.summary}
+                  onCompare={focusedSession?.attempt_group ? () => onCompare(focusedSession) : undefined}
                 />
               </div>
             )}
@@ -1111,6 +1179,7 @@ export function AppShell() {
           onSetup={onSetupAgent}
           onProjectAdded={() => refresh()}
           onStarted={(id, projectId, title) => { openTab({ kind: 'session', sessionId: id }, projectId, title); data.refresh() }}
+          onAttempts={onAttempts}
         />
       )}
       {sheet?.kind === 'quick-chat' && (

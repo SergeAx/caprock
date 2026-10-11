@@ -19,6 +19,10 @@
  * 2026-10-09: "existing or new — totally unclear"): *This folder* is the
  * project's own checkout, *Existing copy* a worktree already there, *New copy
  * on its own branch* a new one, explained in a line under the name field.
+ *
+ * *Attempts* (ADR-052), under a new copy: 1 to 4 agents on the same first
+ * message, each in a copy of its own from the same branch, to compare and
+ * keep one. Not remembered: every start is one agent unless asked.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, errText } from '@/lib/api'
@@ -63,6 +67,7 @@ export function NewAgentSheet({
   onSetup,
   onProjectAdded,
   onStarted,
+  onAttempts,
 }: {
   projects: Project[]
   projectId?: string
@@ -78,6 +83,8 @@ export function NewAgentSheet({
   /** A repository picked in the search was added as a project. */
   onProjectAdded?: (projectId: string) => void
   onStarted: (sessionId: string, projectId: string, title: string) => void
+  /** Several attempts started (ADR-052): their sessions in order, and why any after the first did not start. */
+  onAttempts?: (sessionIds: string[], projectId: string, title: string, error?: string) => void
 }) {
   // Which OpenCode is installed decides what a mode becomes in it.
   const status = useApi(() => api.status(), [], { live: false })
@@ -120,6 +127,8 @@ export function NewAgentSheet({
     return () => { alive = false }
   }, [where, project?.id])
   const [newBranch, setNewBranch] = useState(initialWorktree ?? '')
+  const [attempts, setAttempts] = useState(1)
+  const several = where === NEW_WORKTREE && attempts > 1
   const [models, setModels] = useState<Record<SpawnAgent, string>>(DEFAULT_MODELS)
   const [mode, setMode, rememberMode] = useInitialMode(DEFAULT_MODE)
   const [prompt, setPrompt] = useState(initialPrompt)
@@ -157,6 +166,7 @@ export function NewAgentSheet({
   const start = async () => {
     if (!project) { setError('Pick a project first.'); return }
     if (where === NEW_WORKTREE && nameBad) return
+    if (several && !prompt.trim()) { setError('Attempts need a first message: it is what each one works on.'); return }
     setBusy(true)
     setError('')
     try {
@@ -173,9 +183,12 @@ export function NewAgentSheet({
         if (base) { req.worktree_base = base; req.worktree_pull = pull }
       }
       if (prompt.trim()) req.prompt = prompt.trim()
-      const { session_id } = await api.spawn(req)
+      if (several) req.attempts = attempts
+      const res = await api.spawn(req)
       rememberMode()
-      onStarted(session_id, project.id, prompt.trim().slice(0, 60) || 'new session')
+      const title = prompt.trim().slice(0, 60) || 'new session'
+      if (several && res.session_ids && onAttempts) onAttempts(res.session_ids, project.id, title, res.error)
+      else onStarted(res.session_id, project.id, title)
       onClose()
     } catch (e) {
       if (!consent.noteRefusal(e)) setError(errText(e))
@@ -231,7 +244,7 @@ export function NewAgentSheet({
             title={`Start (${startKey})`}
             keyHint={busy ? undefined : startKey}
           >
-            {busy ? 'Starting…' : consent.needed ? 'Accept and start' : 'Start'}
+            {busy ? 'Starting…' : consent.needed ? 'Accept and start' : several ? `Start ${attempts}` : 'Start'}
           </SheetButton>
         </>
       }
@@ -278,9 +291,22 @@ export function NewAgentSheet({
                   Pull the latest <span className="mono">{base}</span> from {branches.find((b) => b.name === base)?.remote} first
                 </label>
               )}
-              <p className="text-[12px] leading-snug text-fg-faint" title={WHERE_TOOLTIP}>
-                A separate folder, so this agent doesn’t collide with others: <span className="mono text-fg-muted">caprock/{worktreeName}</span>{base ? <> from <span className="mono text-fg-muted">{base}</span></> : null}.
-              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <SheetField label="Attempts" hint={several ? 'one copy each' : 'compare and keep one'}>
+                  <select className="input" value={attempts} onChange={(e) => setAttempts(Number(e.target.value))}>
+                    {ATTEMPT_CHOICES.map((n) => <option key={n} value={n}>{n === 1 ? '1 agent' : `${n} agents, same message`}</option>)}
+                  </select>
+                </SheetField>
+              </div>
+              {several ? (
+                <p className="text-[12px] leading-snug text-fg-faint" title={WHERE_TOOLTIP}>
+                  {attempts} separate folders, one agent each, all from {base ? <span className="mono text-fg-muted">{base}</span> : 'the same commit'}: <span className="mono text-fg-muted">caprock/{worktreeName}-1</span> to <span className="mono text-fg-muted">-{attempts}</span>. Compare what each changed and cost, then keep the one you want.
+                </p>
+              ) : (
+                <p className="text-[12px] leading-snug text-fg-faint" title={WHERE_TOOLTIP}>
+                  A separate folder, so this agent doesn’t collide with others: <span className="mono text-fg-muted">caprock/{worktreeName}</span>{base ? <> from <span className="mono text-fg-muted">{base}</span></> : null}.
+                </p>
+              )}
               {project && <ProjectSetupCommand key={project.id} project={project} />}
             </div>
           )}
@@ -325,6 +351,9 @@ export function NewAgentSheet({
     </Sheet>
   )
 }
+
+/** How many attempts one start may make; the daemon allows the same (attemptsMax). */
+const ATTEMPT_CHOICES = [1, 2, 3, 4]
 
 const WHERE_KEY = 'caprock.newAgent.where'
 const PULL_KEY = 'caprock.newAgent.pull'

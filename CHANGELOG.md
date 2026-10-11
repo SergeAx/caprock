@@ -14,6 +14,9 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   *caprock 160 MB* beside it is Caprock itself (daemon, app, terminal
   holders), with the split in its tooltip.
 
+- **ui:** *Settings* in the dashboard header is a framed button with a gear,
+  like *Feedback* beside it, instead of grey text.
+
 ### Fixed
 
 - **app:** the update card no longer stacks on top of the version panel:

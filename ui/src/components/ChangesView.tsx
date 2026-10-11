@@ -455,7 +455,8 @@ function FileDiff({ target, entry, token, layout, onLayout, onChanges, onError, 
 
   const fileNotes = useMemo(() => review.notes.filter((n) => n.path === path), [review.notes, path])
   const diffNotes = useMemo<DiffNotes | undefined>(() => {
-    if (!patch || patch.binary || patch.too_large) return undefined
+    // A conflicted file shows a combined diff with no line numbers to note on.
+    if (!patch || patch.binary || patch.too_large || entry.area === 'conflicted') return undefined
     const { add, update, remove } = review
     return {
       notes: fileNotes,
@@ -479,7 +480,7 @@ function FileDiff({ target, entry, token, layout, onLayout, onChanges, onError, 
       },
       onCancel: () => setDraft(null),
     }
-  }, [patch, review, fileNotes, draft, focusNote, path, setDraft])
+  }, [patch, entry.area, review, fileNotes, draft, focusNote, path, setDraft])
 
   const f = entry.file
   const large = patch ? isLargePatch(patch) : false

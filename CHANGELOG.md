@@ -7,6 +7,12 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Changed
+
+- **Tasks, before the task runner is on, is large and plain:** one headline
+  (*Hand off a task. Get it back green.*), three big numbered steps, and a
+  filled *Turn on the task runner* button.
+
 ## [0.107.1] - 2026-10-11
 
 ### Changed

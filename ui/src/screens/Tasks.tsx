@@ -94,39 +94,43 @@ function TaskRunnerOff({ status, onEnabled }: { status: Status; onEnabled: () =>
   const hive = status.suggested_hive ?? '~/caprock-tasks'
   const repo = status.suggested_repo ?? ''
   return (
-    <div className="grid gap-3 max-w-[52rem] mx-auto">
-      <Panel title="Task runner" right={<span className="text-[11px] text-fg-faint">off</span>}>
-        <div className="grid gap-3 px-3 py-3">
-          <ol className="grid gap-2 md:grid-cols-3">
-            <Step n={1} title="You write a task">
-              A title, a budget, and the commands that have to pass.
-            </Step>
-            <Step n={2} title="Caprock runs it">
-              An orchestrator hands each task to a Claude worker in its{' '}
-              <span className="text-fg">own git worktree</span> — your working tree is untouched.
-            </Step>
-            <Step n={3} title="Caprock checks it">
-              <span className="text-fg">Caprock</span> runs your commands, not the agent. Only green
-              is done.
-            </Step>
-          </ol>
-          <div className="text-[11px] text-fg-faint">
-            Best for independent tasks — nothing here merges branches. The queue directory is
-            created for you; your repository is not modified.
-          </div>
-        </div>
-        {!isPairedDevice() && <footer className="px-3 py-2 border-t border-border flex items-center gap-2">
+    // Big on purpose (owner, 2026-10-11: "make it large and beautiful"): this
+    // is the whole feature for anyone who has not turned it on.
+    <div className="mx-auto grid max-w-[64rem] gap-8 px-2 py-6 md:py-10">
+      <header className="grid gap-3">
+        <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-fg-faint">Task runner · off</span>
+        <h1 className="text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] text-fg md:text-[40px]">
+          Hand off a task. <span className="text-accent">Get it back green.</span>
+        </h1>
+        <p className="max-w-[44rem] text-[16px] leading-relaxed text-fg-muted">
+          Write what needs doing and the commands that must pass. An agent does it in its own worktree, and Caprock checks the result itself.
+        </p>
+      </header>
+      <ol className="grid gap-4 md:grid-cols-3">
+        <Step n={1} title="You write a task">
+          A title, a budget, and the commands that have to pass.
+        </Step>
+        <Step n={2} title="Caprock runs it">
+          A Claude worker takes it in its <span className="text-fg">own git worktree</span>. Your working tree is untouched.
+        </Step>
+        <Step n={3} title="Caprock checks it">
+          <span className="text-fg">Caprock</span> runs your commands, not the agent. Only green is done.
+        </Step>
+      </ol>
+      {!isPairedDevice() && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
           <button
             onClick={() => setConfirming(true)}
-            className="border border-accent bg-accent/15 text-accent px-3 py-1 rounded-sm text-[12px] hover:bg-accent/25"
+            className="rounded-[10px] bg-accent px-6 py-3 text-[16px] font-semibold text-panel shadow-[0_10px_30px_-12px_var(--color-accent)] hover:opacity-90"
           >
             Turn on the task runner
           </button>
-          <span className="text-[11px] text-fg-faint">
-            No restart. Nothing runs until you start it.
-          </span>
-        </footer>}
-      </Panel>
+          <span className="text-[14px] text-fg-muted">No restart. Nothing runs until you start it.</span>
+        </div>
+      )}
+      <p className="text-[13px] text-fg-faint">
+        Best for independent tasks: nothing here merges branches. The queue directory is created for you; your repository is not modified.
+      </p>
       {confirming && (
         <EnableDialog hive={hive} repo={repo} onClose={() => setConfirming(false)} onDone={onEnabled} />
       )}
@@ -136,12 +140,10 @@ function TaskRunnerOff({ status, onEnabled }: { status: Status; onEnabled: () =>
 
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
-    <li className="border border-border bg-panel-2/60 rounded-sm px-2.5 py-2 grid gap-1 content-start">
-      <div className="flex items-baseline gap-1.5">
-        <span className="num text-[11px] text-accent">{n}</span>
-        <span className="text-[12px] font-medium">{title}</span>
-      </div>
-      <div className="text-[11px] text-fg-muted leading-[1.45]">{children}</div>
+    <li className="grid content-start gap-3 rounded-[14px] border border-border bg-panel-2/60 p-5">
+      <span className="num text-[44px] font-semibold leading-none tracking-[-0.03em] text-accent">{n}</span>
+      <span className="text-[18px] font-semibold leading-snug text-fg">{title}</span>
+      <div className="text-[14px] leading-relaxed text-fg-muted">{children}</div>
     </li>
   )
 }

@@ -7,7 +7,6 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -193,13 +192,6 @@ func (d *Detector) Forget(sessionID string) {
 	d.mu.Unlock()
 }
 
-var (
-	reNums   = regexp.MustCompile(`\b\d+\b`)
-	reSpaces = regexp.MustCompile(`\s+`)
-	reHex    = regexp.MustCompile(`\b[0-9a-f]{7,64}\b`)
-	reTmp    = regexp.MustCompile(`/tmp/[^\s"']+|/var/folders/[^\s"']+`)
-)
-
 // Signature normalizes a tool call into a similarity key: tool name + the
 // tool_input with volatile parts (numbers, hashes, temp paths, whitespace)
 // collapsed. Two calls that differ only in a retry counter, a line number, or a
@@ -212,9 +204,26 @@ func Signature(tool string, payload json.RawMessage) (sig, sample string) {
 		ToolInput map[string]json.RawMessage `json:"tool_input"`
 	}
 	_ = json.Unmarshal(payload, &p)
+	return signatureOf(tool, p.ToolInput), Describe(tool, p.ToolInput)
+}
+
+// InputSignature is Signature for a call's tool_input alone, without the
+// banner text: the same key Signature gives the payload that wraps it. A scan
+// over history needs only the key, and reading tool_input out of the payload
+// is what keeps the rest of it (a tool's whole response) out of memory.
+func InputSignature(tool string, input json.RawMessage) string {
+	if tool == "" {
+		return ""
+	}
+	var m map[string]json.RawMessage
+	_ = json.Unmarshal(input, &m)
+	return signatureOf(tool, m)
+}
+
+func signatureOf(tool string, input map[string]json.RawMessage) string {
 	// Deterministic field order.
-	keys := make([]string, 0, len(p.ToolInput))
-	for k := range p.ToolInput {
+	keys := make([]string, 0, len(input))
+	for k := range input {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
@@ -228,8 +237,8 @@ func Signature(tool string, payload json.RawMessage) (sig, sample string) {
 			continue
 		}
 		var s string
-		if err := json.Unmarshal(p.ToolInput[k], &s); err != nil {
-			s = string(p.ToolInput[k])
+		if err := json.Unmarshal(input[k], &s); err != nil {
+			s = string(input[k])
 		}
 		if k == "content" || k == "new_string" || k == "old_string" {
 			// Edit/Write bodies: compare only a fingerprint of the first part; a
@@ -243,22 +252,99 @@ func Signature(tool string, payload json.RawMessage) (sig, sample string) {
 		b.WriteString(normalize(s))
 		b.WriteByte(';')
 	}
-	raw := b.String()
-	sum := sha1.Sum([]byte(raw))
-	sample = Describe(tool, p.ToolInput)
-	return hex.EncodeToString(sum[:]), sample
+	sum := sha1.Sum([]byte(b.String()))
+	return hex.EncodeToString(sum[:])
 }
 
+// normalize collapses the volatile parts of one input field: temp paths, hex
+// ids, numbers and runs of whitespace, lower-cased and cut at 400 bytes.
+//
+// It is one pass over the string and gives exactly what these four
+// replacements, in this order, gave (TestNormalizeMatchesRegexps holds it to
+// them):
+//
+//	/tmp/[^\s"']+|/var/folders/[^\s"']+   -> "/tmp/…"
+//	\b[0-9a-f]{7,64}\b                     -> "#"
+//	\b\d+\b                                -> "0"
+//	\s+                                     -> " "
+//
+// Four regexp passes over every tool call's input were half of what a
+// whole-history Week allocated.
 func normalize(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
-	s = reTmp.ReplaceAllString(s, "/tmp/…")
-	s = reHex.ReplaceAllString(s, "#")
-	s = reNums.ReplaceAllString(s, "0")
-	s = reSpaces.ReplaceAllString(s, " ")
-	if len(s) > 400 {
-		s = s[:400]
+	var b strings.Builder
+	b.Grow(min(len(s), 512))
+	for i := 0; i < len(s) && b.Len() <= 400; {
+		c := s[i]
+		switch {
+		case c == '/':
+			if n := tempPathLen(s[i:]); n > 0 {
+				b.WriteString("/tmp/…")
+				i += n
+				continue
+			}
+			b.WriteByte(c)
+			i++
+		case isWordByte(c):
+			j := i
+			hex, digits := true, true
+			for j < len(s) && isWordByte(s[j]) {
+				d := s[j] >= '0' && s[j] <= '9'
+				digits = digits && d
+				hex = hex && (d || (s[j] >= 'a' && s[j] <= 'f'))
+				j++
+			}
+			switch n := j - i; {
+			case hex && n >= 7 && n <= 64:
+				b.WriteByte('#')
+			case digits:
+				b.WriteByte('0')
+			default:
+				b.WriteString(s[i:j])
+			}
+			i = j
+		case isSpaceByte(c):
+			for i < len(s) && isSpaceByte(s[i]) {
+				i++
+			}
+			b.WriteByte(' ')
+		default:
+			b.WriteByte(c)
+			i++
+		}
 	}
-	return s
+	out := b.String()
+	if len(out) > 400 {
+		out = out[:400]
+	}
+	return out
+}
+
+// tempPathLen is the length of the temp path at the start of s, or 0.
+func tempPathLen(s string) int {
+	for _, prefix := range [...]string{"/tmp/", "/var/folders/"} {
+		if !strings.HasPrefix(s, prefix) {
+			continue
+		}
+		n := len(prefix)
+		for n < len(s) && !isSpaceByte(s[n]) && s[n] != '"' && s[n] != '\'' {
+			n++
+		}
+		if n > len(prefix) {
+			return n
+		}
+	}
+	return 0
+}
+
+// isWordByte is regexp's \w: ASCII letters, digits and underscore.
+func isWordByte(c byte) bool {
+	return c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+// isSpaceByte is regexp's \s: [\t\n\f\r ].
+func isSpaceByte(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\f' || c == '\r'
 }
 
 // Describe renders a short human-readable form of a tool call for banners.

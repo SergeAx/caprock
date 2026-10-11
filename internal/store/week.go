@@ -475,12 +475,27 @@ type toolRow struct {
 
 // scanToolPosts reads the successful Bash, Edit, Write and MultiEdit calls in
 // [from, to), in time order.
+//
+// SQLite picks out the fields weekTools reads instead of handing back each
+// payload whole. A tool.post payload carries the tool's response, and an
+// Edit's response holds the whole file it edited: on the owner's database the
+// four tools' payloads came to about a gigabyte, all of it decoded and held
+// at once to count lines and find pull requests. Only a Bash call's response
+// is kept, for its output.
 func scanToolPosts(ctx context.Context, q Querier, from, to int64) ([]toolRow, error) {
 	rows, err := q.QueryContext(ctx, `
-		SELECT e.session_id, COALESCE(e.key,''), COALESCE(e.tool,''), e.ts, e.payload
+		SELECT e.session_id, COALESCE(e.key,''), COALESCE(e.tool,''), e.ts,
+		       COALESCE(e.payload ->> '$.hook_event_name', ''),
+		       COALESCE(CAST(e.payload ->> '$.is_error' AS INTEGER), 0),
+		       COALESCE(e.payload ->> '$.cwd', ''),
+		       COALESCE(CAST(e.payload ->> '$.duration_ms' AS INTEGER), 0),
+		       COALESCE(e.payload -> '$.tool_input', ''),
+		       CASE WHEN e.tool = 'Bash' THEN COALESCE(e.payload -> '$.tool_response', '') ELSE '' END,
+		       COALESCE(CASE WHEN json_type(e.payload, '$.tool_response') = 'object'
+		                     THEN CAST(e.payload ->> '$.tool_response.interrupted' AS INTEGER) END, 0)
 		FROM events e
 		WHERE e.kind = 'tool.post' AND e.ts >= ? AND e.ts < ?`+nonInternalEventE+`
-		  AND e.tool IN ('Bash','Edit','Write','MultiEdit')
+		  AND e.tool IN ('Bash','Edit','Write','MultiEdit') AND json_valid(e.payload)
 		ORDER BY e.ts, e.id`, from, to)
 	if err != nil {
 		return nil, err
@@ -489,16 +504,43 @@ func scanToolPosts(ctx context.Context, q Querier, from, to int64) ([]toolRow, e
 	var posts []toolRow
 	for rows.Next() {
 		var r toolRow
-		var payload []byte
-		if err := rows.Scan(&r.session, &r.key, &r.tool, &r.ts, &payload); err != nil {
+		var input, response string
+		var isErr, interrupted int64
+		if err := rows.Scan(&r.session, &r.key, &r.tool, &r.ts,
+			&r.p.HookEvent, &isErr, &r.p.Cwd, &r.p.DurationMs, &input, &response, &interrupted); err != nil {
 			return nil, err
 		}
-		if json.Unmarshal(payload, &r.p) != nil || !r.p.succeeded() {
+		r.p.IsError = isErr != 0
+		if input != "" {
+			r.p.ToolInput = json.RawMessage(input)
+		}
+		if response != "" && outputMatters(input) {
+			r.p.ToolResponse = json.RawMessage(response)
+		}
+		if interrupted != 0 || !r.p.succeeded() {
 			continue
 		}
 		posts = append(posts, r)
 	}
 	return posts, rows.Err()
+}
+
+// outputMatters reports whether a Bash call's output can change what
+// countPRs counts: only `git commit`, `gh pr create` and `gh pr merge` read
+// it. A command that names neither word cannot be one of them, so its output
+// is not kept; an input that is not here (the transcript plane keeps it on
+// the tool.pre) keeps the output, as before.
+func outputMatters(input string) bool {
+	if input == "" {
+		return true
+	}
+	var ti struct {
+		Command *string `json:"command"`
+	}
+	if json.Unmarshal([]byte(input), &ti) != nil || ti.Command == nil {
+		return true
+	}
+	return strings.Contains(*ti.Command, "commit") || strings.Contains(*ti.Command, "gh")
 }
 
 func preInput(ctx context.Context, q Querier, session, postKey string) (json.RawMessage, error) {
@@ -730,7 +772,7 @@ func weekLoop(ctx context.Context, q Querier, from, to int64, w *Week, o WeekOpt
 			if len(ep) >= k && maxInWindow(ep, winMs, func(h loopHit) int64 { return h.ts }) >= k {
 				first, last := ep[0].ts, ep[len(ep)-1].ts
 				if best == nil || len(ep) > best.Calls || (len(ep) == best.Calls && last-first > best.LastMs-best.FirstMs) {
-					best = &WeekLoop{SessionID: s.session, Agent: s.agent, Tool: s.tool, Kind: loopKind(s.tool, s.payload), Calls: len(ep), FirstMs: first, LastMs: last}
+					best = &WeekLoop{SessionID: s.session, Agent: s.agent, Tool: s.tool, Kind: s.kind, Calls: len(ep), FirstMs: first, LastMs: last}
 				}
 			}
 			start = end
@@ -754,7 +796,7 @@ type loopHit struct {
 // loopSeries is every call of one signature in one session.
 type loopSeries struct {
 	session, agent, tool string
-	payload              []byte // the first call's, for loopKind
+	kind                 string // loopKind of the first call
 	hits                 []loopHit
 }
 
@@ -769,7 +811,8 @@ type loopScan struct {
 func scanLoopSeries(ctx context.Context, q Querier, from, to int64) (loopScan, error) {
 	out := loopScan{series: map[string]*loopSeries{}}
 	rows, err := q.QueryContext(ctx, `
-		SELECT e.session_id, COALESCE(s.agent,'claude'), COALESCE(e.tool,''), e.ts, COALESCE(e.msg_id,''), e.payload
+		SELECT e.session_id, COALESCE(s.agent,'claude'), COALESCE(e.tool,''), e.ts, COALESCE(e.msg_id,''),
+		       COALESCE(CASE WHEN json_valid(e.payload) THEN e.payload -> '$.tool_input' END, '')
 		FROM events e LEFT JOIN sessions s ON s.session_id = e.session_id
 		WHERE e.kind = 'tool.pre' AND e.ts >= ? AND e.ts < ?`+nonInternalEventE+`
 		  AND COALESCE(e.tool,'') NOT IN (`+readOnlyList+`)`, from, to)
@@ -780,27 +823,39 @@ func scanLoopSeries(ctx context.Context, q Querier, from, to int64) (loopScan, e
 	for rows.Next() {
 		var sess, agent, tool, msg string
 		var ts int64
-		var payload []byte
-		if err := rows.Scan(&sess, &agent, &tool, &ts, &msg, &payload); err != nil {
+		var input sql.RawBytes
+		if err := rows.Scan(&sess, &agent, &tool, &ts, &msg, &input); err != nil {
 			return out, err
 		}
 		if tool == "" || loop.ReadOnly(tool) {
 			continue
 		}
-		sig, _ := loop.Signature(tool, payload)
+		sig := loop.InputSignature(tool, json.RawMessage(input))
 		if sig == "" {
 			continue
 		}
 		key := sess + "\x00" + sig
 		s := out.series[key]
 		if s == nil {
-			s = &loopSeries{session: sess, agent: agent, tool: tool, payload: payload}
+			// The kind is read now, while the input is at hand: keeping the
+			// first payload of every series until the end held one per
+			// distinct call in the window.
+			wrapped := append(append([]byte(`{"tool_input":`), orNull(input)...), '}')
+			s = &loopSeries{session: sess, agent: agent, tool: tool, kind: loopKind(tool, wrapped)}
 			out.series[key] = s
 			out.order = append(out.order, key)
 		}
 		s.hits = append(s.hits, loopHit{ts, msg})
 	}
 	return out, rows.Err()
+}
+
+// orNull is a JSON value to wrap: an absent tool_input is null.
+func orNull(b []byte) []byte {
+	if len(b) == 0 {
+		return []byte("null")
+	}
+	return b
 }
 
 // weekSpans cuts [from, to) into at most n contiguous slices holding about

@@ -358,12 +358,8 @@ One window, three regions:
   Settings. The minute chart and the plan windows left the deck on
   2026-10-11 (owner, translated: "we already have charts everywhere"; the
   sidebar carries the plan windows). A figure the agent does not report is
-  left out, never drawn as zero. The bars cover the hour only while the 400
-  calls and turns held reach back that far; when they do not, the window
-  starts at the oldest one held and says so (*Last 23 min*), rather than
-  drawing minutes it never read as silence. As the terminal narrows the
-  cells that matter least give way first (container queries): Changes
-  below 1000px, Plan below 720px. ⌘B (Ctrl+Shift+B off macOS), a strip
+  left out, never drawn as zero. As the terminal narrows the Branch cell
+  gives way first, below 720px (a container query). ⌘B (Ctrl+Shift+B off macOS), a strip
   button beside the inspector's — labelled *Deck* with its key, since an
   icon alone left the deck unfound — and the palette open and close it; the
   Add project sheet's own ⌘B is not reached, since a sheet owns the

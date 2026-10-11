@@ -73,6 +73,16 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-11 — 0.106.0: folding panels, an update panel, links on Windows
+
+Dashboard panels fold to their titles (remembered); the agents row folds to
+icons. Plan limits and the daily cap lead Cost; Daily cost has a time axis
+and a weekday readout. The status bar's version opens an update panel (last
+checked, one-click update, notes, Check now). In the app every link meant
+for the browser goes through the shell's opener, which fixes *download it*
+on Windows. Open: on Windows and Linux an app update can leave an older
+daemon of the app's own running, since adoption is macOS-only (ADR-040).
+
 ### 2026-10-11 — 0.105.0: lighter daemon, session deck, drawn charts
 
 Resource use became the focus (owner, 2026-10-11). The whole-history Week

@@ -7,6 +7,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+## [0.106.0] - 2026-10-11
+
 ### Changed
 
 - **Dashboard panels fold.** The arrow on a panel's title folds it to that

@@ -183,6 +183,11 @@ type Config struct {
 	// GitHubNotify raises an OS notification when a followed pull request's
 	// CI starts failing or a review lands. On unless switched off.
 	GitHubNotify *bool `json:"github_notify,omitempty"`
+	// KeepAwake is when the daemon keeps the computer from idle-sleeping
+	// (internal/keepawake, ADR-049): "off", "working" (while an agent
+	// works) or "always" (while Caprock runs). Empty means never chosen,
+	// which is "working".
+	KeepAwake string `json:"keep_awake,omitempty"`
 }
 
 // GitHubNotifyOn reports whether CI and review notifications are on.

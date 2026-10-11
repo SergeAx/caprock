@@ -547,6 +547,7 @@ GET  /v1/storage                       → what the data directory holds; see §
 GET  /v1/pricing                       → the pricing table in force
 GET  /v1/premium                       → what the paid plan costs and where to buy it
 GET  /v1/window-stop                   → the plan-window stop's state (§ Pricing table, "The plan-window stop"); 501 when the daemon has no guard
+GET  /v1/keepawake                     → whether the computer is kept awake now (§ Keep awake); 501 when the daemon has no keeper
 POST /v1/report/test                   → sends this week's report now → {sent:"ok"}; 502 with Telegram's error, 501 when reporting is unavailable
 POST /v1/alerts/test                   → sends a test phone alert now, no licence needed → {sent:"ok"}; 502 with Telegram's error or "no bot configured"
 GET/PUT/POST/DELETE /v1/telegram…      → the Telegram bridge's setup and pairing (§ Telegram bridge)
@@ -751,6 +752,35 @@ sweeps on its own, five minutes after start and then hourly, but only holders
 whose verdict is `ours` (they registered with its own data directory): a
 preview or test daemon must never stop another install's leftovers, so those
 wait for the button.
+
+#### Keep awake
+
+`GET /v1/keepawake` (2026-10-11, [ADR-049](08-decisions.md)) says whether the
+daemon is keeping the computer from idle-sleeping. Code:
+`internal/keepawake` (the modes, the keeper, the per-OS holders) and
+`internal/daemon/keepawake.go` (what counts as working).
+
+```json
+{"mode": "working", "holding": true, "since": 1791400000000, "working": 2,
+ "available": true, "reason": "", "error": ""}
+```
+
+- `mode` is the effective mode: `off`, `working` or `always`.
+- `holding` is true while the assertion is in force; `since` is when it was
+  taken (Unix ms, absent when not holding). `working` is how many sessions
+  counted as working at the last check, every 15 s.
+- `available` is false where the machine offers nothing to ask (Linux without
+  `systemd-inhibit`, a daemon built without a holder); `reason` says why.
+- `error` is why the last attempt to hold failed, empty when it did not; a
+  failed hold is tried again after five minutes.
+- `501` when the daemon has no keeper. Machine only: not on a paired device's
+  list.
+
+`GET`/`PUT /v1/settings` carry **`keep_awake`**: one of `off`, `working`,
+`always`, else `400` (an empty string included). `GET` returns the effective
+mode, `working` when never chosen; it is stored as `keep_awake` in
+`config.json` only once it differs from what is stored, so writing back what
+was read does not pin the default.
 
 `PUT /v1/settings` also accepts `gemini_api_key`, stored write-only in the same way. `GET` reports `gemini_key_set` and `gemini_key_from_env` instead of the value; `GEMINI_API_KEY` in the daemon's environment takes precedence over the stored key when both exist ([ADR-025](08-decisions.md)).
 

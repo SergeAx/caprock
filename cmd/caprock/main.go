@@ -32,6 +32,7 @@ import (
 	"github.com/dspv/caprock/internal/daemon"
 	"github.com/dspv/caprock/internal/disclaim"
 	"github.com/dspv/caprock/internal/hooks"
+	"github.com/dspv/caprock/internal/keepawake"
 	"github.com/dspv/caprock/internal/shim"
 	"github.com/dspv/caprock/internal/statusline"
 	"github.com/dspv/caprock/internal/version"
@@ -144,6 +145,7 @@ func runForeground(cmd *cobra.Command, dir string, cfg config.Config, noOpen, us
 		DataDir: dir, Config: cfg, Version: version.Version, Log: log, HiveDir: hiveDir, RepoCwd: repoDir,
 		HolderExe: holderExe(dir),
 		LAN:       useLAN,
+		KeepAwake: keepawake.NewOS(),
 		OnReady: func(url string) {
 			fmt.Fprintf(cmd.OutOrStdout(), "caprock is up at %s  (data: %s)\n", url, dir)
 			printHive(cmd, hiveDir)

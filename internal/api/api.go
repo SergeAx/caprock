@@ -33,6 +33,7 @@ import (
 	"github.com/dspv/caprock/internal/gitdiff"
 	"github.com/dspv/caprock/internal/github"
 	"github.com/dspv/caprock/internal/gitremote"
+	"github.com/dspv/caprock/internal/keepawake"
 	"github.com/dspv/caprock/internal/license"
 	"github.com/dspv/caprock/internal/loop"
 	"github.com/dspv/caprock/internal/narrate"
@@ -90,6 +91,9 @@ type Deps struct {
 	// nil ⇒ 501.
 	Resources   func(ctx context.Context) any
 	ReapOrphans func(ctx context.Context) (any, error)
+	// KeepAwake returns whether the computer is being kept awake, for GET
+	// /v1/keepawake (keepawake.Status). Nil ⇒ 501.
+	KeepAwake func() any
 	// WindowStop returns the plan-window stop's state for GET
 	// /v1/window-stop: the share, whether a licence is active, the figures it
 	// acts on and how fresh they are, and the sessions it has paused. nil ⇒ 501.
@@ -294,6 +298,10 @@ type Settings struct {
 	// request names no mode and has no session to carry one from. One of
 	// agents.PermissionModes, or empty for not set.
 	SpawnMode string `json:"spawn_permission_mode"`
+	// KeepAwake is when the computer is kept from idle-sleeping: one of
+	// keepawake.Modes. GET returns the effective mode, "working" when never
+	// chosen (ADR-049).
+	KeepAwake string `json:"keep_awake"`
 }
 
 // ReportSender sends one weekly report immediately.
@@ -448,6 +456,7 @@ func New(d Deps) *Server {
 	m.HandleFunc("POST /v1/claude/bypass-consent", s.handleBypassConsent)
 	m.HandleFunc("GET /v1/settings", s.handleGetSettings)
 	m.HandleFunc("GET /v1/window-stop", s.handleWindowStop)
+	m.HandleFunc("GET /v1/keepawake", s.handleKeepAwake)
 	m.HandleFunc("PUT /v1/settings", s.handlePutSettings)
 	m.HandleFunc("POST /v1/report/test", s.handleTestReport)
 	m.HandleFunc("POST /v1/alerts/test", s.handleTestAlert)
@@ -1212,6 +1221,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		Terminal        *string  `json:"terminal"`
 		Editor          *string  `json:"editor"`
 		SpawnMode       *string  `json:"spawn_permission_mode"`
+		KeepAwake       *string  `json:"keep_awake"`
 		// The bot token goes in and never comes back out. An empty string is a
 		// deliberate clear, which is why it is a pointer like everything else.
 		ReportBotToken *string `json:"report_bot_token"`
@@ -1310,6 +1320,14 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		in.SpawnMode = v
+	}
+	if patch.KeepAwake != nil {
+		v := strings.TrimSpace(*patch.KeepAwake)
+		if !keepawake.ValidMode(v) {
+			s.failCode(w, http.StatusBadRequest, fmt.Errorf("keep_awake must be one of %s", strings.Join(keepawake.Modes, ", ")))
+			return
+		}
+		in.KeepAwake = v
 	}
 	// Only touched when the caller named it. GET never returns the token, so a
 	// UI that reads settings and writes them back always omits it — treating
@@ -2446,6 +2464,16 @@ func (s *Server) handleWindowStop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.d.WindowStop(r.Context()))
+}
+
+// handleKeepAwake is GET /v1/keepawake: the mode, and whether the computer is
+// being kept awake right now (03-contracts.md § Keep awake).
+func (s *Server) handleKeepAwake(w http.ResponseWriter, r *http.Request) {
+	if s.d.KeepAwake == nil {
+		s.failCode(w, http.StatusNotImplemented, errors.New("keeping the computer awake is not available"))
+		return
+	}
+	writeJSON(w, http.StatusOK, s.d.KeepAwake())
 }
 
 // hasMainEvent reports whether any of events is the main thread's own.

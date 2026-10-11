@@ -7,6 +7,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+## [0.106.1] - 2026-10-11
+
 ### Fixed
 
 - **app:** on Windows and Linux the desktop app now replaces its own daemon

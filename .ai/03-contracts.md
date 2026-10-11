@@ -1373,10 +1373,10 @@ GET    /v1/projects                        → {projects: [Project]}; pinned fir
 POST   /v1/projects                        {path} | {create: {parent, name, git_init?}} | {clone: {url, parent, name?}, op_id?}
                                            path, create → 200 {project, created}; clone → 202 {op, existing}
 GET    /v1/projects/ops                    → {ops: [Op]}; clones running or ended in the last hour, newest first
-PATCH  /v1/projects/{id}                   {name?, pinned?, sort?, defaults?: {agent?, model?, permission_mode?, system_prompt?}} → {project}
+PATCH  /v1/projects/{id}                   {name?, pinned?, sort?, defaults?: {agent?, model?, permission_mode?, system_prompt?, setup_command?}} → {project}
 DELETE /v1/projects/{id}                   → 204; unlists it: nothing on disk is touched, no session or cost changes
 GET    /v1/projects/{id}/worktrees         → {worktrees: [Worktree]}
-POST   /v1/projects/{id}/worktrees         {branch, create?, base?} → {worktree: {path, branch, tracks?}}
+POST   /v1/projects/{id}/worktrees         {branch, create?, base?} → {worktree: {path, branch, tracks?, copied?}}
 GET    /v1/projects/{id}/branches          → {branches: [{name, main?, default?, local?, remote?, committed_ms}]}
 DELETE /v1/projects/{id}/worktrees/{name}  → 204; 409 {error} when it has any change
 POST   /v1/shells                          {cwd | project_id, cols?, rows?, replaces?} → {shell: Shell}
@@ -1445,6 +1445,30 @@ GET    /v1/shells?project=<id>             → {shells: [Shell]}; every running 
   `-c developer_instructions="<text>"` (quoted as TOML), a Grok one
   `--rules <text>`, on a start and a resume; OpenCode and Gemini ignore it. `defaults` is replaced whole by a PATCH, so a client sends the
   other keys back with it (`instructionsPatch`).
+- **`defaults.setup_command`** (2026-10-11, [ADR-050](08-decisions.md)) runs in
+  a worktree created for an agent being started (`POST /v1/agents` with
+  `worktree`), before the agent, in its terminal; never in a worktree that
+  already existed. Trimmed, at most 4 KiB, no NUL. A paired device's PATCH
+  that would set, change or clear it is `403`; one that carries it through
+  unchanged is not (`setupPatch` on the client).
+- **`.worktreeinclude`** (ADR-050): every worktree Caprock creates — `POST
+  /v1/projects/{id}/worktrees` and a spawn's `worktree` — gets the files of
+  the checkout it was made from that match the patterns in that checkout's
+  `.worktreeinclude` (gitignore syntax) **and** that git ignores. Never an
+  overwrite, never outside the worktree, symlinks only relative and inside the
+  repository, at most 5000 files and 256 MB. `copied` on the worktree `POST`
+  says what came along (*copied 2 files from .worktreeinclude (.env,
+  .env.local)*), or why not; absent when nothing matched.
+- **`caprock worktree-setup -- <agent> <args…>`** (hidden) is the process a
+  session with a setup command starts as. It reads `CAPROCK_SETUP_COMMAND`,
+  `CAPROCK_SETUP_TIMEOUT` (seconds, default 600) and `CAPROCK_SETUP_NOTE`
+  from its environment and removes them, prints the note, runs the command
+  (`/bin/sh -c` in its own process group; `cmd.exe /d /s /c` on Windows) with
+  no input, prints the outcome, writes `ESC ] 777 ; caprock-setup-done BEL`,
+  then execs the agent (Windows: runs it in a kill-on-close job and exits
+  with its code). Ctrl+C stops the command, the timeout stops its process
+  tree, and either way the agent starts. The session records the agent's own
+  command, not the wrapper's.
 - **`type`** on `POST /v1/shells` (ADR-046) is one line typed at the new
   shell's prompt once the shell has drawn it and gone quiet, never followed by
   Enter: an agent's install or sign-in command that the user reads and runs.
@@ -1785,7 +1809,7 @@ CREATE TABLE IF NOT EXISTS projects (
   added_at       INTEGER NOT NULL,             -- unix ms
   pinned         INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0,1)),
   sort           INTEGER NOT NULL DEFAULT 0,
-  defaults       TEXT    NOT NULL DEFAULT '{}', -- JSON: {agent?, model?, permission_mode?}
+  defaults       TEXT    NOT NULL DEFAULT '{}', -- JSON: {agent?, model?, permission_mode?, system_prompt?, setup_command?}
   archived_at    INTEGER                       -- unix ms; NULL = listed
 );
 ```

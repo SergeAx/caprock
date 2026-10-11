@@ -2605,3 +2605,65 @@ daemon, on a timer).
 
 **Revisit if** Claude Code or Codex add a documented account switch that does
 not move the whole configuration directory, or stop keying credentials to it.
+
+## ADR-050 — A new copy is ready to run: .worktreeinclude files come along, and a project's setup command runs in the agent's terminal first
+
+**Date:** 2026-10-11 · **Status:** accepted
+
+A fresh worktree is a checkout of what git tracks and nothing else: no `.env`,
+no `node_modules`. An agent started in one fails on its first test run, or
+spends its first minutes installing what the main checkout already had. Claude
+Code's own `--worktree` and Orca copy the git-ignored files a repository lists
+in `.worktreeinclude`; Orca also runs a per-project setup command. (ADR-049
+is keeping the computer awake, decided the same night in its own change.)
+
+**Decision.**
+
+- **`.worktreeinclude`**, with Claude Code's semantics: gitignore patterns in
+  a file at the repository root, and a file is copied only when it matches one
+  **and** git ignores it — a tracked file is already in the worktree, and an
+  untracked file nobody ignores is work in progress. Git decides both (`git
+  ls-files --others --ignored --exclude-from=.worktreeinclude`, then `git
+  check-ignore`), so the semantics are git's own. Applied to every worktree
+  Caprock makes: a New agent copy and the sidebar's new copy (`POST
+  /v1/projects/{id}/worktrees`, which reports it in `copied`).
+- **The copy never leaves the worktree.** No path with `..`, never an
+  overwrite (the worktree's own file wins), a directory resolved through
+  symlinks must still be inside the worktree, and a symlink is recreated only
+  when it is relative and points inside the repository; anything else is
+  skipped and counted. At most 5000 files and 256 MB; past that the copy stops
+  and says so.
+- **A setup command per project**, `defaults.setup_command` (no DDL change:
+  the column is already JSON). It runs only in a worktree created for the
+  agent being started, never in one reattached to, never in the main
+  checkout.
+- **In the agent's own terminal, before the agent.** The session's process
+  is `caprock worktree-setup -- <agent> <args…>`: it prints what was copied,
+  runs the command through `/bin/sh -c` (`cmd.exe /d /s /c` on Windows) with
+  no input, prints how it went, then **becomes the agent** — `exec` on macOS
+  and Linux, so the pid Caprock recorded, signals and watches is the agent's;
+  on Windows it starts the agent and waits, inside a kill-on-close job so
+  stopping the session stops both. The command and its limits travel in the
+  environment and are removed before the agent starts.
+- **Never blocks for long.** Ten minutes at most, then the whole process tree
+  is stopped (its own process group; `taskkill /T` on Windows); Ctrl+C skips
+  it; a failure is shown in red and the agent starts anyway. A first message
+  that is typed into an agent (OpenCode) waits for the wrapper's marker, so
+  it is never typed into the setup.
+- **Set on the machine.** A paired controller may start agents but may not
+  set or change a project's setup command (`403`): it is a command this
+  machine runs, and shells are not a phone's either (ADR-034).
+- **Nothing here can stop a spawn.** A failed copy is logged and said in the
+  terminal; a daemon with no Caprock binary to run the wrapper from (an
+  in-process test) starts the agent without the command and logs why.
+
+**Rejected.** Running the command in the daemon and blocking the start
+request on it (minutes with no output, and a request that outlives its
+caller); a shell wrapper around the agent (`sh -c 'setup; exec claude'`: no
+timeout without job control, and no `exec` on Windows); copying every ignored
+file (a `node_modules` per copy, gigabytes, for a repository that did not ask);
+a separate setup tab (two places to look, and the agent would start before the
+setup ended).
+
+**Revisit if** Claude Code changes `.worktreeinclude`'s semantics, or users
+want a per-project timeout or a teardown command when a copy is removed.

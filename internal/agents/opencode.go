@@ -258,7 +258,8 @@ var (
 // (measured on 2.0.26) as in OpenCode 1's; a final CR sends it. Nothing is
 // typed into a process that has ended or never drew anything.
 func (m *Manager) typeWhenReady(a *Agent, text string) {
-	if !m.waitQuiet(a) {
+	// A fresh worktree's setup draws first; the agent is not there yet.
+	if !a.awaitSetup() || !m.waitQuiet(a) {
 		return
 	}
 	body := strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\n", "\x1b\r")

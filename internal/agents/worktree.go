@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/dspv/caprock/internal/wtsetup"
 )
 
 // createWorktree runs `git worktree add` under repoDir and returns the new path.
@@ -17,12 +19,27 @@ import (
 // base, when set, is the branch the new one starts from (else HEAD); with pull
 // it is fetched from its remote first (startPoint).
 func createWorktree(ctx context.Context, repoDir, name, base string, pull bool) (string, error) {
+	w, err := makeWorktree(ctx, repoDir, name, base, pull)
+	return w.Dir, err
+}
+
+// madeWorktree is what makeWorktree did: the worktree's folder, the checkout
+// it was made from, and whether it is new — a worktree reattached to is
+// already set up, and copying or running setup into it again would be wrong.
+type madeWorktree struct {
+	Dir   string
+	Repo  string
+	Fresh bool
+}
+
+// makeWorktree is createWorktree, reporting where from and whether it is new.
+func makeWorktree(ctx context.Context, repoDir, name, base string, pull bool) (madeWorktree, error) {
 	if strings.ContainsAny(name, `/\:`) {
-		return "", errors.New("agents: worktree name must not contain path separators")
+		return madeWorktree{}, errors.New("agents: worktree name must not contain path separators")
 	}
 	top, err := gitOut(ctx, repoDir, "rev-parse", "--show-toplevel")
 	if err != nil {
-		return "", errors.New("agents: worktree requested but cwd is not a git repository")
+		return madeWorktree{}, errors.New("agents: worktree requested but cwd is not a git repository")
 	}
 	repo := strings.TrimSpace(top)
 	// Without this the main checkout lists .caprock-worktrees/ as an untracked
@@ -41,16 +58,16 @@ func createWorktree(ctx context.Context, repoDir, name, base string, pull bool) 
 		// Already checked out somewhere. Only reuse the path we would have chosen;
 		// anything else is the user's own checkout of that branch.
 		if filepath.Clean(existing) != filepath.Clean(dir) {
-			return "", fmt.Errorf(
+			return madeWorktree{}, fmt.Errorf(
 				"agents: branch %s is already checked out at %s; remove that worktree or use a different worker name",
 				branch, existing)
 		}
 		if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
-			return dir, nil
+			return madeWorktree{Dir: dir, Repo: repo}, nil
 		}
 	}
 	if branchExists(ctx, repo, branch) {
-		return "", fmt.Errorf(
+		return madeWorktree{}, fmt.Errorf(
 			"agents: branch %s already exists; delete it (git branch -D %s) or use a different worker name",
 			branch, branch)
 	}
@@ -58,16 +75,16 @@ func createWorktree(ctx context.Context, repoDir, name, base string, pull bool) 
 	// want even if the checks above are ever bypassed by a race.
 	point, err := startPoint(ctx, repo, base, pull)
 	if err != nil {
-		return "", err
+		return madeWorktree{}, err
 	}
 	args := []string{"worktree", "add", "--no-track", "-b", branch, dir}
 	if point != "" {
 		args = append(args, point)
 	}
 	if _, err := gitOut(ctx, repo, args...); err != nil {
-		return "", err
+		return madeWorktree{}, err
 	}
-	return dir, nil
+	return madeWorktree{Dir: dir, Repo: repo, Fresh: true}, nil
 }
 
 // branchExists reports whether refs/heads/<branch> is present.
@@ -125,6 +142,9 @@ type Worktree struct {
 	// Tracks is the remote branch a new local branch was set to track, empty
 	// when none.
 	Tracks string `json:"tracks,omitempty"`
+	// Copied says what .worktreeinclude brought over from the main checkout
+	// (internal/wtsetup), empty when nothing was.
+	Copied string `json:"copied,omitempty"`
 }
 
 // WorktreeName is the directory name a branch's worktree gets under
@@ -143,6 +163,25 @@ func WorktreeName(branch string) string {
 // never forces: a branch checked out in another worktree is refused with
 // git's own message, which names where.
 func AddWorktree(ctx context.Context, repoDir string, spec WorktreeSpec) (Worktree, error) {
+	w, err := addWorktree(ctx, repoDir, spec)
+	if err != nil {
+		return w, err
+	}
+	// Ready to run: the git-ignored files the repository lists in
+	// .worktreeinclude come along (ADR-050). A failure here is the copy's,
+	// not the worktree's, which exists and is returned.
+	if top, err := gitOut(ctx, repoDir, "rev-parse", "--show-toplevel"); err == nil {
+		c, err := wtsetup.CopyIncluded(ctx, strings.TrimSpace(top), w.Path)
+		if err != nil {
+			w.Copied = "could not copy from " + wtsetup.IncludeFile + ": " + err.Error()
+		} else {
+			w.Copied = c.Summary()
+		}
+	}
+	return w, nil
+}
+
+func addWorktree(ctx context.Context, repoDir string, spec WorktreeSpec) (Worktree, error) {
 	branch := strings.TrimSpace(spec.Branch)
 	if err := checkBranchName(ctx, repoDir, branch); err != nil {
 		return Worktree{}, err

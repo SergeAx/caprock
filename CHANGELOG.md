@@ -7,6 +7,13 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Changed
+
+- **The block at the bottom of the sidebar folds.** The arrow beside
+  *Send feedback* collapses feedback, Dashboard, Settings and the theme
+  switch to one row of icons, and the arrow there brings the rows back.
+  The app remembers which way you left it.
+
 ## [0.104.0] - 2026-10-11
 
 ### Added

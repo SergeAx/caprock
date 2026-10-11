@@ -95,6 +95,8 @@ others. Installing it: [install-app.md](install-app.md).
   Cost, Lifetime and the other screens in a *Dashboard* tab pinned at the
   left of the tab strip; your terminals stay in the strip beside it, one click
   away, and the tab brings back the screen you left it on until you close it.
+  The arrow beside *Send feedback* folds that bottom block to one row of
+  icons and back; the app remembers which way you left it.
   The sliders beside it open Settings (⌘,) in the same tab, where the app puts
   how new agents start, appearance, terminal and editor first. The × beside
   the *Settings* heading, or Esc, closes it as the tab's × does. *Send

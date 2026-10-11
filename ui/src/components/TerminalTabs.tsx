@@ -16,7 +16,7 @@ import { dotOf, sessionTitle } from '@/lib/sidebar'
 import { tabLabels, type TabLabel } from '@/lib/tablabels'
 import { TerminalPane, type PaneStatus } from './TerminalPane'
 import { AgentGlyph } from './AgentMarks'
-import { ChatIcon, CloseIcon, DashboardIcon, FileIcon, InspectorIcon, PlusIcon, TerminalIcon } from './AppIcons'
+import { ChatIcon, CloseIcon, DashboardIcon, DeckIcon, FileIcon, InspectorIcon, PlusIcon, TerminalIcon } from './AppIcons'
 import { StatusDot, TitleAndBranch } from './ProjectRow'
 import { HotMark } from './ResourceMeter'
 import { closeTitle, closeWord } from '@/lib/closeShell'
@@ -74,6 +74,10 @@ export interface TabStripProps {
   chatOpen?: boolean
   /** Absent when the tab in front has no conversation: a shell. */
   onToggleChat?: () => void
+  /** The session deck under the agent's terminal is open. */
+  deckOpen?: boolean
+  /** Absent when the tab in front is not an agent's: a shell has no deck. */
+  onToggleDeck?: () => void
 }
 
 export function TabStrip(props: TabStripProps) {
@@ -227,6 +231,9 @@ export function TabStrip(props: TabStripProps) {
       <div className="mb-1 flex shrink-0 items-center gap-0.5">
         {props.paneTools !== false && props.onToggleChat && (
           <StripButton label={props.chatOpen ? 'Show the terminal' : 'Show the chat'} pressed={props.chatOpen} onClick={props.onToggleChat}><ChatIcon size={15} /></StripButton>
+        )}
+        {props.paneTools !== false && props.onToggleDeck && (
+          <StripButton label={`Session deck (${keys('⌘B')})`} pressed={props.deckOpen} onClick={props.onToggleDeck}><DeckIcon size={15} /></StripButton>
         )}
         {props.paneTools !== false && <StripButton label={`Inspector (${keys('⌘I')})`} pressed={props.inspectorOpen} onClick={props.onToggleInspector}><InspectorIcon size={15} /></StripButton>}
       </div>

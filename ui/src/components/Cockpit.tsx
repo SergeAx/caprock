@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode }
 import { api, type Event, type Permission, type RateWindow, type SessionSummary, type SubagentsNow, type Summary } from '@/lib/api'
 import { usePermission } from './PermissionPrompt'
 import { live } from '@/lib/live'
-import { mergeEvents } from '@/lib/chat'
+import { useSessionEvents } from '@/lib/sessionEvents'
 import { fmtAgo, fmtPct, fmtTokens, fmtUSD } from '@/lib/format'
 import { useNow } from '@/lib/useNow'
 import { countdown, resetClock } from '@/lib/limitclock'
@@ -24,50 +24,16 @@ import { SpendSpark } from './SpendScrub'
 import { AgentCharacter, agentName, characterFor } from './Characters'
 import { SubscriptionTag } from './SubscriptionPicker'
 import {
-  askLine, backgroundAgents, subagentChips, backgroundLabel, cockpitState, commandGist, fmtRun, mainThread, planWindowsFor, requester, runningTool, runShare, runVerb, subagentWaiting, toolKind, toolRuns, turnCosts,
+  askLine, backgroundAgents, subagentChips, backgroundLabel, cockpitState, commandGist, fmtRun, planWindowsFor, requester, runningTool, runShare, runVerb, subagentWaiting, toolKind, toolRuns, turnCosts,
   type CockpitState, type SubagentChip, type ToolKind, type ToolRun, type TurnCost,
 } from '@/lib/cockpit'
 
-/** How many of the main thread's newest calls and turns the panel reads: enough for the last several turns. */
-const EVENTS_HELD = 400
 const TIMELINE_ROWS = 7
 const SUBAGENT_ROWS = 5
 /** The subagent list is read again at most this often while their events stream in. */
 const SUBAGENTS_THROTTLE_MS = 2_000
 /** …and this often regardless, so a finished or silent one drops off. */
 const SUBAGENTS_POLL_MS = 20_000
-/** The kinds the tool list and the cost spark are made of. */
-const MAIN_KINDS = ['tool.pre', 'tool.post', 'turn.assistant'] as const
-
-function isMainKind(e: Event): boolean {
-  return (MAIN_KINDS as readonly string[]).includes(e.kind) && mainThread(e)
-}
-
-/**
- * The main thread's own calls and turns, kept current from the live socket.
- * Fetched filtered (`main=1&kind=…`): a parent whose subagents log hundreds of
- * events an hour had none of its own among its newest 400.
- */
-export function useSessionEvents(sessionId: string): readonly Event[] {
-  const [main, setMain] = useState<readonly Event[]>([])
-  const [nonce, setNonce] = useState(0)
-  useEffect(() => {
-    let alive = true
-    api.recentMainEvents(sessionId, MAIN_KINDS, EVENTS_HELD)
-      .then((list) => { if (alive && Array.isArray(list)) setMain((cur) => mergeEvents(cur, list.filter(isMainKind)).slice(-EVENTS_HELD)) })
-      .catch(() => { /* an older daemon or a gone session: the panel shows what the row has */ })
-    return () => { alive = false }
-  }, [sessionId, nonce])
-  useEffect(() => live.onFrame((f) => {
-    if (f.type === 'event' && f.data.session_id === sessionId) {
-      const e = f.data
-      if (isMainKind(e)) setMain((cur) => { const next = mergeEvents(cur, [e]); return next === cur ? cur : next.slice(-EVENTS_HELD) })
-    } else if (f.type === 'reset' || (f.type === 'hello' && f.data.reset)) {
-      setNonce((n) => n + 1)
-    }
-  }), [sessionId])
-  return main
-}
 
 /**
  * The subagents working in the session, as the daemon sums them up
@@ -132,6 +98,7 @@ export function Cockpit({ s, sessionId, hasPermission, summary, changes }: {
   /** The working tree's changes, drawn by the inspector (it owns the diff fetch). */
   changes?: ReactNode
 }) {
+  // Held once per session and shared with the session deck (lib/sessionEvents.ts).
   const main = useSessionEvents(sessionId)
   const [permission] = usePermission(sessionId)
   const now = useNow(1000)

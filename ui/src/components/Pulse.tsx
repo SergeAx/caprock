@@ -403,7 +403,12 @@ function token(css: CSSStyleDeclaration, name: string, fallback: string): string
   return css.getPropertyValue(name).trim() || fallback
 }
 
-function PulseCanvas({ pulse, now, sessionID }: { pulse: PulseModel; now: number; sessionID: string }) {
+/**
+ * One session's hour as bars. `fill` lets the canvas take its box's height —
+ * the session deck under an agent's terminal grows with its divider — where
+ * the Now screen's rows draw it at a fixed 44px.
+ */
+export function PulseCanvas({ pulse, now, sessionID, fill = false }: { pulse: PulseModel; now: number; sessionID: string; fill?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const [hover, setHover] = useState<number | null>(null)
 
@@ -496,10 +501,10 @@ function PulseCanvas({ pulse, now, sessionID }: { pulse: PulseModel; now: number
   }
 
   return (
-    <div className="relative">
+    <div className={`relative ${fill ? 'h-full' : ''}`}>
       <canvas
         ref={ref}
-        className="w-full h-[44px] block cursor-pointer"
+        className={`w-full ${fill ? 'h-full' : 'h-[44px]'} block cursor-pointer`}
         onMouseMove={onMove}
         onMouseLeave={() => setHover(null)}
         onClick={onClick}

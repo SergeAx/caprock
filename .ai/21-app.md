@@ -333,6 +333,44 @@ One window, three regions:
   `context_note` instead), no plan windows for an agent with none. A shell
   tab keeps the plain inspector (folder, changes, actions). Code:
   `components/Cockpit.tsx`, derivations in `lib/cockpit.ts`.
+- **Session deck (under the agent's terminal)** (owner, 2026-10-11,
+  translated: "I want to be able to enlarge the bottom area so that I
+  basically type in the centre, a bit below the middle of the screen —
+  that's comfortable — and in this new area show data useful to me while I
+  work"). A full-width terminal puts Claude Code's prompt on the window's
+  bottom edge; the deck is a band under the terminal of the agent in front
+  that lifts it. One dense row, every figure the workspace already holds
+  and none estimated: *Now* (the cockpit's state and the call running or
+  *Thinking after …* with its clock; taller, the last three calls), *Spent*
+  (`stats.cost_usd`, the last priced call; taller, turns and tool calls),
+  *Context* (`context.pct`, the bar, `next_call_usd`; taller, tokens of the
+  window), *Plan* (the agent's 5-hour and weekly windows, `planWindowsFor`;
+  taller, the reset clock), *Changes* (the sidebar's `changed` for the
+  session's worktree, taller only) and the session's last hour as one bar
+  per minute (`buildPulse` and the Now screen's `PulseCanvas` over the
+  main thread's calls and turns). A figure the agent does not report is
+  left out, never drawn as zero. The bars cover the hour only while the 400
+  calls and turns held reach back that far; when they do not, the window
+  starts at the oldest one held and says so (*Last 23 min*), rather than
+  drawing minutes it never read as silence. As the terminal narrows the
+  cells that matter least give way first (container queries): Changes
+  below 1000px, Plan below 720px. ⌘B (Ctrl+Shift+B off macOS), a strip
+  button beside the inspector's and the palette open and close it; the
+  Add project sheet's own ⌘B is not reached, since a sheet owns the
+  keyboard. Its top edge is a separator: dragged, the band is drawn over
+  the terminal at the new height and the terminal's box changes once, on
+  release, so a drag is one fit and one PTY resize, not one per frame; ↑ ↓,
+  Page Up/Down, Home and End move it and settle after 250 ms the same way;
+  double-click restores the default (260px). Clamped between 72px and 60%
+  of the pane, the CSS height capped at 60% too, so a window made smaller
+  never leaves the terminal a sliver. Closed by default; open and height
+  in `caprock.app.deck` (`lib/deck.ts`). A shell tab has no deck and no
+  button, and ⌘B there says why. Performance: a sibling of the terminals,
+  so nothing in it redraws one; not mounted while closed, while a shell or
+  the Dashboard is in front, so no clock and no subscription then; its
+  events are the cockpit's, held once per session with a reference count
+  (`lib/sessionEvents.ts`) — one fetch and one live listener for both, let
+  go when the last reader closes. Code: `components/SessionDeck.tsx`.
 - **Empty project (main, no tab open).** New agent, New shell, Add a
   project, then the project's six most recent agent sessions (ended ones
   nobody wrote in left out) with cost, age and one button: *Continue* resumes

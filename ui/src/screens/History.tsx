@@ -21,7 +21,7 @@ import { TeamsBanner } from '@/components/TeamsBanner'
 import { Locked } from '@/components/Locked'
 import { WeeklyReport } from '@/components/WeeklyReport'
 import { UnpricedNote } from '@/components/Unpriced'
-import { Donut, sharePct, topN, type Segment } from '@/components/Donut'
+import { Donut, ShareBar, sharePct, sliceColors, topN, type Segment } from '@/components/Donut'
 import { cacheLevel } from '@/lib/cachelevel'
 import { ToolDrill } from '@/components/ToolDrill'
 
@@ -104,6 +104,8 @@ export function HistoryScreen() {
   const measured = !!d && d.totals.turns > 0
   const days = groupDays(d?.daily ?? [])
   const f = lifetimeFigures(d)
+  const projectColors = sliceColors(f.projects)
+  const modelColors = sliceColors(f.models)
   const setView = (v: View) => {
     setViewState(v)
     try { localStorage.setItem(VIEW_KEY, v) } catch { /* a remembered view is a convenience */ }
@@ -118,10 +120,12 @@ export function HistoryScreen() {
         {(['today', '7d', '30d', 'all'] as Range[]).map((r) => (
           <button key={r} onClick={() => setRange(r)} aria-pressed={range === r} className={`px-2 py-1 text-[12px] rounded-sm ${range === r ? 'bg-panel-2 text-fg' : 'text-fg-muted hover:text-fg'}`}>{r}</button>
         ))}
-        <span className="ml-auto inline-flex items-center gap-0.5 rounded-md bg-panel-2 p-0.5" role="group" aria-label="View">
+        {/* Charts or exact numbers, each drawn: the owner missed this switch
+          * at 11px (2026-10-11), so it is the size of the range buttons. */}
+        <span className="ml-auto inline-flex items-center gap-0.5 rounded-md border border-border bg-panel-2 p-0.5" role="group" aria-label="View">
           {(['charts', 'numbers'] as const).map((v) => (
             <button key={v} type="button" onClick={() => setView(v)} aria-pressed={view === v}
-              className={`px-2 py-0.5 rounded-[5px] text-[11px] capitalize ${view === v ? 'bg-accent text-panel font-medium' : 'text-fg-muted hover:text-fg'}`}>
+              className={`px-3 py-1 rounded-[5px] text-[13px] capitalize ${view === v ? 'bg-accent text-panel font-medium' : 'text-fg-muted hover:text-fg'}`}>
               {v}
             </button>
           ))}
@@ -172,6 +176,19 @@ export function HistoryScreen() {
         <UnpricedNote u={d?.totals.unpriced} background={d?.totals.background} className="mx-3 mb-2.5" />
       </Panel>
 
+      {/* Right under the totals, low: the owner's favourite reading of the
+        * whole history, "clear, beautiful, real activity" (2026-10-11,
+        * translated), was at the bottom of the page. */}
+      <Panel
+        title="Daily cost"
+        right={<BarReadout bars={days} active={activeDay} total={days.reduce((a, x) => a + x.cost, 0)} />}
+      >
+        {!h.data ? <Skeleton rows={2} /> : days.length === 0 && <Empty title="No history yet" />}
+        {days.length > 0 && (
+          <BarChart bars={days} active={activeDay} onActive={setActiveDay} height={72} showDayLabels={false} />
+        )}
+      </Panel>
+
       {/* Top projects lead: "which repository did this go into" is the first
         * question after "how much". The donut gives the shape; the table
         * beside it the exact figures, every row with its share. */}
@@ -197,7 +214,7 @@ export function HistoryScreen() {
                       <td className="px-2 py-1.5 font-medium truncate max-w-[16rem]">{p.project || 'unknown'}</td>
                       <td className="px-2 py-1.5 num text-right text-fg-muted">{fmtTokens(p.tokens)}</td>
                       <td className="px-2 py-1.5 num text-right">{fmtUSD(p.cost_usd)}</td>
-                      <td className="px-2 py-1.5 num text-right text-fg-muted">{sharePct(p.cost_usd, f.cost || f.projectTotal)}</td>
+                      <td className="px-2 py-1.5 text-right text-fg-muted w-28"><ShareBar value={p.cost_usd} total={f.cost || f.projectTotal} color={projectColors.get(p.project || 'unknown')} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -268,7 +285,7 @@ export function HistoryScreen() {
                         <td className="px-3 py-1 mono">{m.model || 'unknown'}</td>
                         <td className="px-3 py-1 num text-right text-fg-muted">{fmtTokens(m.tokens)}</td>
                         <td className="px-3 py-1 num text-right">{fmtUSD(m.cost_usd)}</td>
-                        <td className="px-3 py-1 num text-right text-fg-muted">{sharePct(m.cost_usd, f.modelTotal)}</td>
+                        <td className="px-3 py-1 text-right text-fg-muted w-28"><ShareBar value={m.cost_usd} total={f.modelTotal} color={modelColors.get(m.model || 'unknown')} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -287,15 +304,6 @@ export function HistoryScreen() {
           </Locked>}
         </div>
       </div>
-      <Panel
-        title="Daily cost"
-        right={<BarReadout bars={days} active={activeDay} total={days.reduce((a, x) => a + x.cost, 0)} />}
-      >
-        {!h.data ? <Skeleton rows={2} /> : days.length === 0 && <Empty title="No history yet" />}
-        {days.length > 0 && (
-          <BarChart bars={days} active={activeDay} onActive={setActiveDay} height={96} showDayLabels={false} />
-        )}
-      </Panel>
     </div>
   )
 }

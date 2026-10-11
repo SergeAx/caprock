@@ -33,6 +33,9 @@ export interface DashboardTab {
   onClose: () => void
 }
 
+/** From this many tabs the Dashboard tab shows only its icon and key. */
+export const DASHBOARD_FOLD_AT = 5
+
 /**
  * A project's mark on its tabs: a hue from its id, muted, so tabs of one
  * project share a colour without the strip turning into a rainbow.
@@ -124,13 +127,21 @@ export function TabStrip(props: TabStripProps) {
             onClick={props.dashboard.onActivate}
             onAuxClick={(e) => { if (e.button === 1) props.dashboard!.onClose() }}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') props.dashboard!.onActivate() }}
-            title={`${props.dashboard.label} — ${keys('⇧⌘D')}`}
+            title={`${props.dashboard.label} — ${keys('⌘0')}`}
+            aria-label={props.dashboard.label}
             className={`group relative flex h-[32px] shrink-0 cursor-default select-none items-center gap-2 rounded-t-[9px] pl-3 pr-1.5 text-[12.5px] transition-colors duration-100 motion-reduce:transition-none ${
               props.dashboard.active ? 'app-tab-front app-tab-dash bg-bg font-medium text-fg' : 'app-tab-dash text-fg hover:text-fg'
             }`}
           >
             <DashboardIcon size={13} className="text-accent" />
-            <span>{props.dashboard.label}</span>
+            {/* With many tabs open the Dashboard folds to its icon and its
+              * key; the key always stays (owner, 2026-10-11). */}
+            {tabs.length < DASHBOARD_FOLD_AT && <span>{props.dashboard.label}</span>}
+            {/* Its key on the tab, as the other tabs carry ⌘1–⌘8: the way
+              * back from a terminal (owner, 2026-10-11). */}
+            {props.dashboard.label === 'Dashboard' && (
+              <kbd data-dashboard-key aria-hidden className="app-kbd-key">{keys('⌘0')}</kbd>
+            )}
             <button
               type="button"
               aria-label={`Close tab ${props.dashboard.label}`}
@@ -192,7 +203,7 @@ export function TabStrip(props: TabStripProps) {
               {/* The jump key on the tab itself, as iTerm shows it: ⌘1–⌘8 by
                 * position, ⌘9 on the last. In a tooltip nobody found it. */}
               {digit && (
-                <kbd data-tab-key aria-hidden className="mono shrink-0 text-[10.5px] text-fg-faint">{tabKey(digit)}</kbd>
+                <kbd data-tab-key aria-hidden className="app-kbd-key shrink-0">{tabKey(digit)}</kbd>
               )}
               <button
                 type="button"

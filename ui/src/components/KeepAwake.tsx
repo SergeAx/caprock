@@ -82,19 +82,86 @@ export function KeepAwakeSetting() {
   )
 }
 
-/** The status strip's mark: shown only while the computer is held awake. */
+/**
+ * The status strip's mark. Its colour says whether the computer is held awake
+ * this moment: accent with a live dot while it is, faint while it may sleep.
+ * A click opens what it means and the three modes, so the mode changes where
+ * it is noticed (owner, 2026-10-11, translated: "it is not clear whether it
+ * is active right now or not, and a click should explain or set it").
+ * Hidden when the mode is off or the OS offers no way to stay awake.
+ */
 export function KeepAwakeIndicator() {
   const owner = !isPairedDevice()
-  const st = useApi(() => (owner ? api.keepAwake() : Promise.resolve(undefined)), [owner], { live: false, intervalMs: 15_000, keepUnchanged: true })
+  const [open, setOpen] = useState(false)
+  const st = useApi(() => (owner ? api.keepAwake() : Promise.resolve(undefined)), [owner], { live: false, intervalMs: open ? 3_000 : 15_000, keepUnchanged: true })
   const s = st.data
-  if (!s?.holding) return null
-  const why = s.mode === 'always'
-    ? 'Caprock is keeping this computer awake while it runs.'
-    : `Caprock is keeping this computer awake: ${s.working} ${s.working === 1 ? 'agent is' : 'agents are'} working.`
+  if (!s || !s.available || s.mode === 'off') return open ? <KeepAwakePopover status={s} onClose={() => setOpen(false)} onChanged={st.refresh} /> : null
+  const holding = s.holding
+  const why = holding
+    ? s.mode === 'always'
+      ? 'Awake now: Caprock is keeping this computer awake while it runs.'
+      : `Awake now: ${s.working} ${s.working === 1 ? 'agent is' : 'agents are'} working.`
+    : 'May sleep: no agent is working.'
   return (
-    <span data-keep-awake className="inline-flex items-center gap-1 text-fg-muted" title={`${why} The screen can still turn off. Settings → Keep awake.`}>
-      <CoffeeIcon size={12} />
-      awake
+    <span className="relative">
+      <button
+        type="button"
+        data-keep-awake
+        data-holding={holding ? 'true' : 'false'}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        title={`${why} Click for what this means.`}
+        className={`inline-flex items-center gap-1 rounded-[5px] px-1 hover:bg-[var(--app-row-hover)] ${holding ? 'text-accent' : 'text-fg-faint'}`}
+      >
+        <span className="relative inline-flex">
+          <CoffeeIcon size={12} />
+          {holding && <span aria-hidden className="absolute -right-0.5 -top-0.5 h-[5px] w-[5px] rounded-full bg-ok" />}
+        </span>
+        {holding ? 'awake' : 'may sleep'}
+      </button>
+      {open && <KeepAwakePopover status={s} onClose={() => setOpen(false)} onChanged={st.refresh} />}
     </span>
+  )
+}
+
+/** What keep-awake is doing and the three modes, above the status strip. */
+function KeepAwakePopover({ status, onClose, onChanged }: { status?: KeepAwakeStatus; onClose: () => void; onChanged: () => void }) {
+  const [mode, setMode] = useState<KeepAwakeMode>(status?.mode ?? 'working')
+  const [error, setError] = useState('')
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [onClose])
+  const save = async (m: KeepAwakeMode) => {
+    setError('')
+    setMode(m)
+    try {
+      await api.saveSettings({ keep_awake: m } as Partial<Settings> as Settings)
+      window.setTimeout(onChanged, 900)
+    } catch (e) {
+      setError(errText(e))
+    }
+  }
+  const line = keepAwakeLine(status && { ...status, mode })
+  return (
+    <>
+      <span aria-hidden className="fixed inset-0 z-40" onClick={onClose} />
+      <div role="dialog" aria-label="Keep awake" data-keep-awake-popover
+        className="absolute bottom-[calc(100%+8px)] right-0 z-50 grid w-[320px] gap-2 rounded-[10px] border border-border-strong bg-panel p-3 text-left text-[12px] text-fg shadow-lg">
+        <div className="flex items-center gap-1.5 font-medium"><CoffeeIcon size={13} />Keep awake</div>
+        <span className="inline-flex flex-wrap gap-1 rounded-md bg-panel-2 p-0.5" role="radiogroup" aria-label="Stay awake">
+          {OPTIONS.map((o) => (
+            <button key={o.value} type="button" role="radio" aria-checked={mode === o.value} onClick={() => void save(o.value)}
+              className={`rounded-[5px] px-2 py-0.5 ${mode === o.value ? 'bg-accent font-medium text-panel' : 'text-fg-muted hover:text-fg'}`}>
+              {o.label}
+            </button>
+          ))}
+        </span>
+        <p className="leading-relaxed text-fg-muted">{HINT[mode]} Closing a laptop&apos;s lid still puts it to sleep.</p>
+        {line && mode !== 'off' && <p className="text-fg-muted">{line}</p>}
+        {error && <p className="text-danger">{error}</p>}
+      </div>
+    </>
   )
 }

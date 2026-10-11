@@ -838,12 +838,13 @@ export function AppShell() {
       ...(source === 'api' && activeProject?.kind === 'repo'
         ? [{ id: 'a-copies', group: 'Actions' as const, label: 'Clean up copies…', detail: `${activeProject.name}: worktrees, sizes, merged`, icon: <BranchIcon size={14} />, run: () => onCleanCopies(activeProject.id) }]
         : []),
-      { id: 'a-dashboard', group: 'Actions', label: 'Open the dashboard', hint: keys('⇧⌘D'), icon: <DashboardIcon size={14} />, run: onDashboard },
+      { id: 'a-dashboard', group: 'Actions', label: 'Open the dashboard', hint: keys('⌘0'), icon: <DashboardIcon size={14} />, run: onDashboard },
       { id: 'a-settings', group: 'Actions', label: 'Settings', detail: 'permission mode, theme, terminal, notifications, phone', hint: keys('⌘,'), icon: <SettingsIcon size={14} />, run: onSettings },
       { id: 'a-phone', group: 'Actions', label: 'Open Caprock on your phone', detail: 'pair with a QR code, then add it to the home screen', icon: <SettingsIcon size={14} />, run: openPhoneSettings },
       { id: 'a-telegram', group: 'Actions', label: 'Connect Telegram', detail: 'messages when a session needs you; reply from the chat', icon: <SettingsIcon size={14} />, run: () => openSettingsAt('telegram') },
       { id: 'a-keys', group: 'Actions', label: 'Keyboard shortcuts', detail: 'every key the app answers to', icon: <SearchIcon size={14} />, run: () => setSheet({ kind: 'keys' }) },
       { id: 'a-theme', group: 'Actions', label: 'Switch theme', icon: <SparkIcon size={14} />, run: toggleTheme },
+      ...(isTauri() ? [{ id: 'a-zoom-reset', group: 'Actions' as const, label: 'Interface size: back to the default', hint: isMacPlatform() ? keys('⇧⌘0') : undefined, icon: <SparkIcon size={14} />, run: () => stepUiScale(0) }] : []),
       { id: 'a-share', group: 'Actions', label: 'Share my numbers', detail: 'a card of your figures: copy, save or post to X', icon: <SparkIcon size={14} />, run: () => setSheet({ kind: 'share' }) },
       ...SCREENS.map(([route, label, detail]) => ({ id: `a-screen-${route}`, group: 'Actions' as const, label, detail, icon: <DashboardIcon size={14} />, run: () => { location.hash = `#/${route}` } })),
       { id: 'a-waiting', group: 'Actions', label: 'Next session waiting on you', hint: keys('⌘J'), icon: <SparkIcon size={14} />, run: jumpToWaiting },

@@ -2,7 +2,7 @@
  * Keep awake (ADR-049): three modes saved by the daemon, a line saying what
  * is happening now, and a status-strip mark only while the machine is held.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { KeepAwakeStatus, Settings } from '@/lib/api'
 
@@ -73,11 +73,27 @@ describe('keepAwakeLine', () => {
 })
 
 describe('KeepAwakeIndicator', () => {
-  it('draws nothing while not holding', async () => {
+  it('says the computer may sleep, faint, while nothing holds it', async () => {
     state.status = { mode: 'working', holding: false, working: 0, available: true }
+    render(<KeepAwakeIndicator />)
+    const mark = await screen.findByText('may sleep')
+    expect(mark.closest('[data-keep-awake]')?.getAttribute('data-holding')).toBe('false')
+  })
+
+  it('draws nothing when keep-awake is off', async () => {
+    state.status = { mode: 'off', holding: false, working: 0, available: true }
     const { container } = render(<KeepAwakeIndicator />)
     await new Promise((r) => setTimeout(r, 20))
     expect(container.querySelector('[data-keep-awake]')).toBeNull()
+  })
+
+  it('opens what it means and the three modes on a click', async () => {
+    state.status = { mode: 'working', holding: true, working: 2, available: true }
+    render(<KeepAwakeIndicator />)
+    fireEvent.click(await screen.findByText('awake'))
+    const pop = await screen.findByRole('dialog', { name: 'Keep awake' })
+    expect(within(pop).getByRole('radio', { name: 'While agents work' }).getAttribute('aria-checked')).toBe('true')
+    expect(within(pop).getByText(/2 agents working/)).toBeTruthy()
   })
 
   it('shows a mark while holding, with why in its title', async () => {

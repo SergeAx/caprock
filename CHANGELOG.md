@@ -7,6 +7,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+## [0.102.0] - 2026-10-11
+
 ### Added
 
 - **One prompt, several attempts, compared by cost.** In *New agent*, with

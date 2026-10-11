@@ -12,6 +12,9 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 - **app:** the pinned Dashboard or Settings tab is its icon and its key —
   ⌘0, or ⌘, for Settings — the name in the tooltip.
 
+- **app:** the sidebar's *Projects* heading counts them — *● 3 of 12* has
+  something running — and *Outside projects* can be hidden like any project.
+
 ### Changed
 
 - **app:** the version panel is the version, whether it is current, when it

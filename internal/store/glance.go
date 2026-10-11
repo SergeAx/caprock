@@ -183,3 +183,12 @@ func FirstEventTs(ctx context.Context, q Querier) (int64, error) {
 	err := q.QueryRowContext(ctx, `SELECT COALESCE(MIN(ts),0) FROM events WHERE 1=1`+nonInternalEvent).Scan(&ts)
 	return ts, err
 }
+
+// EventsVersion is the newest event's id: it moves on every event written,
+// and an answer counted at one version is still right at the same version
+// unless rows were removed. Read off the primary key, so it costs one lookup.
+func EventsVersion(ctx context.Context, q Querier) (int64, error) {
+	var v int64
+	err := q.QueryRowContext(ctx, `SELECT COALESCE(MAX(id), 0) FROM events`).Scan(&v)
+	return v, err
+}

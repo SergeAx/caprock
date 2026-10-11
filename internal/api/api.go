@@ -397,6 +397,9 @@ type Server struct {
 	// (weekTTL, weekLongTTL, glanceTTL).
 	week     *answerCache
 	weekLong *answerCache
+	// today caches today's summary for the moments nothing was written; see
+	// rangeSummary.
+	today *answerCache
 	glance   *answerCache
 	// drill holds the tool drill-downs (drillTTL).
 	drill *answerCache
@@ -424,6 +427,18 @@ func New(d Deps) *Server {
 	s := &Server{d: d, replaced: map[string]string{}, mux: http.NewServeMux(), ws: newWSHub(d.Bus, d.Log, lanHost), hist: newAnswerCache(historyTTL, answerMaxStale, time.Now), summ: newAnswerCache(summaryTTL, answerMaxStale, time.Now),
 		week: newAnswerCache(weekTTL, answerMaxStale, time.Now), weekLong: newAnswerCache(weekLongTTL, answerMaxStale, time.Now), glance: newAnswerCache(glanceTTL, answerMaxStale, time.Now),
 		drill: newAnswerCache(drillTTL, answerMaxStale, time.Now), repos: newRepoCache()}
+	// The whole-history answers are renewed while nothing was written: with
+	// the dashboard open and no agent working, five components asked for
+	// all-time history once a minute each and every ask past the TTL counted
+	// it again (seconds of CPU a minute on a 1.9 GB database). A summary
+	// carries the sessions active in the last half hour, which moves with the
+	// clock, so those are renewed for a minute at most.
+	version := func(ctx context.Context) (int64, error) { return store.EventsVersion(ctx, d.Store.DB()) }
+	s.hist.versioned(version, answerRecheck)
+	s.week.versioned(version, answerRecheck)
+	s.weekLong.versioned(version, answerRecheck)
+	s.summ.versioned(version, time.Minute)
+	s.today = newAnswerCache(todayTTL, todayTTL, time.Now).versioned(version, time.Minute)
 	// Seeded from Deps so `caprock up --lan` behaves exactly as before; the
 	// dashboard's switch goes through SetLAN.
 	s.pairing, s.lanURL = d.Pairing, d.LANURL
@@ -1588,8 +1603,9 @@ func (s *Server) Warm(ctx context.Context) {
 
 // rangeSummary is the aggregate behind /v1/stats/summary for one range.
 //
-// Today's is computed on every request: it is ~40ms, and it is the figure
-// people watch move. Every wider range goes through the answer cache, because
+// Today's is the figure people watch move, so it is never served stale: it is
+// counted again once it is two seconds old and something was written since
+// (~40ms, but fifteen asks a minute with the dashboard open). Every wider range goes through the answer cache, because
 // a 7d, 30d or all-time summary scans that much more of the events table —
 // ~1s for all time on the owner's 1 GB database — for figures that a few
 // seconds cannot visibly change. The returned Summary is a copy; its slices
@@ -1599,11 +1615,12 @@ func (s *Server) rangeSummary(ctx context.Context, from int64, label string, age
 	compute := func(c context.Context) (store.Summary, error) {
 		return store.SummarizeSparkFor(c, s.d.Store.DB(), from, spark, agent)
 	}
+	cache := s.summ
 	if label == "today" {
-		return compute(ctx)
+		cache = s.today
 	}
 	key := "summary|" + label + "|" + strconv.FormatInt(from, 10) + "|" + string(agent)
-	v, err := s.summ.get(ctx, key, func() (any, error) {
+	v, err := cache.get(ctx, key, func() (any, error) {
 		return compute(context.WithoutCancel(ctx))
 	})
 	if err != nil {

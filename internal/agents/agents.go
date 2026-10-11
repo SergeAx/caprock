@@ -36,8 +36,13 @@ type SpawnRequest struct {
 	Worktree string `json:"worktree,omitempty"` // git worktree name to create under the repo
 	// WorktreeBase is the branch a new worktree starts from (HEAD when empty);
 	// WorktreePull fetches it from its remote first.
-	WorktreeBase   string `json:"worktree_base,omitempty"`
-	WorktreePull   bool   `json:"worktree_pull,omitempty"`
+	WorktreeBase string `json:"worktree_base,omitempty"`
+	WorktreePull bool   `json:"worktree_pull,omitempty"`
+	// WorktreePR starts the new worktree from a GitHub pull request's head
+	// instead: refs/pull/<n>/head, fetched from the repository's remote with
+	// the user's own git credentials (prStartPoint). Needs Worktree; not with
+	// WorktreeBase.
+	WorktreePR     int    `json:"worktree_pr,omitempty"`
 	Model          string `json:"model,omitempty"`           // --model
 	PermissionMode string `json:"permission_mode,omitempty"` // --permission-mode
 	Command        string `json:"command,omitempty"`         // default "claude"
@@ -455,8 +460,20 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Agent, error) {
 	cwd := req.Cwd
 	worktree := ""
 	var setup worktreeSetup
+	if req.WorktreePR != 0 && (req.Worktree == "" || req.WorktreeBase != "" || req.WorktreePR < 0) {
+		return nil, errors.New("agents: worktree_pr needs a worktree name and a positive number, and no worktree_base")
+	}
 	if req.Worktree != "" {
-		wt, err := makeWorktree(ctx, req.Cwd, req.Worktree, req.WorktreeBase, req.WorktreePull)
+		base, pull := req.WorktreeBase, req.WorktreePull
+		if req.WorktreePR > 0 {
+			ref, err := prStartPoint(ctx, req.Cwd, req.WorktreePR)
+			if err != nil {
+				return nil, err
+			}
+			base, pull = ref, false
+			defer dropPRRef(ctx, req.Cwd, ref)
+		}
+		wt, err := makeWorktree(ctx, req.Cwd, req.Worktree, base, pull)
 		if err != nil {
 			return nil, err
 		}

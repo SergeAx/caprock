@@ -234,3 +234,28 @@ func gitHead(t *testing.T, dir string) string {
 	}
 	return strings.TrimSpace(string(out))
 }
+
+// Attempts on a pull request: the first copy fetches its head, the rest
+// start from the commit the first started from and fetch nothing.
+func TestAttemptsOnAPullRequestFetchItOnce(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	_, fa, do := attemptServer(t, 0)
+	w := do("POST", "/v1/agents", `{"cwd":"/repo","worktree":"pr-7","worktree_pr":7,"prompt":"review it","attempts":2}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("start: %d %s", w.Code, w.Body)
+	}
+	if len(fa.spawns) != 2 {
+		t.Fatalf("%d spawns", len(fa.spawns))
+	}
+	if pr, _ := fa.spawns[0]["worktree_pr"].(float64); pr != 7 {
+		t.Errorf("first: %v", fa.spawns[0])
+	}
+	if _, has := fa.spawns[1]["worktree_pr"]; has {
+		t.Errorf("second fetched again: %v", fa.spawns[1])
+	}
+	if b, _ := fa.spawns[1]["worktree_base"].(string); b == "" {
+		t.Errorf("second has no start commit: %v", fa.spawns[1])
+	}
+}

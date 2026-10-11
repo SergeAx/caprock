@@ -292,12 +292,14 @@ var pairedDeviceRoutes = map[string]bool{
 
 	// GitHub (WP-19): the connection's state (never the token), the clone
 	// picker's lists, and each worktree's pull request with its checks and
-	// reviews. The daemon makes the calls; the token never leaves it.
-	"GET /v1/github":               true,
-	"GET /v1/github/owners":        true,
-	"GET /v1/github/repos":         true,
-	"GET /v1/github/prs":           true,
-	"GET /v1/projects/{id}/github": true,
+	// reviews; and New agent's list of a project's open issues and pull
+	// requests. The daemon makes the calls; the token never leaves it.
+	"GET /v1/github":                     true,
+	"GET /v1/github/owners":              true,
+	"GET /v1/github/repos":               true,
+	"GET /v1/github/prs":                 true,
+	"GET /v1/projects/{id}/github":       true,
+	"GET /v1/projects/{id}/github/items": true,
 }
 
 // What a controller may do on top of reading (ADR-034), named one route at a

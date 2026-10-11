@@ -1035,6 +1035,8 @@ export interface SpawnRequest {
   /** The branch a new worktree starts from (HEAD when absent); with
    *  worktree_pull it is fetched from its remote first. */
   worktree_base?: string; worktree_pull?: boolean
+  /** Start the new worktree at GitHub pull request N's head (refs/pull/N/head, fetched from the remote) instead of a branch. */
+  worktree_pr?: number
   model?: string; permission_mode?: string; args?: string[]
   /** The sign-in to run on (ADR-048): a subscription id, or absent / "default"
    *  for the user's own. Claude Code and Codex only; a resume keeps its own. */

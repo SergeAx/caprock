@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -75,5 +76,52 @@ func TestStartPointRefusesOptionsAndUnknownBranches(t *testing.T) {
 		if _, err := startPoint(context.Background(), dir, bad, false); err == nil {
 			t.Fatalf("%q accepted", bad)
 		}
+	}
+}
+
+// A copy from a pull request starts at its head, fetched as GitHub keeps it
+// (refs/pull/<n>/head, a fork's too), on a branch of its own that tracks
+// nothing; the fetched ref does not linger.
+func TestNewCopyFromAPullRequestHead(t *testing.T) {
+	up, upRun := gitRepo(t)
+	upRun("checkout", "-q", "-b", "contrib")
+	if err := os.WriteFile(filepath.Join(up, "pr"), []byte("from a fork"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	upRun("add", "pr")
+	upRun("commit", "-q", "-m", "the change")
+	head := upRun("rev-parse", "HEAD")
+	upRun("checkout", "-q", "main")
+	// Only the pull request ref holds it, as for a fork's branch.
+	upRun("update-ref", "refs/pull/7/head", head)
+	upRun("branch", "-q", "-D", "contrib")
+	clone := filepath.Join(t.TempDir(), "clone")
+	upRun("clone", "-q", up, clone)
+
+	ctx := context.Background()
+	ref, err := prStartPoint(ctx, clone, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wt, err := makeWorktree(ctx, clone, "pr-7-the-change", ref, false)
+	dropPRRef(ctx, clone, ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := gitOut(ctx, wt.Dir, "rev-parse", "HEAD")
+	if strings.TrimSpace(got) != head {
+		t.Fatalf("copy at %q, pull request head %s", got, head)
+	}
+	if b, _ := gitOut(ctx, wt.Dir, "rev-parse", "--abbrev-ref", "HEAD"); strings.TrimSpace(b) != "caprock/pr-7-the-change" {
+		t.Fatalf("branch %q", b)
+	}
+	if _, err := gitOut(ctx, clone, "rev-parse", "--verify", "--quiet", ref); err == nil {
+		t.Fatalf("%s left behind", ref)
+	}
+	if _, err := prStartPoint(ctx, clone, 8); err == nil || !strings.Contains(err.Error(), "#8") {
+		t.Fatalf("a missing pull request: %v", err)
+	}
+	if _, err := prStartPoint(ctx, clone, 0); err == nil {
+		t.Fatal("number 0 accepted")
 	}
 }

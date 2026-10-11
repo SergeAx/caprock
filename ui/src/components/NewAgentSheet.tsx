@@ -23,6 +23,14 @@
  * *Attempts* (ADR-052), under a new copy: 1 to 4 agents on the same first
  * message, each in a copy of its own from the same branch, to compare and
  * keep one. Not remembered: every start is one agent unless asked.
+ *
+ * *From GitHub* (when the project's remote is on github.com and GitHub is
+ * connected, or when asked for by ⌘K → New agent from issue…): pick an open
+ * issue or pull request (GitHubItemPicker). An issue prefills a new copy's
+ * name (`issue-123-short-slug`) and the first message (its title, link and
+ * text, trimmed); a pull request does the same and starts the copy at the
+ * pull request's head, fetched from the remote (`worktree_pr`), a fork's
+ * too. Everything stays editable before Start.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, errText } from '@/lib/api'
@@ -45,6 +53,9 @@ import { defaultWorktreeName, WORKTREE_NAME } from '@/lib/slug'
 import { isMacPlatform } from '@/lib/appmode'
 import { SubscriptionNote, SubscriptionPicker, subscriptionsFor, useSubscriptionList } from './SubscriptionPicker'
 import { rememberedSubscription, rememberSubscription } from '@/lib/subscriptions'
+import { useGitHubStatus } from '@/lib/github'
+import { githubRepoOf, itemBranchName, itemPrompt, type GitHubItem } from '@/lib/fromGitHub'
+import { GitHubItemPicker } from './GitHubItemPicker'
 
 const NEW_WORKTREE = '__new__'
 
@@ -64,6 +75,7 @@ export function NewAgentSheet({
   prompt: initialPrompt = '',
   worktree: initialWorktree,
   here = false,
+  fromGitHub = false,
   onClose,
   onSetup,
   onProjectAdded,
@@ -80,6 +92,8 @@ export function NewAgentSheet({
   worktree?: string
   /** Open on `cwd` itself — This folder when it is the project's root — rather than the way to start remembered from last time. */
   here?: boolean
+  /** Open on the From GitHub picker (⌘K → New agent from issue…). */
+  fromGitHub?: boolean
   onClose: () => void
   /** Opens a shell tab in `home` with an agent's install or sign-in typed, not run (ADR-046). */
   onSetup?: (command: string, home?: string) => void
@@ -130,6 +144,20 @@ export function NewAgentSheet({
     return () => { alive = false }
   }, [where, project?.id])
   const [newBranch, setNewBranch] = useState(initialWorktree ?? '')
+  // From GitHub: the picked issue or pull request, and whether the picker is open.
+  const github = useGitHubStatus()
+  const ghRepo = githubRepoOf(project?.remote_url)
+  const [ghOpen, setGhOpen] = useState(fromGitHub)
+  const [ghItem, setGhItem] = useState<GitHubItem | null>(null)
+  const fromPR = where === NEW_WORKTREE && ghItem?.pr ? ghItem.number : 0
+  const pickItem = (it: GitHubItem) => {
+    setGhItem(it)
+    setGhOpen(false)
+    setError('')
+    setWhereRaw(NEW_WORKTREE) // for this start only: the remembered way to start stays
+    setNewBranch(itemBranchName(it))
+    setPrompt(itemPrompt(it))
+  }
   const [attempts, setAttempts] = useState(1)
   const several = where === NEW_WORKTREE && attempts > 1
   const [models, setModels] = useState<Record<SpawnAgent, string>>(DEFAULT_MODELS)
@@ -183,7 +211,8 @@ export function NewAgentSheet({
       if (mode && !custom) req.permission_mode = mode
       if (where === NEW_WORKTREE) {
         req.worktree = worktreeName
-        if (base) { req.worktree_base = base; req.worktree_pull = pull }
+        if (fromPR) req.worktree_pr = fromPR
+        else if (base) { req.worktree_base = base; req.worktree_pull = pull }
       }
       if (prompt.trim()) req.prompt = prompt.trim()
       if (several) req.attempts = attempts
@@ -204,6 +233,7 @@ export function NewAgentSheet({
   // repository under the default folder is added first, then chosen.
   const pickProject = async (c: Candidate) => {
     setError('')
+    if (c.projectId !== pid) setGhItem(null)
     if (c.projectId) { setPid(c.projectId); setWhereRaw((w) => (w === NEW_WORKTREE ? NEW_WORKTREE : '')); return }
     setAdding(true)
     try {
@@ -274,13 +304,35 @@ export function NewAgentSheet({
               </select>
             </SheetField>
           </div>
+          {project && ghItem ? (
+            <div className="flex min-w-0 items-center gap-2 rounded-[8px] border border-border px-2.5 py-1.5 text-[12.5px]" aria-label="Started from GitHub">
+              <span className="shrink-0 text-fg-muted">{ghItem.pr ? 'Pull request' : 'Issue'} <span className="mono">#{ghItem.number}</span></span>
+              <a href={ghItem.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-fg hover:underline" title={ghItem.title}>{ghItem.title}</a>
+              <button type="button" className="shrink-0 text-[12px] text-accent hover:underline" onClick={() => setGhOpen(true)}>Change</button>
+              <button type="button" className="shrink-0 text-[12px] text-fg-muted hover:text-fg" aria-label="Not from GitHub" title="Not from GitHub: keep the fields as they are" onClick={() => { setGhItem(null); setGhOpen(false) }}>×</button>
+            </div>
+          ) : null}
+          {project && ghOpen ? (
+            <GitHubItemPicker key={`github-${project.id}`} projectId={project.id} onPick={pickItem} onClose={() => setGhOpen(false)} />
+          ) : project && !ghItem && ghRepo && github.status?.connected ? (
+            <button type="button" className="justify-self-start text-[12.5px] text-accent hover:underline" onClick={() => setGhOpen(true)}>
+              From a GitHub issue or pull request…
+            </button>
+          ) : null}
           {where === NEW_WORKTREE && (
             <div className="grid min-w-0 gap-2">
               <div className="grid grid-cols-2 gap-3">
-                <div className="grid min-w-0 gap-1.5">
-                  <span className="text-[12px] font-medium text-fg-muted">From branch</span>
-                  <BranchPicker branches={branches} value={base} onChange={setBase} loading={branchesLoading} />
-                </div>
+                {fromPR ? (
+                  <div className="grid min-w-0 gap-1.5">
+                    <span className="text-[12px] font-medium text-fg-muted">From</span>
+                    <span className="input truncate text-fg-muted" title="The pull request's head commit, fetched from the remote when it starts">pull request <span className="mono">#{fromPR}</span>, its head</span>
+                  </div>
+                ) : (
+                  <div className="grid min-w-0 gap-1.5">
+                    <span className="text-[12px] font-medium text-fg-muted">From branch</span>
+                    <BranchPicker branches={branches} value={base} onChange={setBase} loading={branchesLoading} />
+                  </div>
+                )}
                 <SheetField
                   label="New branch name"
                   hint={nameBad ? <span className="text-danger">letters, digits, dot and dash only</span> : 'optional'}
@@ -288,7 +340,7 @@ export function NewAgentSheet({
                   <input className="input" aria-invalid={nameBad || undefined} placeholder={worktreeName} value={newBranch} onChange={(e) => setNewBranch(e.target.value)} spellCheck={false} />
                 </SheetField>
               </div>
-              {base && branches.find((b) => b.name === base)?.remote && (
+              {!fromPR && base && branches.find((b) => b.name === base)?.remote && (
                 <label className="flex items-center gap-2 text-[13px] text-fg">
                   <input type="checkbox" checked={pull} onChange={(e) => setPull(e.target.checked)} />
                   Pull the latest <span className="mono">{base}</span> from {branches.find((b) => b.name === base)?.remote} first
@@ -303,11 +355,11 @@ export function NewAgentSheet({
               </div>
               {several ? (
                 <p className="text-[12px] leading-snug text-fg-faint" title={WHERE_TOOLTIP}>
-                  {attempts} separate folders, one agent each, all from {base ? <span className="mono text-fg-muted">{base}</span> : 'the same commit'}: <span className="mono text-fg-muted">caprock/{worktreeName}-1</span> to <span className="mono text-fg-muted">-{attempts}</span>. Compare what each changed and cost, then keep the one you want.
+                  {attempts} separate folders, one agent each, all from {fromPR ? <>pull request <span className="mono text-fg-muted">#{fromPR}</span>’s head</> : base ? <span className="mono text-fg-muted">{base}</span> : 'the same commit'}: <span className="mono text-fg-muted">caprock/{worktreeName}-1</span> to <span className="mono text-fg-muted">-{attempts}</span>. Compare what each changed and cost, then keep the one you want.
                 </p>
               ) : (
                 <p className="text-[12px] leading-snug text-fg-faint" title={WHERE_TOOLTIP}>
-                  A separate folder, so this agent doesn’t collide with others: <span className="mono text-fg-muted">caprock/{worktreeName}</span>{base ? <> from <span className="mono text-fg-muted">{base}</span></> : null}.
+                  A separate folder, so this agent doesn’t collide with others: <span className="mono text-fg-muted">caprock/{worktreeName}</span>{fromPR ? <> at pull request <span className="mono text-fg-muted">#{fromPR}</span>’s head, fetched from the remote</> : base ? <> from <span className="mono text-fg-muted">{base}</span></> : null}.
                 </p>
               )}
               {project && <ProjectSetupCommand key={project.id} project={project} />}

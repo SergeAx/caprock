@@ -134,6 +134,8 @@ type SheetState =
       kind: 'agent'; projectId?: string; cwd?: string; prompt?: string; worktree?: string
       /** Start in `cwd` itself (This folder for the main checkout), not the remembered choice. */
       here?: boolean
+      /** Open on the From GitHub picker: an open issue or pull request to start from. */
+      fromGitHub?: boolean
       /** Runs once the agent has started: a handed-off prompt was delivered. */
       onStarted?: () => void
     }
@@ -826,6 +828,7 @@ export function AppShell() {
     const split = current && current.root.type === 'split'
     items.push(
       { id: 'a-agent', group: 'Actions', label: 'New agent', hint: keys('⇧⌘N'), icon: <PlusIcon size={14} />, run: () => onNewAgent() },
+      { id: 'a-agent-issue', group: 'Actions', label: 'New agent from issue…', detail: 'an open GitHub issue or pull request: its own copy, its text as the first message', icon: <BranchIcon size={14} />, run: () => setSheet({ kind: 'agent', projectId: activeProjectId, fromGitHub: true }) },
       { id: 'a-shell', group: 'Actions', label: 'New shell', hint: keys('⌘T'), icon: <TerminalIcon size={14} />, run: () => onNewShell() },
       { id: 'a-quick-chat', group: 'Actions', label: 'Quick chat', detail: 'starts at once, on the agent and model used last', hint: keys('⌥⌘N'), icon: <ChatIcon size={14} />, run: () => { void onQuickChat() } },
       { id: 'a-quick-chat-with', group: 'Actions', label: 'Quick chat with…', detail: 'pick Claude, Codex, Gemini or OpenCode and a model', icon: <ChatIcon size={14} />, run: onQuickChatChooser },
@@ -914,7 +917,7 @@ export function AppShell() {
       }
     }
     return items
-  }, [data.sessions, onCompare, savedItems, manageSaved, ws.tabs, model.projects, model.inbox, sessionsById, projectsById, openSessions, prefs.inspector, current, onNewAgent, onNewShell, onQuickChat, onQuickChatChooser, onAddProject, onDashboard, toggleTheme, onSettings, run, showWorkspace, openSession, openSplit, onSelectProject, onOpenInbox, jumpToWaiting, splitShell, detach, editors, focusedSession?.cwd, openInEditor, source, onOpenChanges, fileScope, focused?.kind, activeProject, onCleanCopies])
+  }, [data.sessions, onCompare, savedItems, manageSaved, ws.tabs, model.projects, model.inbox, sessionsById, projectsById, openSessions, prefs.inspector, current, onNewAgent, onNewShell, onQuickChat, onQuickChatChooser, onAddProject, onDashboard, toggleTheme, onSettings, run, showWorkspace, openSession, openSplit, onSelectProject, onOpenInbox, jumpToWaiting, splitShell, detach, editors, focusedSession?.cwd, openInEditor, source, onOpenChanges, fileScope, focused?.kind, activeProject, activeProjectId, onCleanCopies])
 
   // Every session the daemon knows, by what it was about; one that is open or
   // live is already in the list above under its own id.
@@ -1220,6 +1223,7 @@ export function AppShell() {
           prompt={sheet.prompt}
           worktree={sheet.worktree}
           here={sheet.here}
+          fromGitHub={sheet.fromGitHub}
           onClose={() => setSheet(null)}
           onSetup={onSetupAgent}
           onProjectAdded={() => refresh()}

@@ -149,6 +149,8 @@ type Service struct {
 	deviceCancel context.CancelFunc
 
 	track *tracker
+	// items keeps the issue picker's answers for itemsTTL (issues.go).
+	items map[string]itemsCached
 }
 
 func (s *Service) init() {
@@ -483,6 +485,7 @@ func (s *Service) Disconnect(ctx context.Context) (Status, error) {
 	s.c.forget()
 	s.mu.Lock()
 	s.stored = false
+	s.items = nil
 	s.tok, s.tokSource = "", ""
 	s.user, s.scopes, s.scopesOK, s.kind, s.checkedAt = nil, nil, false, "", 0
 	s.lastOK, s.lastErr = 0, nil

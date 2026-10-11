@@ -1015,7 +1015,7 @@ machine, never from a forge's API (rule 4):
   guarded recent folder without checking that it still exists.
 
 ```
-POST   /v1/agents                    {cwd?, chat?, create?, worktree?, worktree_base?, worktree_pull?, agent?, subscription?, model?, permission_mode?, resume?, fork?, command?, args?, attempts?} → {session_id, cwd, session_ids?, attempt_group?, error?}
+POST   /v1/agents                    {cwd?, chat?, create?, worktree?, worktree_base?, worktree_pull?, worktree_pr?, agent?, subscription?, model?, permission_mode?, resume?, fork?, command?, args?, attempts?} → {session_id, cwd, session_ids?, attempt_group?, error?}
 GET    /v1/attempts/{group}          → {group, base?, attempts: [AttemptView]}; 404 for an unknown group
 GET    /v1/agents/models?agent=      {agent, default?, models:[{id,label}]}
 GET    /v1/agents/catalog            → {agents: [CatalogEntry], licensed, home?}
@@ -1825,6 +1825,7 @@ GET    /v1/github/repos?owner=&q=&page=    → RepoPage
 GET    /v1/github/prs                      → {prs: [PR]}
 GET    /v1/projects/{id}/github[?worktree=]          → WorktreeInfo
 POST   /v1/projects/{id}/github/refresh[?worktree=]  → WorktreeInfo (read now)
+GET    /v1/projects/{id}/github/items[?q=]           → Items (open issues and pull requests)
 POST   /v1/projects/{id}/github/pr[?worktree=]  {title, body, base?, draft} → {pr: PR, pushed, push?}
 POST   /v1/projects/{id}/github/repo  {name, owner?, private?, description?, protocol?, push?} → CreateRepoResult
 ```
@@ -1874,6 +1875,22 @@ POST   /v1/projects/{id}/github/repo  {name, owner?, private?, description?, pro
   the title from the only commit's subject, else the branch name
   (`feat/github-auth` → `feat: github auth`); with more than one commit the
   body lists their subjects since `base`, oldest first (at most 50).
+- **`Items`** — `{connected, repo: {owner, name, full_name, html_url} |
+  null, reason?: no_remote|not_github, items: [Item], more, search?, at}`;
+  `Item` is `{number, title, url, author?, labels: [{name, color?}], pr,
+  draft?, body?, comments, updated_at?}`, `pr` true for a pull request (the
+  issues API lists both). For New agent's *From GitHub*, read only when the
+  picker opens, never polled. The repository is the main checkout's remote,
+  as `WorktreeInfo` reads it; not connected, or not on github.com, answers
+  200 with no items and asks GitHub nothing. No `q`: `GET
+  /repos/{o}/{r}/issues?state=open&sort=updated&per_page=100`, `more` when
+  a next page exists. `q` of a number (`123`, `#123`): `GET
+  /repos/{o}/{r}/issues/123`, listed only if open (a 404 is an empty list).
+  Other `q` (at most 200 characters, else `400 invalid`): the search API,
+  `<q> repo:{o}/{r} is:open`, 50, `more` when the total is larger. `body` is
+  cut to 8,000 characters. Each answer is kept in memory for **60 s** per
+  repository and `q` (and dropped on disconnect), so reopening the picker
+  asks nothing.
 - **Open a pull request** pushes first when the branch is not `published`
   or is `ahead` (the Changes push: `projects.Service.Push`, the user's git
   credentials; a failed push answers as the push does and nothing is sent
@@ -1911,7 +1928,7 @@ POST   /v1/projects/{id}/github/repo  {name, owner?, private?, description?, pro
   a check turning to `fail` or a new `approved` / `changes_requested` review
   is a `notify` frame of kind `ci` or `review` (§ Notify frame) with an
   empty `session_id`; never on the first read of a pull request.
-- **Who.** The `GET`s are every paired device's; `…/github/pr` and
+- **Who.** The `GET`s (`…/github/items` included) are every paired device's; `…/github/pr` and
   `…/github/refresh` a controller's (ADR-034 amended); connect, device,
   disconnect, `PATCH` and `…/github/repo` the machine's only.
 - **Where the token lives.** The GitHub CLI's: nowhere in Caprock. A pasted
@@ -2850,3 +2867,5 @@ Not a public contract — the parser is schema-versioned and degrades to hooks-o
 Golden fixtures for the parser (normal, compacted, malformed line, unknown schema field) live in `testdata/transcripts/`.
 
 **A new copy from a branch** (`worktree_base`, `worktree_pull` on `POST /v1/agents`; `GET /v1/projects/{id}/branches`). `worktree` alone makes `caprock/<name>` from HEAD, as before. With `worktree_base` the branch starts from that branch instead; with `worktree_pull` the remote that has it (origin preferred) is fetched first and the copy starts from `<remote>/<base>`, so it is what the server has now. The new branch is created `--no-track`: a push never lands on the base. A base starting with `-` or holding a space or a ref metacharacter is refused before git runs. The branch list puts the remote's default branch (`origin/HEAD`, else main or master) first, then main, master, develop, dev, trunk, then the rest by newest commit; local and remote copies of one name are one row; Caprock's own `caprock/*` branches are left out. A paired phone gets it only for projects under home, like every project route.
+
+**A new copy from a pull request** (`worktree_pr` on `POST /v1/agents`; New agent → From GitHub). A positive number, with `worktree` and without `worktree_base` (otherwise `400`). Before the copy is made the daemon runs `git fetch --quiet --no-tags <remote> +refs/pull/<n>/head:refs/caprock/pull/<n>` in the project — `origin`, else the only remote; none is `400` — with the user's own git credentials and a 60 s limit, as `worktree_pull` does, and makes `caprock/<worktree>` `--no-track` from that ref, then deletes the ref (the branch holds the commit). GitHub keeps `refs/pull/<n>/head` for every pull request, a fork's included, so no fork remote is added. A fetch that fails (no such pull request, no access) is `400` with git's words. The token is not used: this is git, not the API. With `attempts`, only the first copy fetches; the rest start from its commit (`worktree_pr` is dropped for them).

@@ -82,6 +82,7 @@ func (s *Server) spawnAttempts(w http.ResponseWriter, r *http.Request, req map[s
 			// remote, and every attempt must start from the same code.
 			one["worktree_base"] = commit
 			delete(one, "worktree_pull")
+			delete(one, "worktree_pr") // the first copy fetched it; the commit is its head
 		}
 		id, cwd, err := s.d.Agents.Spawn(ctx, one)
 		if err != nil {

@@ -39,6 +39,7 @@ type fakeGitHub struct {
 	fail     map[string]http.HandlerFunc // "METHOD /path" -> handler
 	log      []string                    // "METHOD /path?query [If-None-Match]"
 	device   []map[string]any            // answers to successive token polls
+	issues   []map[string]any            // the repository's open issues and pull requests
 }
 
 func newFakeGitHub(t *testing.T) *fakeGitHub {
@@ -147,6 +148,8 @@ func (f *fakeGitHub) route(w http.ResponseWriter, r *http.Request, login string)
 			w.Header().Set("Link", `<`+f.srv.URL+`/user/repos?page=2>; rel="next"`)
 		}
 		answer(w, r, 200, f.repos)
+	case p == "/search/issues":
+		answer(w, r, 200, map[string]any{"total_count": len(f.issues) + 10, "items": f.issues[:1]})
 	case p == "/search/repositories":
 		answer(w, r, 200, map[string]any{"total_count": len(f.repos), "items": f.repos})
 	case (p == "/user/repos" || strings.HasPrefix(p, "/orgs/")) && r.Method == http.MethodPost:
@@ -167,6 +170,16 @@ func (f *fakeGitHub) repoRoute(w http.ResponseWriter, r *http.Request, seg []str
 	full := seg[0] + "/" + seg[1]
 	rest := seg[2:]
 	switch {
+	case len(rest) == 1 && rest[0] == "issues":
+		answer(w, r, 200, f.issues)
+	case len(rest) == 2 && rest[0] == "issues":
+		for _, is := range f.issues {
+			if fmt.Sprint(is["number"]) == rest[1] {
+				answer(w, r, 200, is)
+				return
+			}
+		}
+		answer(w, r, 404, map[string]any{"message": "Not Found"})
 	case len(rest) == 1 && rest[0] == "pulls" && r.Method == http.MethodGet:
 		state := r.URL.Query().Get("state")
 		head := r.URL.Query().Get("head")

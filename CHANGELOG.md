@@ -7,6 +7,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+## [0.107.2] - 2026-10-11
+
 ### Changed
 
 - **Tasks, before the task runner is on, is large and plain:** one headline

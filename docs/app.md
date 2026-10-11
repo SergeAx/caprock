@@ -282,7 +282,14 @@ others. Installing it: [install-app.md](install-app.md).
 - **Chat.** An agent tab switches between its terminal and its chat with the
   chat button in the tab strip: your prompts, what the agent wrote, and each
   tool call on one line that opens. The field under it types into the
-  session.
+  session. Send while the agent is still working and the message waits as
+  a dashed *Queued* bubble; Caprock types it in when the turn ends, one
+  message per turn, and never into a permission prompt. **Edit**,
+  **Cancel** and **Send now** sit on each bubble, and the phone sees the
+  same queue. Type `/` at the start of the field for the agent's commands
+  (its own, your project's `.claude/commands` and skills, and yours in
+  `~/.claude`), or `@` for a file in the session's folder: ↑ ↓ and Enter
+  pick, Esc closes. Picking only fills the field.
 - **Agent cockpit** (⌘I). Open beside an agent's terminal unless you close
   it: the agent and its state, what the session has cost and what each of
   its last model calls cost, how full its context is and what every call
@@ -747,6 +754,15 @@ A phone you let control sessions can:
   this session's project — are chips above the field: tap one to put it in
   the field, then **Send**. They are added and changed on the computer, in
   Settings; saved commands stay on the computer.
+- **Queue the next message.** Send while the agent works and the message
+  waits under the conversation as *Queued*; it goes in when the turn ends,
+  one per turn, in the order you sent them — the computer holds them, so
+  locking the phone loses nothing. Tap **Edit** to change one, **Cancel** to
+  drop it, or **Send now** to send it without waiting. While a permission
+  prompt is on the screen nothing is typed in; answer the prompt first.
+- **Pick a command or a file.** Type `/` at the start of the field for the
+  agent's commands and skills, or `@` for a file in the session's folder,
+  and tap one: it goes into the field, ready to send.
 - **Answer a permission prompt** with the buttons on the prompt card.
 - **Commit and push.** A session's *Changes* tab starts with what is
   uncommitted in its worktree. Tap files to commit only those (nothing
@@ -758,6 +774,6 @@ A phone you let control sessions can:
 It reconnects by itself. The header says where it stands — *Live*,
 *Catching up…*, *Reconnecting*, *Offline since* — and says *Live* only when
 the computer answered in the last 25 seconds. A message sent while offline
-waits as *Will send when connected* and goes when the connection is back,
-unless a permission prompt is waiting; then it stays as a draft for you to
-send. Keys like Esc and Ctrl+C are never held back to be sent later.
+waits as *Will send when connected* and goes when the connection is back
+(on a session's chat it joins the queue, so it never lands in a permission
+prompt; on the Terminal tab it stays as a draft while a prompt waits). Keys like Esc and Ctrl+C are never held back to be sent later.

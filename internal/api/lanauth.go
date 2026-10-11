@@ -273,6 +273,14 @@ var pairedDeviceRoutes = map[string]bool{
 	// The permission prompt an owned session waits on (ADR-035); the live
 	// socket already carries it to a viewer.
 	"GET /v1/agents/{id}/permission": true,
+	// The messages waiting for an owned session's turn to end (ADR-053);
+	// the live socket carries every change to a viewer too.
+	"GET /v1/agents/{id}/queue": true,
+	// The chat field's pickers: the session's slash commands (names and
+	// descriptions from its .claude folders) and its folder's file list,
+	// as a project's file list is a read.
+	"GET /v1/sessions/{id}/commands": true,
+	"GET /v1/sessions/{id}/files":    true,
 
 	// The projects list, a project's worktrees and the clones in flight
 	// (WP-05, WP-08): what the sidebar shows, as the session list is.
@@ -341,6 +349,13 @@ var controllerRoutes = map[string]bool{
 
 	// Answer a permission prompt with a button (ADR-035).
 	"POST /v1/agents/{id}/permission": true,
+
+	// The chat field: send or queue a message, and change, drop or send now
+	// one that waits (ADR-053). Typing, as /input is.
+	"POST /v1/agents/{id}/queue":            true,
+	"PATCH /v1/agents/{id}/queue/{qid}":     true,
+	"DELETE /v1/agents/{id}/queue/{qid}":    true,
+	"POST /v1/agents/{id}/queue/{qid}/send": true,
 
 	// Start work from the phone (21-app.md decision 8, ADR-034 amended):
 	// add, create or clone a project under home, rename, pin or unlist one

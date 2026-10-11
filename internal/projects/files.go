@@ -169,6 +169,16 @@ func (s *Service) ListFiles(ctx context.Context, id int64, worktree string) (Fil
 	if err != nil {
 		return FileList{}, err
 	}
+	return s.ListDirFiles(ctx, dir)
+}
+
+// ListDirFiles is ListFiles for a folder named directly: a session's working
+// directory, for the chat field's @ picker (ADR-053). Paths are relative to
+// dir; in a repository, only the files under dir.
+func (s *Service) ListDirFiles(ctx context.Context, dir string) (FileList, error) {
+	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+		return FileList{}, ErrNoFile
+	}
 	if err := tcc.Check(dir); err != nil {
 		return FileList{}, err
 	}

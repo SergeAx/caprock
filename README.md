@@ -674,7 +674,9 @@ loopback-only:
   any folder under your home directory with Claude Code, Codex or OpenCode, in
   any permission mode (Bypass asks once first, and the computer's one-time
   bypass consent has to have been given at the computer), type into it (a big input
-  field plus Esc, Tab, arrows, Enter and Ctrl+C buttons), answer approvals and
+  field plus Esc, Tab, arrows, Enter and Ctrl+C buttons; `/` and `@` pick a
+  command or a file, and a message sent while the agent works waits in a queue
+  the computer holds and goes in when the turn ends), answer approvals and
   stop it. *Start work* on Now also lets it clone a repository, make a new
   project or a worktree, and start an agent there, opening on the session's
   chat. That is as much power as a shell in your home directory, so grant it

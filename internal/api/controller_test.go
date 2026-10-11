@@ -41,7 +41,9 @@ var viewerMay = map[string]bool{
 	"GET /v1/window-stop": true, "GET /v1/live": true, "GET /v1/tasks": true, "GET /v1/tasks/{id}": true, "GET /v1/approvals": true,
 	"GET /v1/statusline/{id}": true, "GET /v1/pair/me": true, "GET /healthz": true,
 	"GET /v1/agents/{id}/permission": true,
-	"GET /v1/glance":                 true, "GET /v1/week": true, "GET /v1/tools/drill": true, "GET /v1/saved-prompts": true, "GET /v1/attempts/{group}": true,
+	// The message queue and the chat field's pickers (ADR-053).
+	"GET /v1/agents/{id}/queue": true, "GET /v1/sessions/{id}/commands": true, "GET /v1/sessions/{id}/files": true,
+	"GET /v1/glance": true, "GET /v1/week": true, "GET /v1/tools/drill": true, "GET /v1/saved-prompts": true, "GET /v1/attempts/{group}": true,
 	"GET /v1/projects": true, "GET /v1/projects/ops": true, "GET /v1/projects/{id}/worktrees": true,
 	"GET /v1/projects/{id}/changes": true, "GET /v1/projects/{id}/changes/diff": true,
 	"GET /v1/projects/{id}/file": true, "GET /v1/projects/{id}/files": true,
@@ -58,7 +60,8 @@ var controllerMayAlso = map[string]bool{
 	"GET /v1/sessions/{id}/relay": true, "GET /v1/agents/{id}/term": true,
 	"POST /v1/agents/{id}/input": true, "POST /v1/agents/{id}/signal": true, "POST /v1/paste": true,
 	"POST /v1/agents/{id}/permission": true,
-	"POST /v1/tasks/{id}/approve":     true, "POST /v1/tasks/{id}/reject": true,
+	"POST /v1/agents/{id}/queue":      true, "PATCH /v1/agents/{id}/queue/{qid}": true, "DELETE /v1/agents/{id}/queue/{qid}": true, "POST /v1/agents/{id}/queue/{qid}/send": true,
+	"POST /v1/tasks/{id}/approve": true, "POST /v1/tasks/{id}/reject": true,
 	// Start work from the phone (21-app.md decision 8). Shells are not
 	// here: from the phone they are P1, so POST and GET /v1/shells are 403.
 	"POST /v1/projects": true, "PATCH /v1/projects/{id}": true, "DELETE /v1/projects/{id}": true,

@@ -172,6 +172,8 @@ type Daemon struct {
 	// directory (ADR-048, subscriptions.go).
 	subIn subIngest
 	mgr   *agents.Manager
+	// queue holds what the chat field sends while a turn runs (ADR-053).
+	queue *msgQueue
 	// projs is the projects list and its git watcher (WP-05).
 	projs *projects.Service
 	// gh is the GitHub integration (WP-19); idle until the user connects.
@@ -426,8 +428,10 @@ func (d *Daemon) run(ctx context.Context) error {
 	// kept to a bounded size.
 	logcap.Watch(config.LogPath(d.opt.DataDir), config.ServiceLogPath(d.opt.DataDir))
 	go logcap.Run(ctx, d.log)
+	d.queue = newMsgQueue(d)
 	d.mgr.OnExit = func(id string, code int) {
 		d.link.Ended(id)
+		go d.queue.ended(id)
 		if s, err := store.GetSession(ctx, d.store.DB(), id); err == nil {
 			st, _ := store.GetStats(ctx, d.store.DB(), id)
 			d.bus.Publish(bus.Frame{Type: bus.FrameSession, Data: rollup.SessionFrame{Session: s, Stats: st}})
@@ -446,6 +450,7 @@ func (d *Daemon) run(ctx context.Context) error {
 	if len(reattached) > 0 {
 		d.log.Info("reattached sessions that outlived the last run", "component", "daemon", "count", len(reattached))
 	}
+	d.queue.startup(ctx)
 
 	// The projects list: seeded once from the repositories sessions ran in,
 	// then each repository's .git watched for changes (never polled).
@@ -504,7 +509,7 @@ func (d *Daemon) run(ctx context.Context) error {
 	// Hook receiver. Decide is wired unconditionally: it is a method that
 	// answers nil while no board exists, so the Stop-loop starts working the
 	// moment the task runner is turned on rather than only on the next restart.
-	hh := &hookd.Handler{Token: rt.Token, Recorder: d.rec, Log: d.log, Decide: d.stopDecision, Handoff: d.handoff, Observe: d.observeHook}
+	hh := &hookd.Handler{Token: rt.Token, Recorder: d.rec, Log: d.log, Decide: d.stopDecision, Handoff: d.handoff, Observe: d.observeHook, AfterMain: d.queue.afterMain}
 
 	// API.
 	// LAN access, decided before the API is built so the pairing screen has an
@@ -544,7 +549,7 @@ func (d *Daemon) run(ctx context.Context) error {
 		},
 		ActiveLoops: d.activeLoop, IdleAfter: d.opt.IdleAfter,
 		LoopK: d.det.K, LoopWindow: d.det.Window,
-		Token: rt.Token, Shutdown: cancel, Agents: &agentAdapter{m: d.mgr, d: d}, Catalog: &catalogAdapter{d: d}, Subscriptions: &subsAdapter{d: d},
+		Token: rt.Token, Shutdown: cancel, Agents: &agentAdapter{m: d.mgr, d: d}, Queue: d.queue, Catalog: &catalogAdapter{d: d}, Subscriptions: &subsAdapter{d: d},
 		Tasks: &boardAdapter{d: d}, Settings: &settingsAdapter{d: d}, Update: d.upd,
 		AskGemini: d.askGemini,
 		DataDir:   d.opt.DataDir,

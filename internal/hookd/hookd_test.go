@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -163,6 +164,34 @@ func TestHandlerStopDecision(t *testing.T) {
 	// SubagentStop never gets a decision.
 	if rr := post(h, "secret", fixture(t, "subagent_stop.json")); rr.Code != http.StatusNoContent {
 		t.Fatalf("subagent stop: %d", rr.Code)
+	}
+}
+
+// AfterMain hears the main thread's events once recorded, and a Stop the
+// Stop-loop sent back to work is marked continued (the queue, ADR-053).
+func TestAfterMainSeesTheTurnEnd(t *testing.T) {
+	h, _ := newHandler(t)
+	block := true
+	h.Decide = func(context.Context, Payload) []byte {
+		if block {
+			return []byte(`{"decision":"block","reason":"process your inbox"}`)
+		}
+		return nil
+	}
+	type seen struct {
+		kind      event.Kind
+		continued bool
+	}
+	var got []seen
+	h.AfterMain = func(ev *event.Event, continued bool) { got = append(got, seen{ev.Kind, continued}) }
+	post(h, "secret", fixture(t, "user_prompt_submit.json"))
+	post(h, "secret", fixture(t, "subagent_stop.json"))
+	post(h, "secret", fixture(t, "stop.json"))
+	block = false
+	post(h, "secret", fixture(t, "stop.json"))
+	want := []seen{{event.KindTurnUser, false}, {event.KindAgentStop, true}, {event.KindAgentStop, false}}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("AfterMain saw %v, want %v", got, want)
 	}
 }
 

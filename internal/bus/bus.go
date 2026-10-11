@@ -41,6 +41,9 @@ const (
 	// FrameResources is the resource meter's sample (daemon.ResourceReport),
 	// every few seconds while a dashboard is connected.
 	FrameResources FrameType = "resources"
+	// FrameQueue is an owned session's message queue after any change
+	// (ADR-053): {session_id, messages, waiting}.
+	FrameQueue FrameType = "queue"
 )
 
 // Frame is what goes over /v1/live. Seq is set by Publish: one more than the

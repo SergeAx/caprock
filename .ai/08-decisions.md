@@ -2847,3 +2847,68 @@ are the user's; cost alone is not quality).
 **Revisit if** people want different agents or models per attempt, a test
 command whose result the comparison shows, or a one-click *keep this one*
 that removes the other copies.
+
+## ADR-053 — Queued messages: the daemon holds what the chat sends mid-turn and types it in when the turn ends, one per turn
+
+**Date:** 2026-10-11 · **Status:** accepted
+
+Typing the next instruction while the agent works is how people use Claude
+Code, and on the phone it is the only way: the chat field typed straight into
+the running turn, and the only queue was the phone's own while it was offline
+(*Will send when connected*). Orca queues messages in its chat; the gap
+analysis of 2026-10-11 ranked it phone first. With it come the `/` and `@`
+pickers, because typing a command name or a path on a phone keyboard is the
+other half of the same complaint.
+
+**Decision.**
+
+- **The daemon decides, not the page.** The chat field sends to `POST
+  /v1/agents/{id}/queue`; the daemon types the text in at once when the
+  session sits at its prompt with nothing queued, and holds it otherwise.
+  Held in SQLite (migration 0047), so the phone and the Mac show one queue,
+  it outlives a phone going to sleep and a daemon restart, and every change
+  is a `queue` frame.
+- **Delivered on the turn's end and nothing else.** The end of a turn is the
+  session's own `Stop` hook, on the main thread, recorded, and not answered
+  "keep going" by the task runner's Stop-loop. After 700 ms the daemon reads
+  the state again and types the oldest message only if the session is still
+  at its prompt with no permission prompt and no question on the screen.
+  Not on silence (a long build is silent), not on `StopFailure` (a rate
+  limit would eat the queue one message at a time), never into a menu.
+- **One message per turn, in order.** Not "send all as one". Each message
+  was written against what the user saw when they wrote it; delivered one
+  per turn, the agent finishes one before it reads the next, and the user
+  can still edit or cancel the later ones after seeing the first answer.
+  Joining them would make one prompt of two decisions and take that chance
+  away. The cost — N turns for N messages — is what the user asked for by
+  sending N messages.
+- **Send now** on a bubble types that one in regardless of the turn — the
+  way out when no `Stop` is coming (a turn interrupted with Esc may not
+  send one) — and is refused while a prompt or a question is on
+  the screen.
+- **Only where the turn can be read.** Claude Code with its hooks
+  recording. Codex, OpenCode, Gemini and Claude Code without hooks say
+  nothing when a turn ends, so their messages are typed in at once, as
+  before: a queue that never drains is worse than none.
+- **Only Caprock's sessions** ([rule 7](../CLAUDE.md)): the manager types,
+  and a session that ends loses its queue, whatever ended it.
+- **The keys bar under the terminal is not queued.** What is typed there
+  answers what is on the screen, a menu or a question included; a queue
+  there would hold the answer. The pickers are in both fields.
+- **Pickers read the disk, read-only.** `/` lists the agent's built-ins and
+  the `.claude/commands` and `.claude/skills` of the session's folder, its
+  repository root and `~/.claude` (Codex: its built-ins and
+  `~/.codex/prompts`); `@` lists the folder's files as the file tab does. A
+  pick puts text in the field; nothing is sent until Send.
+
+**Rejected.** A browser-side queue (the Mac would not see what the phone
+queued, and a sleeping phone would not deliver); delivering when the
+session goes quiet (a quiet minute is not the end of a turn); joining the
+queue into one message; typing into the running turn and letting Claude
+Code hold it (it does, but nothing on the phone would show it, and it lands
+in a permission menu as an answer); queueing raw keys (an Esc a minute late
+answers a different question — WP-13's rule stands).
+
+**Revisit if** Claude Code reports an interrupted turn in a hook (then Esc
+can deliver too), another agent gains a turn-end signal, or people ask to
+reorder the queue.

@@ -963,6 +963,24 @@ export interface AgentCatalog { agents: CatalogEntry[]; licensed: boolean; home?
 /** A coding agent the user added by command (Settings → Agents, Premium). */
 export interface CustomAgent { id?: string; name: string; command: string; args?: string[]; models?: string[] }
 
+/** A saved prompt or command (ADR-051); see lib/saved.ts. */
+export interface SavedPrompt {
+  id: number
+  kind: 'prompt' | 'command'
+  name: string
+  text: string
+  /** Absent for every project. */
+  project_id?: number
+  project_root?: string
+  project_name?: string
+  sort: number
+  created_at: number
+  updated_at: number
+}
+
+/** What a saved prompt is made or changed from; project_id 0 is every project. */
+export interface SavedDraft { kind: 'prompt' | 'command'; name: string; text: string; project_id: number }
+
 /** The agents that have subscriptions (ADR-048). */
 export type SubscriptionAgentId = 'claude' | 'codex'
 
@@ -1321,6 +1339,13 @@ export const api = {
   customAgents: () => get<{ agents: CustomAgent[]; licensed: boolean }>('/v1/agents/custom'),
   /** PUT /v1/agents/custom: replaces the list; 402 without an active licence. */
   saveCustomAgents: (agents: CustomAgent[]) => post<{ agents: CustomAgent[]; licensed: boolean }>('/v1/agents/custom', { agents }, 'PUT'),
+  /** Saved prompts and commands (ADR-051): all of them, or a session's — every project's and its own project's. */
+  savedPrompts: (sessionId?: string) =>
+    get<{ items: SavedPrompt[]; max: number }>(`/v1/saved-prompts${sessionId ? `?session=${encodeURIComponent(sessionId)}` : ''}`),
+  /** The machine only; a paired device gets 403. */
+  addSavedPrompt: (d: SavedDraft) => post<{ item: SavedPrompt }>('/v1/saved-prompts', d),
+  updateSavedPrompt: (id: number, d: Partial<SavedDraft>) => post<{ item: SavedPrompt }>(`/v1/saved-prompts/${id}`, d, 'PATCH'),
+  removeSavedPrompt: (id: number) => post<void>(`/v1/saved-prompts/${id}`, {}, 'DELETE'),
   /** Settings → Subscriptions (ADR-048). */
   subscriptions: () => get<SubscriptionsResponse>('/v1/subscriptions'),
   /** 402 at the free number without a licence. */

@@ -73,6 +73,8 @@ import { CloseShellConfirm } from '@/components/CloseShellConfirm'
 import { ShortcutsSheet } from '@/components/ShortcutsSheet'
 import { worktreeSlug } from '@/lib/slug'
 import { openPhoneSettings, openSettingsAt } from '@/components/Pairing'
+import { reloadSaved, savedFor, sendPrompt, useSavedPrompts, type SavedPrompt } from '@/lib/saved'
+import { SAVED_SECTION_ID } from '@/components/SavedPromptsSetting'
 
 export { worktreeSlug }
 
@@ -132,6 +134,8 @@ type SheetState =
   | { kind: 'share' }
   /** Quick chat's vendor and model chooser (components/QuickChat.tsx). */
   | { kind: 'quick-chat' }
+  /** *Run saved…*: the palette narrowed to the saved prompts and commands (ADR-051). */
+  | { kind: 'saved' }
   /** The palette's "Open file…": the files of one worktree. */
   | { kind: 'files'; projectId: string; worktree: string; title: string }
   | null
@@ -483,10 +487,63 @@ export function AppShell() {
     { id: 'agent', label: 'New agent', hint: keys('⇧⌘N'), icon: <PlusIcon size={13} />, run: () => onNewAgent() },
     { id: 'quick-chat', label: 'Quick chat…', hint: keys('⌥⌘N'), icon: <ChatIcon size={13} />, run: onQuickChatChooser },
     { id: 'shell', label: 'New shell', hint: keys('⌘T'), icon: <TerminalIcon size={13} />, run: () => onNewShell() },
+    { id: 'saved', label: 'Run saved…', icon: <SparkIcon size={13} />, run: () => setSheet({ kind: 'saved' }) },
     { id: 'file', label: 'Open file…', icon: <FileIcon size={13} />, run: () => { const f = fileScopeRef.current; if (f) setSheet({ kind: 'files', ...f }); else setToast('Open a project first: files are opened from one.') } },
     { id: 'project', label: 'Add project', hint: keys('⌘O'), icon: <FolderPlusIcon size={13} />, run: onAddProject },
   ], [onNewAgent, onQuickChatChooser, onNewShell, onAddProject])
   const onSettings = useCallback(() => { location.hash = '#/settings' }, [])
+
+  /**
+   * Saved prompts and commands (ADR-051). A prompt goes to the session in
+   * front when Caprock started it and it runs — typed as the message field
+   * types, then Enter; otherwise New agent opens with it as the first
+   * message, never into a session Caprock did not start (rule 7). A command
+   * runs in a new shell tab in the folder in front: the focused session's
+   * worktree, else the project's root.
+   */
+  const saved = useSavedPrompts()
+  // Asked again as a list of them opens: one may have been saved in another window.
+  useEffect(() => { if (sheet?.kind === 'saved' || sheet?.kind === 'palette') void reloadSaved() }, [sheet?.kind])
+  const runSaved = useCallback(async (v: SavedPrompt) => {
+    const s = workspaceShown ? focusedSession : undefined
+    const pid = current?.projectId ?? activeProjectId
+    if (v.kind === 'command') {
+      const cwd = s?.cwd || projectsById.get(pid)?.root
+      if (!cwd) { setToast(`Open a project first: “${v.name}” runs in one.`); return }
+      try {
+        const shell = await projectsApi.startShell({ cwd, cols: 120, rows: 32, type: v.text, run: true })
+        openTab({ kind: 'shell', sessionId: shell.id }, pid, 'shell')
+        refresh()
+      } catch (e) {
+        setToast(`Could not run “${v.name}”: ${errText(e)}`)
+      }
+      return
+    }
+    if (s && s.owned && s.kind !== 'shell' && s.status !== 'ended' && !s.detached) {
+      try {
+        await sendPrompt(s.session_id, v.text)
+        setToast(`Sent “${v.name}” to ${sessionTitle(s)}.`)
+      } catch (e) {
+        setToast(`“${v.name}” was not sent: ${errText(e)}`)
+      }
+      return
+    }
+    setSheet({ kind: 'agent', projectId: pid, prompt: v.text })
+  }, [workspaceShown, focusedSession, current?.projectId, activeProjectId, projectsById, openTab, refresh])
+  const savedItems = useMemo<PaletteItem[]>(() => {
+    const scope = savedFor(saved.items, { dir: workspaceShown ? focusedSession?.cwd : undefined, projectId: current?.projectId ?? activeProjectId })
+    return scope.map((v) => ({
+      id: `saved-${v.id}`,
+      group: 'Saved' as const,
+      label: v.name,
+      detail: v.kind === 'command' ? `run: ${v.text}` : v.text.replace(/\s+/g, ' '),
+      icon: v.kind === 'command' ? <TerminalIcon size={14} /> : <ChatIcon size={14} />,
+      run: () => { void runSaved(v) },
+    }))
+  }, [saved.items, workspaceShown, focusedSession?.cwd, current?.projectId, activeProjectId, runSaved])
+  const manageSaved = useMemo<PaletteItem>(() => ({
+    id: 'a-saved-manage', group: 'Actions', label: 'Add or edit saved prompts and commands', detail: 'Settings', icon: <SettingsIcon size={14} />, run: () => openSettingsAt(SAVED_SECTION_ID),
+  }), [])
   const onPaneStatus = useCallback((sessionId: string, s: PaneStatus) => setPaneStatus((cur) => ({ ...cur, [sessionId]: s })), [])
   const onFocusPane = useCallback((tabId: string, paneId: string) => dispatch({ type: 'focus-pane', tabId, paneId }), [])
   const stopShells = useCallback((stop: readonly ClosingShell[]) => {
@@ -710,6 +767,9 @@ export function AppShell() {
       { id: 'a-share', group: 'Actions', label: 'Share my numbers', detail: 'a card of your figures: copy, save or post to X', icon: <SparkIcon size={14} />, run: () => setSheet({ kind: 'share' }) },
       ...SCREENS.map(([route, label, detail]) => ({ id: `a-screen-${route}`, group: 'Actions' as const, label, detail, icon: <DashboardIcon size={14} />, run: () => { location.hash = `#/${route}` } })),
       { id: 'a-waiting', group: 'Actions', label: 'Next session waiting on you', hint: keys('⌘J'), icon: <SparkIcon size={14} />, run: jumpToWaiting },
+      { id: 'a-saved', group: 'Actions', label: 'Run saved…', detail: 'a saved prompt or command', icon: <SparkIcon size={14} />, run: () => setSheet({ kind: 'saved' }) },
+      manageSaved,
+      ...savedItems,
     )
     // F20: the app's own updater; the answer shows in the status strip.
     if (isTauri()) items.push({ id: 'a-update', group: 'Actions', label: 'Check for updates', icon: <SparkIcon size={14} />, run: () => { void appUpdate.check() } })
@@ -767,7 +827,7 @@ export function AppShell() {
       }
     }
     return items
-  }, [ws.tabs, model.projects, model.inbox, sessionsById, projectsById, openSessions, prefs.inspector, current, onNewAgent, onNewShell, onQuickChat, onQuickChatChooser, onAddProject, onDashboard, toggleTheme, onSettings, run, showWorkspace, openSession, openSplit, onSelectProject, onOpenInbox, jumpToWaiting, splitShell, detach, editors, focusedSession?.cwd, openInEditor, source, onOpenChanges, fileScope, focused?.kind])
+  }, [savedItems, manageSaved, ws.tabs, model.projects, model.inbox, sessionsById, projectsById, openSessions, prefs.inspector, current, onNewAgent, onNewShell, onQuickChat, onQuickChatChooser, onAddProject, onDashboard, toggleTheme, onSettings, run, showWorkspace, openSession, openSplit, onSelectProject, onOpenInbox, jumpToWaiting, splitShell, detach, editors, focusedSession?.cwd, openInEditor, source, onOpenChanges, fileScope, focused?.kind])
 
   // Every session the daemon knows, by what it was about; one that is open or
   // live is already in the list above under its own id.
@@ -1103,6 +1163,7 @@ export function AppShell() {
         />
       )}
       {sheet?.kind === 'palette' && <CommandPalette items={paletteItems} fallback={paletteFallback} search={paletteSearch} onClose={closeSheet} />}
+      {sheet?.kind === 'saved' && <CommandPalette label="Run saved" placeholder="Run a saved prompt or command…" items={[...savedItems, { ...manageSaved, group: 'Saved' }]} onClose={closeSheet} />}
     </div>
   )
 }

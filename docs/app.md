@@ -155,7 +155,17 @@ others. Installing it: [install-app.md](install-app.md).
   Premium. *Remove* deletes the folder after asking.
 - **The tab strip.** The tab in front has an amber top edge; the others are
   shaded tabs of their own. The amber + opens a menu: New agent, Quick
-  chat, New shell, Open file, Add project, each with its key.
+  chat, New shell, Run saved…, Open file, Add project, each with its key.
+- **Saved prompts and commands.** Settings → *Saved prompts and commands*
+  keeps what you type over and over, each with a name, for every project or
+  for one: a *prompt* such as *Run the tests and fix what fails*, or a
+  *command*, one shell line such as `pnpm dev`. ⌘K lists the ones for the
+  project in front under *Saved*; + → *Run saved…* lists only them. A prompt
+  goes to the agent in the tab in front, typed as if you had typed it, then
+  Enter — when Caprock started that agent and it is running; otherwise
+  *New agent* opens with the prompt as its first message. A command opens a
+  new shell tab in the folder in front (the agent's copy, else the project)
+  and runs there. Up to 200, a prompt up to 8 KiB, a command one line.
 - **A past session** opens on its chat, with one button: *Resume in a tab*
   (*Branch into a tab* while it still runs elsewhere) and the permission mode
   beside it. Continuing in another agent, opening it in your own terminal and
@@ -667,7 +677,10 @@ A phone you let control sessions can:
 - **Chat with a session.** On a phone a session opens on its chat. Type into
   the field and send; **Photo** attaches a picture by putting its path in the
   message. The keys bar has Esc, Tab, the arrows, Enter and Ctrl+C for the
-  agent's menus.
+  agent's menus. Your saved prompts — the ones for every project and for
+  this session's project — are chips above the field: tap one to put it in
+  the field, then **Send**. They are added and changed on the computer, in
+  Settings; saved commands stay on the computer.
 - **Answer a permission prompt** with the buttons on the prompt card.
 - **Commit and push.** A session's *Changes* tab starts with what is
   uncommitted in its worktree. Tap files to commit only those (nothing

@@ -2724,3 +2724,52 @@ setup ended).
 
 **Revisit if** Claude Code changes `.worktreeinclude`'s semantics, or users
 want a per-project timeout or a teardown command when a copy is removed.
+
+## ADR-051 — Saved prompts and commands: kept by the daemon, used anywhere, changed on the machine
+
+**Date:** 2026-10-11 · **Status:** accepted
+
+People type the same things into their agents many times a day — "run the
+tests and fix what fails", "commit and open a PR" — and the same shell lines
+— `pnpm dev`. On a phone each one is a paragraph typed on glass. Orca has
+Quick Commands: saved shell commands and agent prompts, global or per
+project, run from the tab bar and synced to its phone app.
+
+**Decision.**
+
+- **Two kinds, one list.** A *prompt* is text for an agent; a *command* is
+  one shell line. Each has a name and is for every project or for one. The
+  daemon keeps them (`saved_prompts`, migration 0045), not the browser, so
+  the phone, the app and a browser tab see one list.
+- **A prompt goes only to a session Caprock started** (rule 7), through the
+  input path the keyboard uses: the text with line breaks as ESC CR, then
+  Enter on its own. On the desktop, ⌘K and the tab strip's + → *Run saved…*
+  send it to the session in front when that is a running session Caprock
+  started; otherwise New agent opens with it as the first message, never
+  into anything else.
+- **A command runs in a new shell tab**, in the folder in front — the focused
+  session's worktree, else the project's root — typed and then Enter
+  (`POST /v1/shells` gained `run`). One line only, so what runs is what was
+  shown. Never in an existing shell: something may be running there.
+- **The phone gets prompts as chips** above the message field, in the chat and
+  the terminal's keys bar, for every project and the session's own. A tap
+  puts the prompt in the field and does not send it: one more tap, with a
+  chance to add a file name, and no prompt sent by a stray touch. The phone
+  gets no commands: shells are not a phone's (ADR-034, ADR-050).
+- **Changed on the machine only.** A paired device reads the list and may
+  not add, change or delete one (`403`): a command is something this machine
+  runs, and Settings are the machine's (ADR-029). Settings → *Saved prompts
+  and commands* edits them.
+- **Small.** A name of 80 characters, a prompt of 8 KiB, a command of 1 KiB,
+  200 rows in all: these are shortcuts, not documents.
+
+**Rejected.** Browser storage (the phone would not see what the Mac saved);
+the daemon's `config.json` (a list people add to daily is data, and Settings
+writes would race the editor); sending a chip's prompt at once (one stray tap
+sends a paragraph to an agent with permissions skipped); commands from the
+phone (a shell is not a phone's, and a command saved on the Mac would run on
+the Mac from the phone); running a command in an existing shell (it may be in
+the middle of something).
+
+**Revisit if** people want variables in a prompt (`{file}`, `{branch}`), a
+key per saved prompt, or commands from the phone once shells are.

@@ -12,7 +12,7 @@ import { Sheet, SHEET_CLOSE_ROOM } from './Sheet'
 
 export interface PaletteItem {
   id: string
-  group: 'Waiting' | 'Actions' | 'Tabs' | 'Sessions' | 'Projects' | 'History'
+  group: 'Waiting' | 'Actions' | 'Saved' | 'Tabs' | 'Sessions' | 'Projects' | 'History'
   label: string
   detail?: string
   hint?: string
@@ -44,7 +44,7 @@ export function score(query: string, item: Pick<PaletteItem, 'label' | 'detail' 
   return 1
 }
 
-const GROUP_ORDER: PaletteItem['group'][] = ['Waiting', 'Actions', 'Tabs', 'Sessions', 'Projects']
+const GROUP_ORDER: PaletteItem['group'][] = ['Waiting', 'Actions', 'Saved', 'Tabs', 'Sessions', 'Projects']
 
 /** The items shown for a query: by group, the group with the best match first once something is typed. */
 export function rank(items: PaletteItem[], q: string): PaletteItem[] {
@@ -62,9 +62,14 @@ export function CommandPalette({
   onClose,
   fallback,
   search,
+  label = 'Command palette',
+  placeholder = 'Search projects, sessions, actions…',
 }: {
   items: PaletteItem[]
   onClose: () => void
+  /** The sheet's name, for a palette narrowed to one kind of item (Run saved…). */
+  label?: string
+  placeholder?: string
   /** What the typed text can do when nothing matches it. */
   fallback?: (q: string) => PaletteItem | undefined
   /** Past sessions matching the text, from the daemon; shown under History. */
@@ -102,7 +107,7 @@ export function CommandPalette({
   }
   let lastGroup = ''
   return (
-    <Sheet label="Command palette" onClose={onClose} width={600}>
+    <Sheet label={label} onClose={onClose} width={600}>
       <div className={`flex items-center gap-2 border-b border-[var(--app-hairline)] pl-4 ${SHEET_CLOSE_ROOM}`}>
         <input
           autoFocus
@@ -111,7 +116,7 @@ export function CommandPalette({
           aria-expanded="true"
           aria-controls="palette-list"
           aria-activedescendant={shown[at] ? `palette-${shown[at]!.id}` : undefined}
-          placeholder="Search projects, sessions, actions…"
+          placeholder={placeholder}
           className="h-[48px] w-full bg-transparent text-[15px] text-fg outline-none placeholder:text-fg-faint"
           value={q}
           onChange={(e) => { setQ(e.target.value); setAt(0) }}

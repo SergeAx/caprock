@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/dspv/caprock/internal/bus"
@@ -22,7 +23,13 @@ import (
 type fakeShells struct {
 	dir     string
 	started []string
+	// typed and ran are the lines typed at a new shell's prompt, without
+	// and with Enter.
+	typed, ran []string
 }
+
+func (f *fakeShells) TypeAtPrompt(_, text string) { f.typed = append(f.typed, text) }
+func (f *fakeShells) RunAtPrompt(_, text string)  { f.ran = append(f.ran, text) }
 
 func (f *fakeShells) StartShell(_ context.Context, cwd string, _, _ int) (ShellInfo, error) {
 	f.started = append(f.started, cwd)
@@ -113,6 +120,22 @@ func TestAPhoneStartsProjectsUnderHome(t *testing.T) {
 // Shells are the machine's: a phone, whatever its role, cannot start one,
 // list them, or reach a shell's terminal through the agent routes it may
 // otherwise use (21-app.md decision 8: shells from the phone are P1).
+// A saved command runs (ADR-051): typed and then Enter; without run it is
+// only typed, as an agent's install line is (ADR-046).
+func TestAShellTypesOrRunsALine(t *testing.T) {
+	s, home, _, _, sh := projectsServer(t)
+	dir := filepath.ToSlash(home)
+	if w := call(t, s, machine, "", "POST", "/v1/shells", `{"cwd":"`+dir+`","type":"npm i -g x"}`); w.Code != http.StatusOK {
+		t.Fatalf("type: %d %s", w.Code, w.Body)
+	}
+	if w := call(t, s, machine, "", "POST", "/v1/shells", `{"cwd":"`+dir+`","type":"pnpm dev","run":true}`); w.Code != http.StatusOK {
+		t.Fatalf("run: %d %s", w.Code, w.Body)
+	}
+	if strings.Join(sh.typed, "|") != "npm i -g x" || strings.Join(sh.ran, "|") != "pnpm dev" {
+		t.Fatalf("typed %q, ran %q", sh.typed, sh.ran)
+	}
+}
+
 func TestShellsStayOnTheMachine(t *testing.T) {
 	s, home, _, controller, sh := projectsServer(t)
 	for _, c := range []struct{ method, path, body string }{

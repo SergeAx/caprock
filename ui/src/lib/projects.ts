@@ -160,8 +160,10 @@ export interface ShellRequest {
   rows: number
   /** The session whose exited program this shell replaces: every client asking gets the same shell. */
   replaces?: string
-  /** One line typed at the prompt once the shell has drawn it, never run: an agent's install or sign-in. */
+  /** One line typed at the prompt once the shell has drawn it, not run unless `run`: an agent's install or sign-in. */
   type?: string
+  /** Press Enter after `type`: a saved command the user picked to run (ADR-051). */
+  run?: boolean
 }
 
 /** What a branch row says for a checkout: the branch, or `detached @ <sha7>` when git names a commit. */

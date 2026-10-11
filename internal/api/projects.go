@@ -373,9 +373,12 @@ func (s *Server) handleStartShell(w http.ResponseWriter, r *http.Request) {
 		// never followed by Enter: an agent's install or sign-in command the
 		// user reads and runs (ADR-046).
 		Type string `json:"type,omitempty"`
+		// Run presses Enter after Type: a saved command the user picked to
+		// run (ADR-051). Still one line.
+		Run bool `json:"run,omitempty"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body is {cwd | project_id, cols?, rows?, replaces?}"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body is {cwd | project_id, cols?, rows?, replaces?, type?, run?}"})
 		return
 	}
 	cwd := body.Cwd
@@ -407,8 +410,14 @@ func (s *Server) handleStartShell(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	if t, ok := s.d.Shells.(interface{ TypeAtPrompt(id, text string) }); ok && body.Type != "" && body.Replaces == "" {
-		t.TypeAtPrompt(sh.ID, body.Type)
+	if body.Type != "" && body.Replaces == "" {
+		if body.Run {
+			if t, ok := s.d.Shells.(interface{ RunAtPrompt(id, text string) }); ok {
+				t.RunAtPrompt(sh.ID, body.Type)
+			}
+		} else if t, ok := s.d.Shells.(interface{ TypeAtPrompt(id, text string) }); ok {
+			t.TypeAtPrompt(sh.ID, body.Type)
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"shell": s.withProject(sh)})
 }

@@ -1409,7 +1409,7 @@ GET    /v1/projects/{id}/worktrees         → {worktrees: [Worktree]}
 POST   /v1/projects/{id}/worktrees         {branch, create?, base?} → {worktree: {path, branch, tracks?, copied?}}
 GET    /v1/projects/{id}/branches          → {branches: [{name, main?, default?, local?, remote?, committed_ms}]}
 DELETE /v1/projects/{id}/worktrees/{name}  → 204; 409 {error} when it has any change
-POST   /v1/shells                          {cwd | project_id, cols?, rows?, replaces?} → {shell: Shell}
+POST   /v1/shells                          {cwd | project_id, cols?, rows?, replaces?, type?, run?} → {shell: Shell}
 GET    /v1/shells?project=<id>             → {shells: [Shell]}; every running shell without project
 ```
 
@@ -1503,6 +1503,10 @@ GET    /v1/shells?project=<id>             → {shells: [Shell]}; every running 
   shell's prompt once the shell has drawn it and gone quiet, never followed by
   Enter: an agent's install or sign-in command that the user reads and runs.
   Anything from the first line break on is dropped; ignored with `replaces`.
+- **`run`** on `POST /v1/shells` (2026-10-11, [ADR-051](08-decisions.md))
+  presses Enter after `type`, on its own write 80 ms later: a saved command
+  the user picked to run. Still one line: anything from the first line break
+  on is dropped, so what runs is what the user saw.
 - **`replaces`** on `POST /v1/shells` names the session whose program exited
   and whose tab the shell takes over. Every window showing that tab asks; the
   first starts the shell and the rest get the same one while it runs. The map
@@ -1550,6 +1554,39 @@ GET    /v1/shells?project=<id>             → {shells: [Shell]}; every running 
   are read from files. An agent's `tool.post` of an edit or shell tool asks
   git again after 2 s; a session starting, stopping, asking or ending sends a
   `project` frame after 1 s. Nothing runs on a timer: idle projects run no git.
+
+### Saved prompts and commands
+
+Short text the user sends to an agent, and one-line shell commands, each with
+a name, for every project or for one ([ADR-051](08-decisions.md)). Code:
+`internal/api/saved.go`, `internal/store/saved.go`, `ui/src/lib/saved.ts`.
+
+```
+GET    /v1/saved-prompts[?session=<id>]    → {items: [SavedPrompt], max}; ?session keeps every project's and that session's project's
+POST   /v1/saved-prompts                   {kind, name, text, project_id?, sort?} → {item: SavedPrompt}
+PATCH  /v1/saved-prompts/{id}              {kind?, name?, text?, project_id?, sort?} → {item: SavedPrompt}
+DELETE /v1/saved-prompts/{id}              → 204
+```
+
+- **`SavedPrompt`** — `{id, kind: "prompt"|"command", name, text,
+  project_id?, project_root?, project_name?, sort, created_at, updated_at}`
+  (unix ms). `project_id` absent (0 in a request) is every project;
+  `project_root` and `project_name` are joined from `projects`, and stay
+  while the project is unlisted. Listed every-project first, then by project
+  name, `sort`, name.
+- **Limits.** `name` trimmed, 1–80 characters, one line; `text` trimmed, no
+  NUL, valid UTF-8; a prompt at most 8 KiB and any number of lines, a command
+  at most 1 KiB and one line. At most 200 rows: the 201st `POST` is `409`.
+  `project_id` must name a project (`400`). An unknown id is `404`.
+- **`?session=<id>`** keeps the rows for every project and those whose
+  `project_root` holds the session's `cwd` (segment boundaries; `404` for an
+  unknown session): the phone's chips.
+- **Who.** `GET` is open to every paired device; `POST`, `PATCH` and
+  `DELETE` to none (`403`): they change what this machine types and runs.
+- **Using one is not an endpoint.** A prompt is typed into a session Caprock
+  started with `POST /v1/agents/{id}/input` — the text with each line break as
+  ESC CR, then `\r` on its own 80 ms later, as the message field does; a
+  command is `POST /v1/shells {cwd, type: <text>, run: true}`.
 
 ### Changes: a worktree's status, diff, commit and push
 
@@ -2186,6 +2223,26 @@ before any event arrives, and a session cannot move between sign-ins. Written
 by `POST /v1/agents`, by any hook or transcript line whose transcript path is
 under `<data dir>/profiles/<id>/`, and by a subscription's Codex importer.
 `SessionSummary` carries it as `subscription`, omitted when empty.
+
+### Saved prompts DDL (migration 0045)
+
+```sql
+CREATE TABLE IF NOT EXISTS saved_prompts (
+  id         INTEGER PRIMARY KEY,
+  kind       TEXT    NOT NULL CHECK (kind IN ('prompt','command')),
+  name       TEXT    NOT NULL,
+  text       TEXT    NOT NULL,
+  project_id INTEGER,                -- NULL = every project
+  sort       INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,       -- unix ms
+  updated_at INTEGER NOT NULL        -- unix ms
+);
+CREATE INDEX IF NOT EXISTS idx_saved_prompts_project ON saved_prompts(project_id);
+```
+
+Saved prompts and commands ([ADR-051](08-decisions.md), § Saved prompts and
+commands). No foreign key: unlisting a project (`archived_at`) keeps its
+rows, and nothing deletes a project row.
 
 ### Pending permission DDL (migrations 0039, 0042, 0043)
 

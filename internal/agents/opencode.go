@@ -307,7 +307,14 @@ func (m *Manager) waitQuiet(a *Agent) bool {
 // and runs it (an agent's install or sign-in, ADR-046). A line break in text
 // is cut off there, so nothing can run by itself. Rule 7 holds: the shell is
 // Caprock's.
-func (m *Manager) TypeAtPrompt(id, text string) {
+func (m *Manager) TypeAtPrompt(id, text string) { m.typeAtPrompt(id, text, false) }
+
+// RunAtPrompt types one line as TypeAtPrompt does and then presses Enter: a
+// saved command the user picked to run (ADR-051). Still one line: anything
+// from the first line break on is dropped, so what runs is what was shown.
+func (m *Manager) RunAtPrompt(id, text string) { m.typeAtPrompt(id, text, true) }
+
+func (m *Manager) typeAtPrompt(id, text string, enter bool) {
 	a, ok := m.Get(id)
 	if !ok || a.Kind != KindShell {
 		return
@@ -324,9 +331,23 @@ func (m *Manager) TypeAtPrompt(id, text string) {
 		}
 		if err := m.Input(id, []byte(text)); err != nil {
 			m.log.Warn("could not type into the shell", "component", "agents", "session_id", id, "err", err)
+			return
+		}
+		if !enter {
+			return
+		}
+		// On its own, after a beat: in one write a shell's line editor can
+		// take the pair as a paste and keep the Enter as text.
+		time.Sleep(runEnterDelay)
+		if err := m.Input(id, []byte("\r")); err != nil {
+			m.log.Warn("could not run the command in the shell", "component", "agents", "session_id", id, "err", err)
 		}
 	}()
 }
+
+// runEnterDelay is the pause between a command typed by RunAtPrompt and its
+// Enter.
+const runEnterDelay = 80 * time.Millisecond
 
 // withEnv adds extra to a child's environment. A variable extra sets replaces
 // the inherited one rather than sitting beside it — two values for one name

@@ -9,6 +9,14 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Added
 
+- **Saved prompts and commands.** Save what you type over and over — *Run the
+  tests and fix what fails*, or a shell line like `pnpm dev` — with a name,
+  for every project or for one (Settings → *Saved prompts and commands*).
+  Press ⌘K, or + in the tab strip → *Run saved…*: a prompt goes to the agent
+  in front (or opens *New agent* with it), a command runs in a new shell tab
+  in the folder in front. On your phone, your prompts are chips above the
+  message field: tap one, then Send.
+
 - **Caprock keeps your computer awake while agents work.** A long run no
   longer stops because the computer idled to sleep. It lets go once nothing
   is working; the screen can still turn off, and closing a laptop's lid

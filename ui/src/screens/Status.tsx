@@ -38,6 +38,7 @@ import { TerminalSettings } from '@/components/TerminalSettings'
 import { EditorSetting } from '@/components/EditorSetting'
 import { DefaultFolderSetting } from '@/components/DefaultFolderSetting'
 import { CustomAgentsSetting } from '@/components/CustomAgentsSetting'
+import { SavedPromptsSetting } from '@/components/SavedPromptsSetting'
 import { SubscriptionsSetting } from '@/components/SubscriptionsSetting'
 import { SpawnModeSetting } from '@/components/SpawnModeSetting'
 import { KeepAwakeSetting } from '@/components/KeepAwake'
@@ -95,6 +96,7 @@ export function StatusScreen() {
         <>
           {owner && <SpawnModeSetting />}
           {owner && <KeepAwakeSetting />}
+          {owner && <SavedPromptsSetting />}
           <AppearanceSection />
           {/* The phone high up: eighth of eleven, people asked where it was. */}
           {owner && <Pairing />}
@@ -123,6 +125,7 @@ export function StatusScreen() {
           <AppearanceSection />
           {owner && <SpawnModeSetting />}
           {owner && <KeepAwakeSetting />}
+          {owner && <SavedPromptsSetting />}
           {owner && <EditorSetting />}
           {owner && <DefaultFolderSetting />}
           {owner && <SubscriptionsSetting />}

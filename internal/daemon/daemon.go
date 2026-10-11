@@ -1737,6 +1737,7 @@ func (a *shellAdapter) StartShell(ctx context.Context, cwd string, cols, rows in
 
 // TypeAtPrompt types a command into a shell's prompt without running it.
 func (a *shellAdapter) TypeAtPrompt(id, text string) { a.m.TypeAtPrompt(id, text) }
+func (a *shellAdapter) RunAtPrompt(id, text string)  { a.m.RunAtPrompt(id, text) }
 
 func (a *shellAdapter) Shells() []api.ShellInfo {
 	var out []api.ShellInfo

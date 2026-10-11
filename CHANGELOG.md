@@ -7,6 +7,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+## [0.104.0] - 2026-10-11
+
 ### Added
 
 - **Queued messages in the chat.** Send while the agent is still working

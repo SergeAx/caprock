@@ -43,7 +43,24 @@ export interface Bar {
   sessions?: number
 }
 
-export function BarChart({ bars, active, onActive, height = 112, showDayLabels = true }: {
+/** "Fri 7 Aug" for an ISO day, read as a local date. */
+export function dayName(day: string): string {
+  const d = new Date(`${day}T12:00:00`)
+  if (Number.isNaN(d.getTime())) return day
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
+/** "today", "yesterday", "12 days ago" for an ISO day against `now`. */
+export function daysAgo(day: string, now = Date.now()): string {
+  const d = new Date(`${day}T12:00:00`).getTime()
+  const t = new Date(now)
+  const today = new Date(t.getFullYear(), t.getMonth(), t.getDate(), 12).getTime()
+  const n = Math.round((today - d) / 86_400_000)
+  if (!Number.isFinite(n)) return ''
+  return n <= 0 ? 'today' : n === 1 ? 'yesterday' : `${n} days ago`
+}
+
+export function BarChart({ bars, active, onActive, height = 112, showDayLabels = true, axis = false }: {
   bars: Bar[]
   /** Day currently under the cursor or focus, owned by the caller so the
    *  panel header can display its figures. */
@@ -51,6 +68,9 @@ export function BarChart({ bars, active, onActive, height = 112, showDayLabels =
   onActive: (day: string | null) => void
   height?: number
   showDayLabels?: boolean
+  /** A time axis under a long run of days: the month at its first day and a
+   *  tick at each Monday (owner, 2026-10-11: "the chart lacks axes"). */
+  axis?: boolean
 }) {
   // Math.max returns NaN if any input is NaN, which made every bar height NaN
   // and blanked the whole chart — not just the bad day — while the header total
@@ -62,8 +82,8 @@ export function BarChart({ bars, active, onActive, height = 112, showDayLabels =
 
   return (
     <div
-      className="relative px-3 py-3 flex items-end gap-[3px]"
-      style={{ height }}
+      className={`relative px-3 flex items-end gap-[3px] ${axis ? 'pt-3 pb-6' : 'py-3'}`}
+      style={{ height: axis ? height + 12 : height }}
       onMouseLeave={() => onActive(null)}
     >
       {/* The ruler. Bars are normalised to the tallest one, so without a
@@ -83,8 +103,11 @@ export function BarChart({ bars, active, onActive, height = 112, showDayLabels =
         </div>
       ))}
 
-      {bars.map((b) => {
+      {bars.map((b, i) => {
         const on = active === b.day
+        // The month is named at its first bar, which is its 1st only when
+        // that day had work.
+        const newMonth = i > 0 && bars[i - 1]!.day.slice(0, 7) !== b.day.slice(0, 7)
         return (
           <button
             key={b.day}
@@ -102,10 +125,26 @@ export function BarChart({ bars, active, onActive, height = 112, showDayLabels =
             {showDayLabels && (
               <div className={`num text-[9px] ${on ? 'text-fg' : 'text-fg-faint'}`}>{b.day.slice(8)}</div>
             )}
+            {axis && <AxisMark day={b.day} on={on} month={newMonth} />}
           </button>
         )
       })}
     </div>
+  )
+}
+
+/** Under one bar of an axis: the month's name at its first bar, a tick on Mondays. */
+function AxisMark({ day, on, month }: { day: string; on: boolean; month: boolean }) {
+  const d = new Date(`${day}T12:00:00`)
+  if (Number.isNaN(d.getTime())) return null
+  const first = month
+  const monday = d.getDay() === 1
+  if (!first && !monday && !on) return null
+  return (
+    <span aria-hidden className="pointer-events-none relative h-0 w-full">
+      {(first || monday) && <span className={`absolute left-1/2 top-0.5 h-[4px] w-px ${first ? 'bg-fg-muted' : 'bg-border-strong'}`} />}
+      {first && <span className="num absolute left-1/2 top-[7px] -translate-x-1/2 whitespace-nowrap text-[9.5px] text-fg-muted">{d.toLocaleDateString('en-GB', { month: 'short' })}</span>}
+    </span>
   )
 }
 
@@ -123,7 +162,7 @@ export function BarReadout({ bars, active, total }: {
   if (!b) return <span className="num">{fmtUSD(total)}</span>
   return (
     <span className="num flex items-baseline gap-2">
-      <span className="text-fg-muted">{b.day}</span>
+      <span className="text-fg-muted" title={b.day}>{dayName(b.day)} · {daysAgo(b.day)}</span>
       <span className="text-fg">{fmtUSD(b.cost)}</span>
       <span className="text-fg-faint">{fmtTokens(b.tokens)}</span>
       {/* A zero here means the daily rollup has no session count for that day,

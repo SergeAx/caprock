@@ -48,6 +48,7 @@ export function BreakdownPanel() {
 
   return (
     <Panel
+      fold="now.all-time"
       title="All time"
       right={
         <span className="inline-flex items-center gap-3">

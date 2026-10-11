@@ -292,7 +292,7 @@ export function PlanLimitsPanel({ limits, codex, now, id, empty, className = '' 
       : null
   return (
     <div id={id} className={`scroll-mt-16 ${className}`}>
-      <Panel title="Plan limits">
+      <Panel fold="plan-limits" title="Plan limits">
         <div className="grid gap-x-8 gap-y-4 px-3 py-3 md:grid-cols-2">
           {claude.length > 0 && (
             <section className="min-w-0">

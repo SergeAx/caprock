@@ -84,8 +84,43 @@ export function CostScreen({ section }: { section?: string } = {}) {
         * if the team card holds the slot, this waits. */}
       <CapNudge daily={daily.data} now={now} />
 
+      {/* Limits first: what is left of the plan, and the cap on the day, are
+        * what this screen is opened to check (owner, 2026-10-11, translated:
+        * "raise spend limits to the top, it's very, very important"). */}
+      {s && (
+        // The same panel as Now's, words and all, with an anchor: the
+        // plan-limit alert links here (#/cost?section=limits), and landing at
+        // the top of Cost left the owner looking for it.
+        <PlanLimitsPanel id="plan-limits" limits={s.rate_limits} codex={s.codex_rate_limits} now={now} empty={
+          <div className="px-3 py-3 text-sm text-fg-muted">
+            Pro and Max plans have Anthropic's 5-hour and weekly limits, which Claude Code reports on its
+            status line. Nothing yet: run <span className="mono text-fg">caprock statusline</span> in a Pro or
+            Max session and your limits appear here. API billing has no windows.
+          </div>
+        } />
+      )}
+      {s && <PlanLimitNudge limits={s.rate_limits} now={now} />}
+      {/* Rendered even with no data. The panel used to vanish when Claude Code
+        * was not feeding the status line, so the one screen that could have
+        * explained why there are no limits showed nothing at all — the same
+        * shape as the spawn button that hid the dialog explaining itself. */}
+      {/* The cap sits beside the limits it complements: one is Anthropic's
+        * ceiling, the other is yours. Showing it here, locked, is the whole
+        * pitch — the panel is where it will be, with real figures behind it. */}
+      {/* The cap sits beside the limits it complements: one is Anthropic's
+        * ceiling, the other is yours. Locked, the panel is the pitch — it is
+        * where the feature will be, with real figures behind it. Unlocked,
+        * Locked renders its children live and this becomes the real control. */}
+      {/* Both panels are controls — one stops sessions, one spends on a key —
+        * and a paired device reads (ADR-029). */}
+      {!isPairedDevice() && (
+        <Locked feature="cap" title="Stop the day at a number you choose">
+          <SpendCap suggestion={capSuggestion} />
+        </Locked>
+      )}
+
       <PlanValue summary={s} plan={plan} days={rangeDays(range, s?.from_ms)} />
-      <Panel title={`Totals · ${range}`}>
+      <Panel fold="cost.totals" title={`Totals · ${range}`}>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-x divide-border">
           {/* The basis belongs on the tile, not only in the corner note above:
               the misreading happens where the number is. */}
@@ -125,7 +160,7 @@ export function CostScreen({ section }: { section?: string } = {}) {
           orphaned at half width beside dead space. They collapse to two
           columns and then to one as the viewport narrows. */}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <Panel title="Model mix" right={<span>by cost</span>}>
+        <Panel fold="cost.models" title="Model mix" right={<span>by cost</span>}>
           {!s ? <Skeleton rows={4} /> : s.models.length === 0 && <Empty title="No priced turns in range" />}
           <CutDonut segments={modelSegs} what="model" />
           <div className="overflow-x-auto">
@@ -138,8 +173,8 @@ export function CostScreen({ section }: { section?: string } = {}) {
               <thead>
                 <tr className="text-[10px] uppercase tracking-[0.08em] text-fg-faint">
                   <th className="px-3 pb-1 text-left font-normal">model</th>
-                  <th className="hidden px-3 pb-1 text-right font-normal 2xl:table-cell">turns</th>
-                  <th className="hidden px-3 pb-1 text-right font-normal 2xl:table-cell">tokens</th>
+                  <th className="hidden px-3 pb-1 text-right font-normal min-[2200px]:table-cell">turns</th>
+                  <th className="hidden px-3 pb-1 text-right font-normal min-[2200px]:table-cell">tokens</th>
                   <th className="px-3 pb-1 text-right font-normal">cost</th>
                   <th className="px-3 pb-1 text-right font-normal">share</th>
                 </tr>
@@ -148,8 +183,8 @@ export function CostScreen({ section }: { section?: string } = {}) {
                 {(s?.models ?? []).map((m) => (
                   <tr key={m.model} className="border-b border-border/60 last:border-0">
                     <td className="px-3 py-1 mono whitespace-nowrap max-w-[11rem] truncate" title={m.model || undefined}><SliceDot color={modelColors.get(m.model)} />{m.model ? fmtModel(m.model) : 'unknown'}</td>
-                    <td className="hidden px-3 py-1 num text-right text-fg-muted whitespace-nowrap 2xl:table-cell">{m.turns.toLocaleString('en-US')}</td>
-                    <td className="hidden px-3 py-1 num text-right text-fg-muted whitespace-nowrap 2xl:table-cell">{fmtTokens(m.tokens)}</td>
+                    <td className="hidden px-3 py-1 num text-right text-fg-muted whitespace-nowrap min-[2200px]:table-cell">{m.turns.toLocaleString('en-US')}</td>
+                    <td className="hidden px-3 py-1 num text-right text-fg-muted whitespace-nowrap min-[2200px]:table-cell">{fmtTokens(m.tokens)}</td>
                     {/* An unpriced model summed to 0 and rendered "$0.00",
                         which reads as free. It has no price, so it shows none. */}
                     <td className="px-3 py-1 num text-right whitespace-nowrap">{(s?.unpriced?.models ?? []).includes(m.model) ? <span className="text-warn" title="this model is not in the pricing table, so its cost is unknown">unpriced</span> : fmtUSD(m.cost_usd)}</td>
@@ -164,7 +199,7 @@ export function CostScreen({ section }: { section?: string } = {}) {
             by the KIND of work each turn did. It sits with its siblings rather
             than on a screen of its own because it answers the same question. */}
         <WorkMix summary={s} />
-        <Panel title="Per project" right={<span>by cost</span>}>
+        <Panel fold="cost.projects" title="Per project" right={<span>by cost</span>}>
           {!s ? <Skeleton rows={4} /> : s.projects.length === 0 && <Empty title="No priced turns in range" />}
           <CutDonut segments={projectSegs} what="project" />
           <div className="overflow-x-auto">
@@ -174,7 +209,7 @@ export function CostScreen({ section }: { section?: string } = {}) {
               <thead>
                 <tr className="text-[10px] uppercase tracking-[0.08em] text-fg-faint">
                   <th className="px-3 pb-1 text-left font-normal">project</th>
-                  <th className="hidden px-3 pb-1 text-right font-normal 2xl:table-cell">tokens</th>
+                  <th className="hidden px-3 pb-1 text-right font-normal min-[2200px]:table-cell">tokens</th>
                   <th className="px-3 pb-1 text-right font-normal">cost</th>
                   <th className="px-3 pb-1 text-right font-normal">share</th>
                 </tr>
@@ -183,7 +218,7 @@ export function CostScreen({ section }: { section?: string } = {}) {
                 {(s?.projects ?? []).map((p) => (
                   <tr key={p.project} className="border-b border-border/60 last:border-0">
                     <td className="px-3 py-1 whitespace-nowrap max-w-[12rem] truncate" title={p.project || undefined}><SliceDot color={projectColors.get(p.project)} />{p.project || 'unknown'}</td>
-                    <td className="hidden px-3 py-1 num text-right text-fg-muted whitespace-nowrap 2xl:table-cell">{fmtTokens(p.tokens)}</td>
+                    <td className="hidden px-3 py-1 num text-right text-fg-muted whitespace-nowrap min-[2200px]:table-cell">{fmtTokens(p.tokens)}</td>
                     <td className="px-3 py-1 num text-right whitespace-nowrap">{fmtUSD(p.cost_usd)}</td>
                     <td className="px-3 py-1 text-right text-fg-faint w-[5.5rem] whitespace-nowrap">{s && s.cost_usd > 0 ? <ShareBar value={p.cost_usd} total={s.cost_usd} color={projectColors.get(p.project)} /> : '—'}</td>
                   </tr>
@@ -198,6 +233,7 @@ export function CostScreen({ section }: { section?: string } = {}) {
           Side by side each one is the size of what it has to say. */}
       <div className="grid gap-3 lg:grid-cols-3">
         <Panel
+          fold="cost.month"
           className="lg:col-span-2"
           title="Last 30 days"
           right={
@@ -227,25 +263,6 @@ export function CostScreen({ section }: { section?: string } = {}) {
               <BarChart bars={days} active={activeDay} onActive={setActiveDay} />
             ))}
         </Panel>
-      {/* Rendered even with no data. The panel used to vanish when Claude Code
-        * was not feeding the status line, so the one screen that could have
-        * explained why there are no limits showed nothing at all — the same
-        * shape as the spawn button that hid the dialog explaining itself. */}
-      {/* The cap sits beside the limits it complements: one is Anthropic's
-        * ceiling, the other is yours. Showing it here, locked, is the whole
-        * pitch — the panel is where it will be, with real figures behind it. */}
-      {/* The cap sits beside the limits it complements: one is Anthropic's
-        * ceiling, the other is yours. Locked, the panel is the pitch — it is
-        * where the feature will be, with real figures behind it. Unlocked,
-        * Locked renders its children live and this becomes the real control. */}
-      {/* Both panels are controls — one stops sessions, one spends on a key —
-        * and a paired device reads (ADR-029). */}
-      {!isPairedDevice() && (
-        <Locked feature="cap" title="Stop the day at a number you choose">
-          <SpendCap suggestion={capSuggestion} />
-        </Locked>
-      )}
-
       {/* Gemini sits on the money screen because that is what it is about
         * here: a second model whose cost lands in the same totals above. The
         * lock is over the panel, never over a figure — the spend it produces
@@ -257,19 +274,6 @@ export function CostScreen({ section }: { section?: string } = {}) {
         </Locked>
       )}
 
-      {s && (
-        // The same panel as Now's, words and all, with an anchor: the
-        // plan-limit alert links here (#/cost?section=limits), and landing at
-        // the top of Cost left the owner looking for it.
-        <PlanLimitsPanel id="plan-limits" className="col-span-full" limits={s.rate_limits} codex={s.codex_rate_limits} now={now} empty={
-          <div className="px-3 py-3 text-sm text-fg-muted">
-            Pro and Max plans have Anthropic's 5-hour and weekly limits, which Claude Code reports on its
-            status line. Nothing yet: run <span className="mono text-fg">caprock statusline</span> in a Pro or
-            Max session and your limits appear here. API billing has no windows.
-          </div>
-        } />
-      )}
-      {s && <PlanLimitNudge limits={s.rate_limits} now={now} className="col-span-full" />}
       </div>
       <div className="text-[11px] text-fg-faint">
         {s && s.throttles > 0

@@ -243,6 +243,7 @@ export function NowScreen({ inApp = false }: { inApp?: boolean } = {}) {
       )}
 
       <Panel
+        fold="now.today"
         title="Today"
         center={
           hasBoth ? (

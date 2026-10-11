@@ -483,6 +483,10 @@ it: nothing that updates behind the sheet takes it from the field you are in.
   the window up from any app, and hides it when it is already in front.
   Change it or turn it off in Settings → *Global shortcut*. Wayland does not
   give apps global shortcuts; the tray's *Show Caprock* still works there.
+- **Folding dashboard panels.** Click a panel's title (the arrow beside it)
+  to fold it down to the title, and again to bring it back; Caprock remembers
+  each one. On Now, *fold to icons* turns the agents' cards into one line of
+  characters with their shares.
 - **The version in the status bar.** Click it to see whether an update is
   out and when Caprock last checked, update in one click (sessions keep
   running) or copy the command, read the first lines of what changed, or

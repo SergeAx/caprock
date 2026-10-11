@@ -27,7 +27,7 @@ export function PlanValue({ summary, plan, days }: { summary?: Summary; plan?: S
   // Nothing stated: invite the user to say, and claim nothing.
   if (!plan?.plan_kind) {
     return (
-      <Panel title="Plan value">
+      <Panel fold="cost.plan-value" title="Plan value">
         <div className="px-3 py-3 text-[12px] text-fg-muted">
           Set your plan in the header and Caprock will show what this usage is
           worth against what you actually pay. It can&apos;t detect your plan, so
@@ -39,7 +39,7 @@ export function PlanValue({ summary, plan, days }: { summary?: Summary; plan?: S
 
   if (plan.plan_kind === 'metered') {
     return (
-      <Panel title="Spend" right={<span className="num text-[12px] text-fg-muted">{plan.plan_label || 'API'} · billed per token</span>}>
+      <Panel fold="cost.plan-value" title="Spend" right={<span className="num text-[12px] text-fg-muted">{plan.plan_label || 'API'} · billed per token</span>}>
         <div className="px-3 py-3">
           <div className="flex items-baseline gap-2">
             <span className="num text-3xl text-fg">{fmtUSD(usage)}</span>

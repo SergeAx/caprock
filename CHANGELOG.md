@@ -7,6 +7,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+## [0.107.0] - 2026-10-11
+
 ### Added
 
 - **The session deck shows the session's pull requests and their CI.** Its

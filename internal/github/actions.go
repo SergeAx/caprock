@@ -74,6 +74,10 @@ type CIJob struct {
 	RunnerGroup string   `json:"runner_group_name,omitempty"`
 	HTMLURL     string   `json:"html_url,omitempty"`
 	Steps       []CIStep `json:"steps"`
+	// Baseline is the median duration of the job of this name in the
+	// workflow's last successful runs (WithBaselines); absent with fewer
+	// than two of them.
+	Baseline *CIEstimate `json:"baseline,omitempty"`
 	// Cost is what the job cost at the runner's list rate (runnercost.go).
 	Cost *RunnerCost `json:"cost,omitempty"`
 }
@@ -96,6 +100,10 @@ type CIRun struct {
 	HeadSHA    string  `json:"head_sha,omitempty"`
 	WorkflowID int64   `json:"workflow_id,omitempty"`
 	Jobs       []CIJob `json:"jobs"`
+	// Baseline is the median wall-clock span (run_started_at to updated_at)
+	// of the workflow's last successful runs (WithBaselines); absent with
+	// fewer than two of them.
+	Baseline *CIEstimate `json:"baseline,omitempty"`
 	// Cost sums the run's finished jobs (runnercost.go).
 	Cost *CICost `json:"cost,omitempty"`
 }

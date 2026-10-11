@@ -7,6 +7,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+## [0.107.1] - 2026-10-11
+
 ### Changed
 
 - **app:** the session deck is a third lower and keeps only what helps

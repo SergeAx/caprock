@@ -15,6 +15,12 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 - **app:** the sidebar's *Projects* heading counts them — *● 3 of 12* has
   something running — and *Outside projects* can be hidden like any project.
 
+- **app:** the inspector's plan windows answer "will it last?" at a glance —
+  a tick on each bar where an even pace would be, the percentage large, and
+  one line: *resets in 4 h 56 min · ✓ enough*, or *⚠ out at 23:50* when the
+  current pace runs out first. A click shows the details; the plan itself
+  is in the header, to confirm or change.
+
 ### Changed
 
 - **app:** the version panel is the version, whether it is current, when it

@@ -18,6 +18,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   which and what to do.
 - **app:** the Keep awake panel says what is happening in a few large words,
   has one short line per mode and a close button.
+- **app:** the session deck's button says *Deck* and shows ⌘B, and the
+  deck's per-minute chart is as tall as the figures beside it.
 
 ## [0.106.0] - 2026-10-11
 

@@ -355,7 +355,8 @@ One window, three regions:
   drawing minutes it never read as silence. As the terminal narrows the
   cells that matter least give way first (container queries): Changes
   below 1000px, Plan below 720px. ⌘B (Ctrl+Shift+B off macOS), a strip
-  button beside the inspector's and the palette open and close it; the
+  button beside the inspector's — labelled *Deck* with its key, since an
+  icon alone left the deck unfound — and the palette open and close it; the
   Add project sheet's own ⌘B is not reached, since a sheet owns the
   keyboard. Its top edge is a separator: dragged, the band is drawn over
   the terminal at the new height and the terminal's box changes once, on

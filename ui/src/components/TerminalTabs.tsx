@@ -233,7 +233,17 @@ export function TabStrip(props: TabStripProps) {
           <StripButton label={props.chatOpen ? 'Show the terminal' : 'Show the chat'} pressed={props.chatOpen} onClick={props.onToggleChat}><ChatIcon size={15} /></StripButton>
         )}
         {props.paneTools !== false && props.onToggleDeck && (
-          <StripButton label={`Session deck (${keys('⌘B')})`} pressed={props.deckOpen} onClick={props.onToggleDeck}><DeckIcon size={15} /></StripButton>
+          // Labelled, with its key, so the deck is found (owner, 2026-10-11:
+          // "it is not clear that it exists").
+          <button type="button" data-deck-toggle title={`Session deck: live figures under the terminal (${keys('⌘B')})`} aria-label={`Session deck (${keys('⌘B')})`}
+            aria-pressed={props.deckOpen} onClick={props.onToggleDeck}
+            className={`flex h-[28px] items-center gap-1.5 rounded-[7px] px-1.5 text-[12px] transition-colors duration-100 motion-reduce:transition-none ${
+              props.deckOpen ? 'bg-[var(--app-row-active)] text-fg' : 'text-fg-muted hover:bg-[var(--app-row-hover)] hover:text-fg'
+            }`}>
+            <DeckIcon size={15} />
+            <span>Deck</span>
+            <kbd aria-hidden className="app-kbd-key">{keys('⌘B')}</kbd>
+          </button>
         )}
         {props.paneTools !== false && <StripButton label={`Inspector (${keys('⌘I')})`} pressed={props.inspectorOpen} onClick={props.onToggleInspector}><InspectorIcon size={15} /></StripButton>}
       </div>

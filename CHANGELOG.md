@@ -7,6 +7,26 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Added
+
+- **Settings has a sections menu:** on a wide window a list of every section
+  sits left of the page, each with a simple icon, the one in view marked;
+  a click scrolls there. Section headings carry the same icons.
+
+### Changed
+
+- **app:** a tab is named by its project — the repo — alone. A second tab of
+  the same project adds its title, faint; the title is in the tooltip.
+- **Now:** *At a glance* — the donuts — comes before *All time*, the exact
+  table: the pictures first, the numbers after.
+- **Feedback is an amber bug** in the header and the sidebar, in place of a
+  grey speech bubble that went unseen.
+- **Now:** the agents folded to icons are twice the size and shrink with the
+  window on one line; hovering one shows a card — its share, spend, turns
+  and cost per turn — instead of a one-line system tooltip.
+- **app:** keys drawn as keys (the deck's *Review changes ⇧⌘G*, the tabs'
+  ⌘1–⌘9) are drawn darker and bolder; the faint chip went unseen.
+
 ### Fixed
 
 - **app:** the keep-awake mark in the status bar stays when keep-awake is
@@ -14,6 +34,9 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   vanishing with no way back from there.
 - **ci:** the PTY resize test waits for the process to report its size
   instead of sleeping, which flaked on a slow macOS runner.
+- **Windows, Linux:** ⇧⌘E (split down) and ⇧⌘0 (reset the interface size)
+  are Ctrl+Alt+Shift+E and Ctrl+Alt+Shift+0 there; as Ctrl+Shift they hit
+  other commands. A test now presses every listed shortcut as each OS spells it.
 
 ## [0.107.6] - 2026-10-11
 

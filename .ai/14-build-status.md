@@ -73,6 +73,13 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-11 — 0.107.1: a lower, plainer session deck
+
+The deck is a third lower and shows context, branch and PRs with CI (CI on
+merged ones too); Now and Spent left it, so it holds no session events. An
+accent top edge frames the prompt; *Hide ⌘B* sits on it. The inspector no
+longer overflows its right edge.
+
 ### 2026-10-11 — 0.107.0: pull requests and CI in the session deck
 
 The session deck shows the session's latest three PRs with CI and review

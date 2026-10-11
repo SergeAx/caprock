@@ -47,6 +47,8 @@ export function openSettingsAt(id: string): void {
   location.hash = '#/settings'
   let tries = 0
   const look = () => {
+    // The page can be gone before the section renders (a test's teardown).
+    if (typeof document === 'undefined') return
     const el = document.getElementById(id)
     if (el) el.scrollIntoView({ block: 'start' })
     else if (++tries < 40) setTimeout(look, 25)

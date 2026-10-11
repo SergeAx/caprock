@@ -7,6 +7,16 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Added
+
+- **The session deck shows the session's pull requests and their CI.** Its
+  latest three PRs with a dot each — passed, running (*CI 3/5*), failed
+  (*CI failed: windows*), merged — and a click opens one on GitHub. Without
+  GitHub connected, *connect GitHub for CI* turns it on through your `gh`
+  login in one click. Beside it the branch, with how many files are not
+  committed and commits not pushed. The per-minute chart and the plan
+  windows left the deck; the dashboard and the sidebar carry those.
+
 ## [0.106.1] - 2026-10-11
 
 ### Fixed

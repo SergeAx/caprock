@@ -378,6 +378,7 @@ GET  /v1/sessions/{id}/events?after=…  → Event[] (paginated; newest=1 return
 GET  /v1/sessions/{id}/subagents       → {working: SubagentNow[], finished} — the subagents working in it now (§ Subagents now)
 GET  /v1/sessions/{id}/calls?limit=…   → SessionCall[] — every priced main-thread model call, oldest first (§ Session calls)
 GET  /v1/sessions/{id}/notes           → AssistantNote[] — what Claude said, newest first
+GET  /v1/sessions/{id}/prs             → {connected, prs: SessionPRLive[]} — the session deck's PRs with CI
 GET  /v1/notes?q=…&before=…            → AssistantNote[] — search that prose across sessions, paged
 GET  /v1/sessions/{id}/diff            → { files: FileDiff[] } | 409 not-a-git-repo
 GET  /v1/stats/summary?range=today     → totals: tokens, cost, sessions, models
@@ -1152,6 +1153,15 @@ defaults to that session's folder. Refused with 400 and a reason: `prompt`
 with `resume` (a continued session has its conversation), `relay_from` with
 `resume`, an unknown `relay_from`, a source folder that no longer exists when
 no `cwd` is given, and a brief over the limit.
+
+**`GET /v1/sessions/{id}/prs`** → `{connected, prs}`: the session's latest
+three pull requests (`session_prs`, newest first), each a `SessionPR` plus
+`live` — the `github.PR` GitHub returns for its link now (state, checks,
+review) — or `error` when GitHub was asked and failed. While GitHub is not
+connected nothing is sent and `live` is absent. Each pull request is kept
+per link for 20 s while its checks run, 2 min once they settled and 30 min
+once merged or closed (`github.PullByURL`), so the deck polling it costs
+GitHub nothing in between; every read is conditional.
 
 **`GET /v1/sessions/{id}/relay`** → `RelayBrief` `{session_id, agent, cwd,
 cwd_exists, passage_at?, git?: {branch?, base?, files[], more?, stat?,

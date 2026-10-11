@@ -1192,6 +1192,8 @@ export function AppShell() {
                     hasPermission={data.permissions.has(focused.sessionId)}
                     summary={data.summary}
                     changed={focusedWorktree?.w.changed}
+                    branch={focusedWorktree?.w.branch}
+                    ahead={focusedWorktree?.w.ahead}
                     onReviewChanges={focusedWorktree?.repo ? () => onOpenChanges(focusedWorktree.projectId, focusedWorktree.w) : undefined}
                     height={deck.height}
                     onResize={onResizeDeck}

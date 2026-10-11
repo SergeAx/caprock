@@ -151,6 +151,8 @@ type Service struct {
 	track *tracker
 	// items keeps the issue picker's answers for itemsTTL (issues.go).
 	items map[string]itemsCached
+	// byURL keeps the pull requests read by their links (byurl.go).
+	byURL byURLCache
 }
 
 func (s *Service) init() {

@@ -12,10 +12,10 @@ const events: Event[] = [
   { id: 3, ts: iso(4_000), session_id: 's1', source: 'hook', kind: 'tool.pre', tool: 'Bash', payload: { tool_use_id: 'b', tool_input: { command: 'go test ./internal/...' } } },
 ]
 
-const h = vi.hoisted(() => ({ asked: 0 }))
+const h = vi.hoisted(() => ({ asked: 0, prs: { connected: true, prs: [] as unknown[] } }))
 vi.mock('@/lib/api', async (orig) => {
   const actual = await orig<typeof import('@/lib/api')>()
-  return { ...actual, api: { ...actual.api, recentMainEvents: async () => { h.asked++; return events } } }
+  return { ...actual, api: { ...actual.api, recentMainEvents: async () => { h.asked++; return events }, sessionPRs: async () => h.prs } }
 })
 
 import { SessionDeck } from './SessionDeck'
@@ -42,7 +42,7 @@ function show(p: Partial<Parameters<typeof SessionDeck>[0]> = {}) {
 afterEach(() => { vi.useRealTimers(); h.asked = 0 })
 
 describe('the session deck', () => {
-  it('reads what the session is doing, what it cost, its context and the plan windows', async () => {
+  it('reads what the session is doing, what it cost and its context', async () => {
     show()
     expect(screen.getByRole('status')).toHaveTextContent('Working')
     expect(screen.getByLabelText('Cost $1.84')).toBeInTheDocument()
@@ -50,25 +50,50 @@ describe('the session deck', () => {
     expect(screen.getByText(/last call/)).toHaveTextContent('$0.07')
     expect(screen.getByRole('meter', { name: 'Context used' })).toHaveAttribute('aria-valuenow', '62')
     expect(screen.getByText(/next call/)).toHaveTextContent('$0.03')
-    expect(screen.getByRole('meter', { name: '5-hour window used' })).toHaveAttribute('aria-valuenow', '41')
-    expect(screen.getByRole('meter', { name: 'Weekly window used' })).toHaveAttribute('aria-valuenow', '12')
-    expect(screen.getByText('Last 60 min')).toBeInTheDocument()
   })
 
   it('leaves out what the agent does not report rather than drawing a zero', () => {
     show({ s: agent({ context: undefined, stats: undefined, agent: 'opencode' }) })
     expect(screen.queryByRole('meter', { name: 'Context used' })).toBeNull()
     expect(screen.queryByText('Spent')).toBeNull()
-    expect(screen.queryByRole('meter', { name: '5-hour window used' })).toBeNull()
     expect(screen.queryByText('$0.00')).toBeNull()
   })
 
-  it('has room for the recent calls and the changed files only when tall', async () => {
-    const { rerender } = show({ changed: 3 })
+  it('shows the branch with what is not committed and not pushed', async () => {
+    show({ branch: 'feat/deck', changed: 3, ahead: 2, onReviewChanges: () => {} })
     await screen.findByText('go test ./internal/...')
-    expect(screen.queryByText('3 files')).toBeNull()
-    rerender(<SessionDeck s={agent()} sessionId="s1" hasPermission={false} summary={summary} height={220} changed={3} onResize={() => {}} onClose={() => {}} />)
-    expect(screen.getByText('3 files')).toBeInTheDocument()
+    expect(screen.getByText('feat/deck')).toBeInTheDocument()
+    expect(screen.getByText('3 not committed · 2 not pushed')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Review changes' })).toBeInTheDocument()
+  })
+
+  it('lists the session’s PRs with their CI', async () => {
+    const pr = (n: number, checks: object, state = 'open') => ({ number: n, url: `https://github.com/a/b/pull/${n}`, title: `PR ${n}`, state, draft: false, review: '', reviews: [], checks })
+    h.prs = { connected: true, prs: [
+      { session_id: 's1', number: 9, url: 'https://github.com/a/b/pull/9', title: 'PR 9', last_at: now, live: pr(9, { state: 'pending', passed: 2, failed: 0, pending: 3, items: [{}, {}, {}, {}, {}] }) },
+      { session_id: 's1', number: 8, url: 'https://github.com/a/b/pull/8', title: 'PR 8', last_at: now, live: pr(8, { state: 'fail', passed: 1, failed: 1, pending: 0, items: [{ name: 'windows', state: 'fail' }, { name: 'lint', state: 'pass' }] }) },
+      { session_id: 's1', number: 7, url: 'https://github.com/a/b/pull/7', title: 'PR 7', last_at: now, live: pr(7, { state: 'pass', passed: 1, failed: 0, pending: 0, items: [{}] }, 'merged') },
+    ] }
+    show()
+    expect(await screen.findByText('CI 2/5')).toBeInTheDocument()
+    expect(screen.getByText('CI failed: windows')).toBeInTheDocument()
+    expect(screen.getByText('merged')).toBeInTheDocument()
+    h.prs = { connected: true, prs: [] }
+  })
+
+  it('says how to get CI while GitHub is not connected', async () => {
+    h.prs = { connected: false, prs: [{ session_id: 's1', number: 4, url: 'https://github.com/a/b/pull/4', title: 'PR 4', last_at: now, merged_at: now }] }
+    show()
+    expect(await screen.findByText('connect GitHub for CI')).toBeInTheDocument()
+    expect(screen.getByText('merged')).toBeInTheDocument()
+    h.prs = { connected: true, prs: [] }
+  })
+
+  it('has room for the recent calls only when tall', async () => {
+    const { rerender } = show()
+    await screen.findByText('go test ./internal/...')
+    expect(screen.queryByText('12 turns')).toBeNull()
+    rerender(<SessionDeck s={agent()} sessionId="s1" hasPermission={false} summary={summary} height={220} onResize={() => {}} onClose={() => {}} />)
     expect(screen.getByText('12 turns')).toBeInTheDocument()
     expect(screen.getByText('40 tool calls')).toBeInTheDocument()
   })

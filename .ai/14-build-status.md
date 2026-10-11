@@ -73,6 +73,18 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-11 — unreleased: Fix with agent
+
+The Changes view hands a failure to the worktree's agent through the review
+notes' handoff: a hook's refusal of a commit or push, files in conflict, the
+pull request's failing checks and its conflicts with the base
+(`lib/fixPrompts.ts`). No API change; check logs are not fetched (the prompt
+names the checks, links them and says how to read them with `gh`). Verified
+on the preview stand with the fake claude: a pre-commit hook's refusal sent
+into the running session and arriving in its terminal, and a merge conflict
+in the main checkout opening New agent on *This folder* with the prompt.
+The GitHub cases are covered by tests only (the stand has no GitHub).
+
 ### 2026-10-11 — unreleased: review notes on the diff
 
 Changes view: a note on a line or range of the diff, kept per worktree in

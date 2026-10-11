@@ -20,6 +20,17 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   all, each with its file, lines and code, into the session Caprock started
   in that worktree as one message — or starts a new agent there with them
   when none is running.
+- **Fix with agent.** A commit or push your git hook refused, files left in
+  conflict, and a pull request's failing checks or conflicts each get a
+  **Fix with agent** button in the Changes view: the output goes to the
+  agent working in that worktree (or a new one there) with a short
+  instruction to find the cause and fix it.
+
+### Fixed
+
+- The Changes view said "A merg is under way" during a merge (and "rebas"
+  during a rebase); it now names the operation, and a hook's coloured output
+  is shown without its escape codes.
 
 ## [0.101.3] - 2026-10-11
 

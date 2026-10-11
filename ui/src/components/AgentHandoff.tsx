@@ -82,3 +82,27 @@ export function HandoffResult({ handoff, target }: { handoff: Handoff; target?: 
     </div>
   )
 }
+
+/**
+ * "Fix with agent" on a failure that belongs to a worktree: the output goes
+ * to the session Caprock started there, or to a new agent started there.
+ * `prompt` is built when clicked, so a long output costs nothing until then.
+ */
+export function FixWithAgent({ target, prompt }: { target?: HandoffTarget; prompt: () => string }) {
+  const handoff = useHandoff(target, 'Fix with a new agent…')
+  if (!handoff.available) return null
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+      <button
+        type="button"
+        disabled={handoff.busy}
+        onClick={() => void handoff.send(prompt())}
+        title={target?.session ? `Send this to ${target.session.title} to fix` : 'No agent Caprock started is running here: start one with this as its first message'}
+        className="inline-flex h-[24px] shrink-0 items-center rounded-[6px] border border-accent/60 px-2 text-[12px] font-medium text-accent hover:bg-accent/10 disabled:opacity-50"
+      >
+        {handoff.busy ? 'Sending…' : target?.session ? 'Fix with agent' : handoff.label}
+      </button>
+      <HandoffResult handoff={handoff} target={target} />
+    </div>
+  )
+}

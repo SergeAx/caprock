@@ -111,6 +111,8 @@ export interface SidebarProps {
   onOpenInEditor?: (path: string, label: string, editorId: string) => void
   /** Removes a project from Caprock's list; never touches its files. */
   onRemoveProject?: (projectId: string) => Promise<void> | void
+  /** Opens Clean up copies for a repository (components/CopiesSheet). */
+  onCleanCopies?: (projectId: string) => void
 }
 
 export function Sidebar(props: SidebarProps) {
@@ -378,6 +380,8 @@ export function Sidebar(props: SidebarProps) {
           onHide={(hide) => onHide(menuNode.project.id, hide)}
           onCloseTabs={() => props.onCloseProjectTabs?.(menuNode.project.id)}
           onOpenInEditor={props.onOpenInEditor ? (editorId) => props.onOpenInEditor!(menuNode.project.root, menuNode.project.name, editorId) : undefined}
+          onCopies={props.onCleanCopies && menuNode.project.kind === 'repo' ? () => props.onCleanCopies!(menuNode.project.id) : undefined}
+          copies={menuNode.project.worktrees?.length ?? 0}
           onRemove={props.onRemoveProject ? () => props.onRemoveProject!(menuNode.project.id) : undefined}
           onClose={closeMenu}
         />

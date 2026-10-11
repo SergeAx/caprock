@@ -530,6 +530,9 @@ func New(d Deps) *Server {
 	m.HandleFunc("GET /v1/projects/{id}/branches", s.handleBranches)
 	m.HandleFunc("POST /v1/projects/{id}/worktrees", s.handleAddWorktree)
 	m.HandleFunc("DELETE /v1/projects/{id}/worktrees/{name}", s.handleRemoveWorktree)
+	// Every worktree with its state and size, and cleaning them up (copies.go).
+	m.HandleFunc("GET /v1/projects/{id}/copies", s.handleCopies)
+	m.HandleFunc("POST /v1/projects/{id}/copies/remove", s.handleRemoveCopies)
 	// A worktree's changes: review, stage, commit, push (changes.go).
 	m.HandleFunc("GET /v1/projects/{id}/changes", s.handleChanges)
 	m.HandleFunc("GET /v1/projects/{id}/changes/diff", s.handleChangeDiff)

@@ -74,6 +74,7 @@ import { fmtAgo } from '@/lib/format'
 import { RecentInProject } from '@/components/RecentInProject'
 import { CloseShellConfirm } from '@/components/CloseShellConfirm'
 import { ShortcutsSheet } from '@/components/ShortcutsSheet'
+import { CopiesSheet } from '@/components/CopiesSheet'
 import { worktreeSlug } from '@/lib/slug'
 import { openPhoneSettings, openSettingsAt } from '@/components/Pairing'
 import { reloadSaved, savedFor, sendPrompt, useSavedPrompts, type SavedPrompt } from '@/lib/saved'
@@ -147,6 +148,8 @@ type SheetState =
   | { kind: 'saved' }
   /** The palette's "Open file…": the files of one worktree. */
   | { kind: 'files'; projectId: string; worktree: string; title: string }
+  /** *Clean up copies…*: a project's worktrees, their state and size (components/CopiesSheet). */
+  | { kind: 'copies'; projectId: string; name: string }
   | null
 
 
@@ -780,6 +783,11 @@ export function AppShell() {
     setToast(`${p.name} is off the list. Its files and sessions are untouched; Add project brings it back.`)
     refresh()
   }, [projectsById, source, archiveLocal, onCloseProjectTabs, refresh])
+  /** *Clean up copies…* for a repository: its worktrees, what each would lose and its size. */
+  const onCleanCopies = useCallback((projectId: string) => {
+    const p = projectsById.get(projectId)
+    if (p?.kind === 'repo') setSheet({ kind: 'copies', projectId, name: p.name })
+  }, [projectsById])
   const onRoute = useCallback((h: string) => { location.hash = h }, [])
 
   // The worktree "Open file…" lists: the file tab's in front, else the
@@ -824,6 +832,9 @@ export function AppShell() {
       { id: 'a-project', group: 'Actions', label: 'Add a project', hint: keys('⌘O'), icon: <FolderPlusIcon size={14} />, run: onAddProject },
       { id: 'a-inspector', group: 'Actions', label: prefs.inspector ? 'Hide the inspector' : 'Show the inspector', hint: keys('⌘I'), icon: <InspectorIcon size={14} />, run: () => run({ kind: 'inspector' }) },
       ...(fileScope ? [{ id: 'a-open-file', group: 'Actions' as const, label: 'Open file…', detail: fileScope.title, icon: <FileIcon size={14} />, run: () => setSheet({ kind: 'files', ...fileScope }) }] : []),
+      ...(source === 'api' && activeProject?.kind === 'repo'
+        ? [{ id: 'a-copies', group: 'Actions' as const, label: 'Clean up copies…', detail: `${activeProject.name}: worktrees, sizes, merged`, icon: <BranchIcon size={14} />, run: () => onCleanCopies(activeProject.id) }]
+        : []),
       { id: 'a-dashboard', group: 'Actions', label: 'Open the dashboard', hint: keys('⇧⌘D'), icon: <DashboardIcon size={14} />, run: onDashboard },
       { id: 'a-settings', group: 'Actions', label: 'Settings', detail: 'permission mode, theme, terminal, notifications, phone', hint: keys('⌘,'), icon: <SettingsIcon size={14} />, run: onSettings },
       { id: 'a-phone', group: 'Actions', label: 'Open Caprock on your phone', detail: 'pair with a QR code, then add it to the home screen', icon: <SettingsIcon size={14} />, run: openPhoneSettings },
@@ -903,7 +914,7 @@ export function AppShell() {
       }
     }
     return items
-  }, [data.sessions, onCompare, savedItems, manageSaved, ws.tabs, model.projects, model.inbox, sessionsById, projectsById, openSessions, prefs.inspector, current, onNewAgent, onNewShell, onQuickChat, onQuickChatChooser, onAddProject, onDashboard, toggleTheme, onSettings, run, showWorkspace, openSession, openSplit, onSelectProject, onOpenInbox, jumpToWaiting, splitShell, detach, editors, focusedSession?.cwd, openInEditor, source, onOpenChanges, fileScope, focused?.kind])
+  }, [data.sessions, onCompare, savedItems, manageSaved, ws.tabs, model.projects, model.inbox, sessionsById, projectsById, openSessions, prefs.inspector, current, onNewAgent, onNewShell, onQuickChat, onQuickChatChooser, onAddProject, onDashboard, toggleTheme, onSettings, run, showWorkspace, openSession, openSplit, onSelectProject, onOpenInbox, jumpToWaiting, splitShell, detach, editors, focusedSession?.cwd, openInEditor, source, onOpenChanges, fileScope, focused?.kind, activeProject, onCleanCopies])
 
   // Every session the daemon knows, by what it was about; one that is open or
   // live is already in the list above under its own id.
@@ -1036,6 +1047,7 @@ export function AppShell() {
               editors={editors}
               onOpenInEditor={editors ? onOpenProjectInEditor : undefined}
               onRemoveProject={onRemoveProject}
+              onCleanCopies={source === 'api' ? onCleanCopies : undefined}
             />
           </div>
         )}
@@ -1234,6 +1246,7 @@ export function AppShell() {
         />
       )}
       {folderMenu && <EditorMenu at={folderMenu} editors={editors} onClose={closeFolderMenu} onError={setToast} />}
+      {sheet?.kind === 'copies' && <CopiesSheet key={sheet.projectId} projectId={sheet.projectId} name={sheet.name} onClose={closeSheet} onChanged={refresh} />}
       {sheet?.kind === 'keys' && <ShortcutsSheet isMac={isMac} onClose={closeSheet} />}
       {sheet?.kind === 'share' && <ShareDialog onClose={closeSheet} />}
       {sheet?.kind === 'files' && (

@@ -256,6 +256,22 @@ others. Installing it: [install-app.md](install-app.md).
   from a new copy. The branch is named after the first message
   unless you type a name, and `.caprock-worktrees/` is kept out of the main
   checkout's changes.
+- **Clean up copies.** A project's ⋯ menu (or ⌘K → *Clean up copies…*)
+  lists every git worktree of the project — the main checkout, Caprock's
+  copies and any you made yourself — with its branch, when it was last
+  committed to, its size on disk and badges: *merged* (every commit is in
+  the default branch), *pushed* or *N unpushed*, *N changes* (uncommitted),
+  *live* (a session or shell runs in it). Sizes are counted in the
+  background; *…* means still counting, and *≥* that a very large copy was
+  counted only up to a limit. Tick some — *Select merged and clean* picks
+  the ones that lose nothing — and *Remove*. Only copies Caprock made can
+  be removed here; the main checkout and your own worktrees never are, and a
+  copy with a session or shell running in it says so and stays. When a copy
+  has uncommitted changes or commits no remote has, Caprock asks again and
+  lists exactly that for each one. Removing deletes the copy's folder,
+  ignored files such as `node_modules` included; its branch stays unless you
+  tick *Also delete merged branches*, which deletes only a branch whose every
+  commit is already in the default branch.
 - **Terminal.** A real terminal for every session Caprock started and every
   shell, and it keeps running when the app or the daemon restarts. Scrolled
   up, new output never moves what you are reading; a "↓ N new lines" pill

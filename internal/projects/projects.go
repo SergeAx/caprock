@@ -130,6 +130,10 @@ type Service struct {
 
 	// team is the last commit-author count (authors.go).
 	team teamCache
+
+	// sizeCache holds the copies' measured sizes (copies.go).
+	sizeOnce  sync.Once
+	sizeCache *sizeCache
 }
 
 type gitState struct {

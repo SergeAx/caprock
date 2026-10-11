@@ -1435,6 +1435,8 @@ GET    /v1/projects/{id}/worktrees         → {worktrees: [Worktree]}
 POST   /v1/projects/{id}/worktrees         {branch, create?, base?} → {worktree: {path, branch, tracks?, copied?}}
 GET    /v1/projects/{id}/branches          → {branches: [{name, main?, default?, local?, remote?, committed_ms}]}
 DELETE /v1/projects/{id}/worktrees/{name}  → 204; 409 {error} when it has any change
+GET    /v1/projects/{id}/copies            → {copies: [Copy], default_branch?, has_remote, total, pending?, capped?}
+POST   /v1/projects/{id}/copies/remove     {copies: [{path, force?}], delete_merged_branches?} → {results: [{path, removed, branch_deleted?, confirm?, error?}]}
 POST   /v1/shells                          {cwd | project_id, cols?, rows?, replaces?, type?, run?} → {shell: Shell}
 GET    /v1/shells?project=<id>             → {shells: [Shell]}; every running shell without project
 ```
@@ -1490,6 +1492,43 @@ GET    /v1/shells?project=<id>             → {shells: [Shell]}; every running 
   under `<root>/.caprock-worktrees/`, never with `--force`: any change,
   untracked included, is `409`; the branch is kept; a name with a separator
   is `400`.
+- **Copies** (2026-10-11; `internal/projects/copies.go`,
+  `internal/api/copies.go`). `GET …/copies` lists `git worktree list
+  --porcelain`, the main checkout first, so worktrees made by hand are listed
+  too. **`Copy`** — `{name?, path, main?, branch?, head?, detached?, caprock,
+  locked?, missing?, committed_at?, merged, unpushed, orphaned?, dirty,
+  changed, live: [string], size, size_capped?, error?}`: `path` is in the OS's
+  own form, spelled under the project's `root` as the project is (git prints
+  symlinks resolved); `committed_at` is the newest commit, Unix seconds;
+  `merged` is HEAD being an ancestor of `refs/heads/<default>` or
+  `refs/remotes/origin/<default>` (never for the main checkout or the
+  default branch itself; a squash merge is not seen); `unpushed` is `git
+  rev-list --count HEAD --not --remotes`, read only when the repository has
+  a remote (`has_remote`); `orphaned`, for a detached HEAD, counts commits no
+  branch or remote holds; `live` names every session not ended whose `cwd`
+  is in the copy and every shell tab started there. `size` is bytes, `null`
+  while measured and always for the main checkout and a missing folder. Sizes
+  are measured in the background, one folder at a time, by walking it
+  without following links, stopping at 300,000 entries or 20 s (`size_capped`:
+  a floor), and kept for 10 minutes; a stale size is served while it is
+  measured again. `total` sums the known sizes of the linked copies,
+  `pending` says some are not known yet, `capped` that some are floors. Up to
+  two copies are inspected at once, each by a handful of git commands under
+  the usual timeout.
+- **Removing copies.** `POST …/copies/remove` takes 1 to 200 paths and
+  judges each again at that moment: the main checkout, a path that is not
+  one of the project's worktrees, a copy not under `<root>/.caprock-worktrees`,
+  a locked one, and one with anything in `live` are refused with the reason
+  in `error`. A copy with uncommitted changes (untracked included), unpushed
+  commits or orphaned commits is refused with `confirm: true` and what it
+  would lose, unless the item says `force`. Removal is `git worktree remove`,
+  with `--force` only for a forced item or a missing folder. With
+  `delete_merged_branches` the copy's local branch is then deleted (`git
+  branch -D`, after checking it is an ancestor of the default branch as for
+  `merged`); an unmerged branch, the default branch and a detached copy keep
+  theirs. The answer is `200` with one result per item; `400` for a body
+  outside those bounds or a project that is not a repository. Both routes are
+  loopback only: neither is on a paired device's or a controller's list.
 - **From a controller phone**, `path`, `create.parent` and `clone.parent`
   must be absolute and resolve under home (`403` otherwise), and the worktree
   routes refuse a project whose root is outside home. The `GET` routes are

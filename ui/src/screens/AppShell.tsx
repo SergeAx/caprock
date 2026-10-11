@@ -39,6 +39,8 @@ import { useDaemonVersion } from '@/lib/useDaemonVersion'
 import { Sidebar } from '@/components/Sidebar'
 import { TabStrip, TerminalStack } from '@/components/TerminalTabs'
 import { Inspector } from '@/components/Inspector'
+import { SessionDeck } from '@/components/SessionDeck'
+import { readDeck, saveDeck, type DeckPrefs } from '@/lib/deck'
 import { StatusStrip } from '@/components/StatusStrip'
 import { StarStrip } from '@/components/StarStrip'
 import { SetupStrip } from '@/components/SetupStrip'
@@ -63,7 +65,7 @@ import { QuickChatSheet, quickChatRequest, rememberQuickChoice, rememberedQuickC
 import { useSpawnableAgents } from '@/components/AgentPicker'
 import { AddProjectSheet } from '@/components/AddProjectSheet'
 import { CommandPalette, type PaletteItem } from '@/components/CommandPalette'
-import { BranchIcon, ChatIcon, DashboardIcon, ExternalIcon, FileIcon, FolderIcon, FolderPlusIcon, InspectorIcon, PlusIcon, SearchIcon, SettingsIcon, SparkIcon, TerminalIcon } from '@/components/AppIcons'
+import { BranchIcon, ChatIcon, DashboardIcon, DeckIcon, ExternalIcon, FileIcon, FolderIcon, FolderPlusIcon, InspectorIcon, PlusIcon, SearchIcon, SettingsIcon, SparkIcon, TerminalIcon } from '@/components/AppIcons'
 import type { PaneStatus } from '@/components/TerminalPane'
 import { EditorMenu, type EditorMenuAt } from '@/components/EditorMenu'
 import { joinPath, preferredName, useEditors } from '@/lib/editors'
@@ -227,6 +229,9 @@ export function AppShell() {
   const data = useWorkspaceData()
   const [ws, dispatch] = useReducer(workspaceReducer, undefined, loadWorkspace)
   const [prefs, setPrefs] = useState<UiPrefs>(loadPrefs)
+  // The session deck under an agent's terminal: open or not, and its height (lib/deck.ts).
+  const [deck, setDeck] = useState<DeckPrefs>(readDeck)
+  useEffect(() => { saveDeck(deck) }, [deck])
   const [sheet, setSheet] = useState<SheetState>(null)
   // Offer answers live on the daemon so the app and a browser tab agree.
   usePromptSync()
@@ -297,6 +302,8 @@ export function AppShell() {
   const current = activeTab(shownWs)
   const focused = current ? focusedLeaf(current).target : undefined
   const focusedSession = focused ? sessionsById.get(focused.sessionId) : undefined
+  // An agent's session is in front: what the session deck and the chat apply to.
+  const frontIsAgent = !!focused && focused.kind === 'session' && focusedSession?.kind !== 'shell'
   const activeProject = projectsById.get(activeProjectId)
   const shownRoute = parseHash(hash)
   // OS notifications in the Tauri shell (WP-09), quiet for the session in front.
@@ -702,6 +709,12 @@ export function AppShell() {
       case 'palette': onPalette(); break
       case 'inspector': setPrefs((p) => ({ ...p, inspector: !p.inspector })); showWorkspace(); break
       case 'sidebar': setPrefs((p) => ({ ...p, sidebar: !p.sidebar })); break
+      case 'deck':
+        // A shell has no deck: say so rather than flip a setting that shows nothing.
+        if (workspaceShown && !frontIsAgent && !deck.open) { setToast('The session deck shows an agent’s figures: bring an agent’s tab to the front.'); break }
+        setDeck((d) => ({ ...d, open: !d.open }))
+        showWorkspace()
+        break
       case 'dashboard': if (workspaceShown) onDashboard(); else location.hash = APP_ROUTE; break
       case 'next-tab': dispatch({ type: 'cycle', delta: 1 }); showWorkspace(); break
       case 'prev-tab': dispatch({ type: 'cycle', delta: -1 }); showWorkspace(); break
@@ -714,7 +727,7 @@ export function AppShell() {
       case 'settings': onSettings(); break
       case 'zoom': stepUiScale(c.step); break
     }
-  }, [onNewShell, onNewAgent, onQuickChat, onAddProject, workspaceShown, detach, onPalette, showWorkspace, onDashboard, splitShell, jumpToWaiting, current, focusedSession?.cwd, onSettings])
+  }, [onNewShell, onNewAgent, onQuickChat, onAddProject, workspaceShown, detach, onPalette, showWorkspace, onDashboard, splitShell, jumpToWaiting, current, focusedSession?.cwd, onSettings, frontIsAgent, deck.open])
 
   // The app's keys, before anything else on the page sees them. The terminal
   // already lets them through (xtermInput), and they are never its keys.
@@ -833,6 +846,7 @@ export function AppShell() {
       { id: 'a-quick-chat', group: 'Actions', label: 'Quick chat', detail: 'starts at once, on the agent and model used last', hint: keys('⌥⌘N'), icon: <ChatIcon size={14} />, run: () => { void onQuickChat() } },
       { id: 'a-quick-chat-with', group: 'Actions', label: 'Quick chat with…', detail: 'pick Claude, Codex, Gemini or OpenCode and a model', icon: <ChatIcon size={14} />, run: onQuickChatChooser },
       { id: 'a-project', group: 'Actions', label: 'Add a project', hint: keys('⌘O'), icon: <FolderPlusIcon size={14} />, run: onAddProject },
+      { id: 'a-deck', group: 'Actions', label: deck.open ? 'Hide the session deck' : 'Show the session deck', detail: 'The agent’s live figures under its terminal', hint: keys('⌘B'), icon: <DeckIcon size={14} />, run: () => run({ kind: 'deck' }) },
       { id: 'a-inspector', group: 'Actions', label: prefs.inspector ? 'Hide the inspector' : 'Show the inspector', hint: keys('⌘I'), icon: <InspectorIcon size={14} />, run: () => run({ kind: 'inspector' }) },
       ...(fileScope ? [{ id: 'a-open-file', group: 'Actions' as const, label: 'Open file…', detail: fileScope.title, icon: <FileIcon size={14} />, run: () => setSheet({ kind: 'files', ...fileScope }) }] : []),
       ...(source === 'api' && activeProject?.kind === 'repo'
@@ -918,7 +932,7 @@ export function AppShell() {
       }
     }
     return items
-  }, [data.sessions, onCompare, savedItems, manageSaved, ws.tabs, model.projects, model.inbox, sessionsById, projectsById, openSessions, prefs.inspector, current, onNewAgent, onNewShell, onQuickChat, onQuickChatChooser, onAddProject, onDashboard, toggleTheme, onSettings, run, showWorkspace, openSession, openSplit, onSelectProject, onOpenInbox, jumpToWaiting, splitShell, detach, editors, focusedSession?.cwd, openInEditor, source, onOpenChanges, fileScope, focused?.kind, activeProject, activeProjectId, onCleanCopies])
+  }, [data.sessions, onCompare, savedItems, manageSaved, ws.tabs, model.projects, model.inbox, sessionsById, projectsById, openSessions, prefs.inspector, deck.open, current, onNewAgent, onNewShell, onQuickChat, onQuickChatChooser, onAddProject, onDashboard, toggleTheme, onSettings, run, showWorkspace, openSession, openSplit, onSelectProject, onOpenInbox, jumpToWaiting, splitShell, detach, editors, focusedSession?.cwd, openInEditor, source, onOpenChanges, fileScope, focused?.kind, activeProject, activeProjectId, onCleanCopies])
 
   // Every session the daemon knows, by what it was about; one that is open or
   // live is already in the list above under its own id.
@@ -973,7 +987,7 @@ export function AppShell() {
     return p && p.id !== OTHER_FOLDERS_ID ? p : undefined
   }, [focused, model.projects])
 
-  const focusedIsAgent = !!focused && focused.kind === 'session' && focusedSession?.kind !== 'shell'
+  const focusedIsAgent = frontIsAgent
   const showChat = focusedIsAgent && !!focused && chatOpen.has(focused.sessionId)
   // The permission card shows for the focused agent whether or not its
   // terminal is in front. 0.78.2 hid it behind the terminal as a duplicate
@@ -982,6 +996,9 @@ export function AppShell() {
   // surface with a working "don't ask again" by key. Other tabs are reached
   // through their badge, the Inbox, the menu bar and the notification.
   const promptCard = focusedIsAgent && !!focused
+  const toggleDeck = useCallback(() => setDeck((d) => ({ ...d, open: !d.open })), [])
+  const closeDeck = useCallback(() => setDeck((d) => ({ ...d, open: false })), [])
+  const onResizeDeck = useCallback((height: number) => setDeck((d) => ({ ...d, height })), [])
   const toggleChat = useCallback(() => {
     if (!focused) return
     const id = focused.sessionId
@@ -1081,6 +1098,8 @@ export function AppShell() {
               onToggleInspector={() => setPrefs((p) => ({ ...p, inspector: !p.inspector }))}
               chatOpen={showChat}
               onToggleChat={focusedIsAgent ? toggleChat : undefined}
+              deckOpen={deck.open}
+              onToggleDeck={focusedIsAgent ? toggleDeck : undefined}
             />
           <div className="flex min-h-0 flex-1">
             <div className="relative min-w-0 flex-1">
@@ -1159,6 +1178,23 @@ export function AppShell() {
                     />
                   )}
                 </div>
+                {/* Under the terminal, never over it: opening it lifts the
+                  * terminal's bottom, and the prompt with it, off the
+                  * window's edge. Not mounted while closed or while the
+                  * dashboard is in front. */}
+                {deck.open && workspaceShown && focusedIsAgent && focused && focusedSession && (
+                  <SessionDeck
+                    s={focusedSession}
+                    sessionId={focused.sessionId}
+                    hasPermission={data.permissions.has(focused.sessionId)}
+                    summary={data.summary}
+                    changed={focusedWorktree?.w.changed}
+                    onReviewChanges={focusedWorktree?.repo ? () => onOpenChanges(focusedWorktree.projectId, focusedWorktree.w) : undefined}
+                    height={deck.height}
+                    onResize={onResizeDeck}
+                    onClose={closeDeck}
+                  />
+                )}
                 {promptCard && !prefs.inspector && focused && (
                   <div className="shrink-0 border-t border-[var(--app-hairline)] px-3 empty:hidden [&>*]:mb-2">
                     <PermissionPrompt sessionId={focused.sessionId} />

@@ -7,7 +7,22 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
-### Changed
+### Added
+
+- **The session deck under an agent's terminal.** ⌘B (Ctrl+Shift+B on
+  Windows and Linux), the strip's deck button or the palette opens a band
+  under the terminal of the agent in front. It lifts the terminal's bottom,
+  and Claude Code's prompt with it, off the window's edge, and fills the
+  room with the session's live figures in one row: its state and what it is
+  doing this second, what it has cost and what the last call cost, how full
+  its context is and what the next call pays to re-read it, the plan's
+  5-hour and weekly windows, and the last hour as one bar per minute. Taller,
+  it adds the last few tool calls, turns and tool calls, and the files
+  changed in its checkout. Drag its top edge (or focus it and use the arrow
+  keys) to resize it, up to 60% of the pane; double-click for the default.
+  It is closed by default, its height and whether it is open are remembered
+  per machine, shell tabs have none, and closed it costs nothing: it reads
+  the figures the inspector already holds, sharing one fetch with it.
 
 - **⌘0 opens the Dashboard.** It sits beside ⌘1–⌘9 like the tab before the
   first; ⇧⌘D still works, and resetting the interface size moved to ⇧⌘0

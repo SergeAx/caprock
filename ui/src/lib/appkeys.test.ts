@@ -22,6 +22,16 @@ describe('the app keyboard map', () => {
     expect(matchAppShortcut(k(',', { metaKey: true }), true)).toEqual({ kind: 'settings' })
   })
 
+  it('opens and closes the session deck on ⌘B, Ctrl+Shift+B elsewhere, and on no Ctrl or Option B', () => {
+    expect(matchAppShortcut(k('b', { metaKey: true }), true)).toEqual({ kind: 'deck' })
+    expect(matchAppShortcut(k('B', { ctrlKey: true, shiftKey: true }), false)).toEqual({ kind: 'deck' })
+    // Ctrl+B and Option+B are the terminal's (tmux prefix, Meta-b word back).
+    expect(matchAppShortcut(k('b', { ctrlKey: true }), true)).toBeNull()
+    expect(matchAppShortcut(k('b', { ctrlKey: true }), false)).toBeNull()
+    expect(matchAppShortcut(k('b', { altKey: true }), true)).toBeNull()
+    expect(keys('⌘B', false)).toBe('Ctrl+Shift+B')
+  })
+
   it('starts a quick chat on ⌥⌘N, Ctrl+Alt+Shift+N elsewhere, and on no other Option chord', () => {
     expect(matchAppShortcut(k('ñ', { code: 'KeyN', metaKey: true, altKey: true }), true)).toEqual({ kind: 'quick-chat' })
     expect(matchAppShortcut(k('N', { ctrlKey: true, shiftKey: true, altKey: true }), false)).toEqual({ kind: 'quick-chat' })

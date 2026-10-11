@@ -304,6 +304,18 @@ others. Installing it: [install-app.md](install-app.md).
   (in a folder that is not a git repository, it opens in your editor at
   its first change). Beside a shell tab it shows the folder and its
   changes.
+- **Session deck** (⌘B). A band under the terminal of the agent in front,
+  so the prompt sits above the window's edge, nearer the middle of the
+  screen, with the session's live figures in the room it makes: its state
+  and what it is doing now, what it has cost and what its last call cost,
+  how full its context is and what the next call pays to re-read it, your
+  plan's 5-hour and weekly windows, and its last hour as one bar per
+  minute. Taller, it adds its last tool calls and the files changed in its
+  checkout. Drag its top edge to resize it (up to 60% of the pane), or
+  focus the edge and use ↑ ↓; double-click it for the default height. The
+  deck button beside the inspector's, ⌘B and the palette open and close it;
+  the app remembers its height and whether it was open. A shell tab has no
+  deck.
 - **Changes.** Click a worktree's ±N in the sidebar (hover the row for the
   same button), *Review and commit* in the inspector, or "Review changes" in
   the palette. The files are listed as *Staged*, *Changes* and *Conflicts*;
@@ -409,6 +421,7 @@ On macOS:
 | ⌘,          | Settings                                 |
 | ⌘+ ⌘− ⇧⌘0   | Interface size: bigger, smaller, default |
 | ⌘I          | Agent cockpit (the inspector)            |
+| ⌘B          | Session deck under the agent's terminal  |
 | ⌘\          | Hide or show the sidebar                 |
 | ⌘0, ⇧⌘D     | Dashboard tab, and back                  |
 | ⌘R          | Reload the window (View → Reload)        |

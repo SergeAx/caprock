@@ -23,6 +23,7 @@ export type AppCommand =
   | { kind: 'detach-tab' }
   | { kind: 'palette' }
   | { kind: 'inspector' }
+  | { kind: 'deck' }
   | { kind: 'sidebar' }
   | { kind: 'dashboard' }
   | { kind: 'next-tab' }
@@ -116,6 +117,9 @@ function plain(k: string): AppCommand | null {
     case 'w': return { kind: 'detach-tab' }
     case 'k': return { kind: 'palette' }
     case 'i': return { kind: 'inspector' }
+    // B for the band at the bottom. The Add project sheet's own ⌘B (Recent ⇄
+    // Browse) is not reached: a sheet owns the keyboard while it is open.
+    case 'b': return { kind: 'deck' }
     case '\\': return { kind: 'sidebar' }
     case 'e': return { kind: 'split', direction: 'row' }
     case 'j': return { kind: 'next-waiting' }
@@ -191,6 +195,7 @@ export const SHORTCUTS: [keys: string, does: string][] = [
   ['⌘[ ]', 'Previous and next pane'],
   ['⌘F', 'Find in the terminal'],
   ['⌘I', 'Inspector'],
+  ['⌘B', 'Session deck: the agent’s live figures under its terminal'],
   ['⌘\\', 'Hide or show the sidebar'],
   ['⌘0, ⇧⌘D', 'Dashboard'],
   ['⌘,', 'Settings'],

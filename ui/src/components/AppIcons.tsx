@@ -36,7 +36,8 @@ export const FolderPlusIcon = (p: P) => <Icon {...p}><path d="M3 7.5A1.5 1.5 0 0
 export const BranchIcon = (p: P) => <Icon {...p}><circle cx="6" cy="5" r="2" /><circle cx="6" cy="19" r="2" /><circle cx="18" cy="7" r="2" /><path d="M6 7v10M18 9c0 5-6 4-11.2 8.6" /></Icon>
 export const PullRequestIcon = (p: P) => <Icon {...p}><circle cx="6" cy="6" r="2.25" /><circle cx="6" cy="18" r="2.25" /><circle cx="18" cy="18" r="2.25" /><path d="M6 8.25v7.5M18 15.75V9.5a3 3 0 0 0-3-3h-3.5M13.5 4l-2.5 2.5 2.5 2.5" /></Icon>
 export const InspectorIcon = (p: P) => <Icon {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /></Icon>
-export const SidebarIcon = (p: P) => <Icon {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /></Icon>
+export const DeckIcon = (p: P) => <Icon {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 13h18M7.5 17v-1M10.5 17v-2M13.5 17v-1M16.5 17v-1.5" /></Icon>
+export const SidebarIcon =(p: P) => <Icon {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /></Icon>
 export const SearchIcon = (p: P) => <Icon {...p}><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" /></Icon>
 export const DashboardIcon = (p: P) => <Icon {...p}><rect x="3" y="3" width="7.5" height="9" rx="1.5" /><rect x="13.5" y="3" width="7.5" height="5" rx="1.5" /><rect x="13.5" y="11" width="7.5" height="10" rx="1.5" /><rect x="3" y="15" width="7.5" height="6" rx="1.5" /></Icon>
 export const InboxIcon = (p: P) => <Icon {...p}><path d="M3 13h5l1.5 2.5h5L16 13h5" /><path d="M5.5 5h13L21 13v5.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5V13z" /></Icon>

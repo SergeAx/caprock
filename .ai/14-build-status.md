@@ -73,6 +73,13 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-11 — 0.103.0: start from GitHub, lighter terminals
+
+New agent starts from a GitHub issue or pull request (picker, branch
+named from it, the PR's head fetched for forks too). Each terminal's
+holder is now its own small binary, caprock-pty-host (ADR-033 amended):
+4.7 MB instead of 11.2 MB per terminal, measured 2026-10-11.
+
 ### 2026-10-11 — unreleased: start an agent from a GitHub issue or pull request
 
 New agent → *From a GitHub issue or pull request…* and ⌘K → *New agent

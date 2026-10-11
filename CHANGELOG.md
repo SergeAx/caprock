@@ -7,6 +7,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+## [0.103.0] - 2026-10-11
+
 ### Added
 
 - **Start an agent from a GitHub issue or pull request.** In *New agent*,

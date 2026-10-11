@@ -2773,3 +2773,53 @@ the middle of something).
 
 **Revisit if** people want variables in a prompt (`{file}`, `{branch}`), a
 key per saved prompt, or commands from the phone once shells are.
+
+## ADR-052 — One prompt, N attempts: separate copies from one commit, compared by what they changed and what they cost
+
+**Date:** 2026-10-11 · **Status:** accepted
+
+Asking an agent once is a sample of one. Orca's headline flow runs the same
+prompt in several worktrees, one agent each, and lets the user pick. What
+Orca cannot show is what each attempt cost; Caprock prices every session it
+reads, so the comparison can say it.
+
+**Decision.**
+
+- **In New agent, under a new copy of a branch**: *Attempts*, 1 to 4, default
+  1 and not remembered. Two or more need a first message (it is what each one
+  works on). One request, `POST /v1/agents` with `attempts`; the daemon starts
+  the same agent with the same message, model, mode and sign-in N times, each
+  in its own copy (`caprock/<name>-1` … `-N`), through the ordinary spawn — so
+  `.worktreeinclude` and the project's setup command (ADR-050) apply to each.
+- **The same starting code.** The base is fetched once, for the first copy;
+  the others start from the commit the first copy started from, not from the
+  branch name again, which may have moved or may differ from its remote.
+- **Grouped, not merged.** Each session records its group, its number and the
+  total (`attempts`, migration 0046) and is titled *attempt 2/3 · …* in tabs,
+  the sidebar and ⌘K. All N open as tabs, the first in front.
+- **Compare** (⌘K *Compare attempts: …*, or *Compare* in the inspector of an
+  attempt) lists them side by side: state, files changed and lines added and
+  removed since the shared commit (committed, uncommitted and new), cost so
+  far from the session's own pricing (the cheapest marked), and time, with
+  *Open* and *Review changes* (the copy's Changes view) on each. Read again
+  every five seconds while open.
+- **The user picks.** Nothing is merged, committed, stopped or removed by
+  Caprock: the one kept is committed or opened as a pull request from its
+  Changes view, the others stay until the user removes their copies.
+- **A failure stops the rest** and is said beside the ones that started; the
+  group's total is what started.
+- **At most four.** Each attempt is a folder, a setup run and an agent's
+  spend; four is already a lot of all three on one machine.
+
+**Rejected.** Different agents per attempt in the first version (one more
+choice per row in a sheet that is already full; the same agent is what the
+gap analysis asked for, and a mix can come later); starting the copies in
+parallel (git's worktree list is one file per repository and concurrent
+`worktree add` races on it); measuring changes against the trunk as the
+Changes panel does (a base other than main would count the base's own
+commits as the attempt's); picking a winner automatically (tests and taste
+are the user's; cost alone is not quality).
+
+**Revisit if** people want different agents or models per attempt, a test
+command whose result the comparison shows, or a one-click *keep this one*
+that removes the other copies.

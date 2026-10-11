@@ -505,6 +505,7 @@ func New(d Deps) *Server {
 	m.HandleFunc("POST /v1/orchestrator/stop", s.handleStopOrchestrator)
 	m.HandleFunc("POST /v1/agents", s.handleSpawn)
 	m.HandleFunc("GET /v1/sessions/{id}/relay", s.handleRelayBrief)
+	m.HandleFunc("GET /v1/attempts/{group}", s.handleAttempts)
 	m.HandleFunc("GET /v1/agents/models", s.handleAgentModels)
 	m.HandleFunc("GET /v1/agents/catalog", s.handleAgentCatalog)
 	m.HandleFunc("GET /v1/agents/custom", s.handleCustomAgents)
@@ -2203,6 +2204,17 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": bypassConsentMsg, "code": "bypass_consent"})
 		return
 	}
+	// One prompt, N attempts (attempts.go, ADR-052).
+	n, msg := attemptsOf(req)
+	if msg != "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
+		return
+	}
+	if n > 1 {
+		s.spawnAttempts(w, r, req, n)
+		return
+	}
+	delete(req, "attempts")
 	// Spawn with a background context: the process must outlive this HTTP request.
 	id, cwd, err := s.d.Agents.Spawn(context.WithoutCancel(r.Context()), req)
 	if err != nil {

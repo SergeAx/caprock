@@ -46,6 +46,7 @@ export function Inspector({
   onOpenFile,
   summary,
   project,
+  onCompare,
 }: {
   session?: SessionSummary
   /** The sidebar's project the session belongs to: its name heads the place line. */
@@ -65,6 +66,8 @@ export function Inspector({
   onOpenFile?: (path: string) => void
   /** The day's summary: the plan windows the cockpit shows. */
   summary?: Summary
+  /** Opens the comparison of the attempts this session is one of (ADR-052). */
+  onCompare?: () => void
 }) {
   const isAgent = !!sessionId && !!session && session.kind !== 'shell'
   return (
@@ -78,7 +81,7 @@ export function Inspector({
       {!sessionId ? (
         <p className="px-4 py-5 text-[12.5px] leading-relaxed text-fg-muted">Open a session to see what it costs, how full its context is, and what it changed.</p>
       ) : (
-        <Body key={sessionId} session={session} project={project} sessionId={sessionId} hasPermission={hasPermission} showPrompt={showPrompt} onDetach={onDetach} editor={editors && onOpenInEditor ? { name: preferredName(editors), open: onOpenInEditor } : undefined} onReviewChanges={onReviewChanges} onOpenFile={onOpenFile} summary={summary} />
+        <Body key={sessionId} session={session} project={project} sessionId={sessionId} hasPermission={hasPermission} showPrompt={showPrompt} onDetach={onDetach} editor={editors && onOpenInEditor ? { name: preferredName(editors), open: onOpenInEditor } : undefined} onReviewChanges={onReviewChanges} onOpenFile={onOpenFile} summary={summary} onCompare={onCompare} />
       )}
     </aside>
   )
@@ -87,7 +90,7 @@ export function Inspector({
 type OpenInEditor = (path: string, label: string, editor?: string, line?: number) => void
 interface EditorAction { name: string; open: OpenInEditor }
 
-function Body({ session: s, project, sessionId, hasPermission, showPrompt, onDetach, editor, onReviewChanges, onOpenFile, summary }: { session?: SessionSummary; project?: Pick<Project, 'name' | 'default_branch'>; sessionId: string; hasPermission: boolean; showPrompt: boolean; onDetach: () => void; editor?: EditorAction; onReviewChanges?: () => void; onOpenFile?: (path: string) => void; summary?: Summary }) {
+function Body({ session: s, project, sessionId, hasPermission, showPrompt, onDetach, editor, onReviewChanges, onOpenFile, summary, onCompare }: { session?: SessionSummary; project?: Pick<Project, 'name' | 'default_branch'>; sessionId: string; hasPermission: boolean; showPrompt: boolean; onDetach: () => void; editor?: EditorAction; onReviewChanges?: () => void; onOpenFile?: (path: string) => void; summary?: Summary; onCompare?: () => void }) {
   const isShell = s?.kind === 'shell'
   const ended = s?.status === 'ended'
   if (s && !isShell) {
@@ -96,6 +99,12 @@ function Body({ session: s, project, sessionId, hasPermission, showPrompt, onDet
         <header className="grid gap-1">
           <h3 className="line-clamp-2 text-[14.5px] font-semibold leading-snug tracking-[-0.01em] text-fg" title={sessionTitle(s)}>{sessionTitle(s)}</h3>
           {s.cwd && <Place place={sessionPlace(s, project)} />}
+          {onCompare && s.attempts && s.attempts > 1 && (
+            <p className="text-[12px] text-fg-muted">
+              Attempt {s.attempt} of {s.attempts} ·{' '}
+              <button type="button" onClick={onCompare} className="text-accent underline-offset-2 hover:underline">Compare</button>
+            </p>
+          )}
         </header>
         {showPrompt && <PermissionPrompt sessionId={sessionId} />}
         <Cockpit

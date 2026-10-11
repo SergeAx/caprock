@@ -268,6 +268,7 @@ var pairedDeviceRoutes = map[string]bool{
 	"GET /v1/week":                    true, // the Week screen
 	"GET /v1/tools/drill":             true, // the tool drill-down; its Premium half is gated in the handler
 	"GET /v1/saved-prompts":           true, // the phone's chips (ADR-051); changing them is the machine's
+	"GET /v1/attempts/{group}":        true, // Compare attempts (ADR-052): what each changed and cost, a read
 
 	// The permission prompt an owned session waits on (ADR-035); the live
 	// socket already carries it to a viewer.

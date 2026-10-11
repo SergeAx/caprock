@@ -156,6 +156,18 @@ others. Installing it: [install-app.md](install-app.md).
 - **The tab strip.** The tab in front has an amber top edge; the others are
   shaded tabs of their own. The amber + opens a menu: New agent, Quick
   chat, New shell, Run saved…, Open file, Add project, each with its key.
+- **Several attempts at once.** In *New agent*, choose *New copy from a
+  branch* and set *Attempts* to 2, 3 or 4, then write the first message. The
+  same agent gets the same message in that many separate copies
+  (`caprock/<name>-1`, `-2`, …), all from the same commit, each with your
+  `.worktreeinclude` files and setup command. They open as tabs named
+  *attempt 1/3 · …*, the first in front. *Compare attempts* — in ⌘K, or
+  *Compare* in the inspector of any of them — shows them side by side: what
+  each is doing, how many files and lines it changed since that commit, what
+  it has cost so far (the cheapest is marked) and how long it has run, with
+  *Open* and *Review changes* on each. Nothing is merged or removed for you:
+  review the one you want, commit it or open a pull request from its
+  changes, and remove the other copies when you are done.
 - **Saved prompts and commands.** Settings → *Saved prompts and commands*
   keeps what you type over and over, each with a name, for every project or
   for one: a *prompt* such as *Run the tests and fix what fails*, or a

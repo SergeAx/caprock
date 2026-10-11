@@ -97,6 +97,8 @@ func fakeRoutes(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && r.URL.Path == "/repos/ada/repo/pulls":
 		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte(`{"number":5,"html_url":"https://github.com/ada/repo/pull/5","title":"Add x","state":"open","head":{"ref":"feat/x","sha":"s"},"base":{"ref":"main"}}`))
+	case r.URL.Path == "/repos/ada/repo/issues":
+		_, _ = w.Write([]byte(`[{"number":3,"title":"Login fails","html_url":"https://github.com/ada/repo/issues/3","state":"open","body":"b","user":{"login":"grace"},"labels":[{"name":"bug"}]}]`))
 	case r.URL.Path == "/user/repos":
 		w.Header().Set("Retry-After", "90")
 		w.WriteHeader(http.StatusForbidden)
@@ -198,5 +200,22 @@ func TestGitHubFailuresAreVisible(t *testing.T) {
 	}
 	if w := call(t, s, machine, "", "POST", "/v1/projects/"+id+"/github/pr", `{"title":""}`); w.Code != http.StatusBadRequest {
 		t.Fatalf("an empty title: %d", w.Code)
+	}
+}
+
+// New agent's picker: the project's open issues, a read every device may make.
+func TestGitHubItemsForNewAgent(t *testing.T) {
+	s, viewer, _, _, id, _ := githubServer(t, fakeRoutes)
+	path := "/v1/projects/" + id + "/github/items"
+	if w := call(t, s, machine, "", "GET", path, ""); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"connected":false`) {
+		t.Fatalf("not connected: %d %s", w.Code, w.Body.String())
+	}
+	call(t, s, machine, "", "POST", "/v1/github/connect", `{"source":"token","token":"ghp_good"}`)
+	w := call(t, s, testPhone, viewer, "GET", path, "")
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"number":3`) || !strings.Contains(w.Body.String(), `"author":"grace"`) {
+		t.Fatalf("items: %d %s", w.Code, w.Body.String())
+	}
+	if w := call(t, s, machine, "", "GET", "/v1/projects/999/github/items", ""); w.Code != http.StatusNotFound {
+		t.Fatalf("no such project: %d %s", w.Code, w.Body.String())
 	}
 }

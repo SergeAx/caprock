@@ -73,6 +73,22 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-11 — unreleased: start an agent from a GitHub issue or pull request
+
+New agent → *From a GitHub issue or pull request…* and ⌘K → *New agent
+from issue…* (the Orca gap analysis). One new read,
+`GET /v1/projects/{id}/github/items`, through the existing GitHub
+connection (`internal/github/issues.go`, kept 60 s, never polled); one new
+spawn field, `worktree_pr`, which fetches `refs/pull/<n>/head` with git
+and the user's own credentials and makes the copy from it, a fork's pull
+request included. No ADR: it reuses ADR-039's connection and ADR-052's
+attempts unchanged. Verified on a preview stand (fake claude, fake `gh`,
+a loopback fake GitHub API, a local bare remote holding a fork-only
+`refs/pull/41/head`) in both themes: the palette command, search, an issue
+started with its text as the first message, a pull request started at its
+head with the fetched ref removed afterwards. Not built: pushing back to a
+pull request's own branch (the copy is `caprock/pr-…`, and the docs say so).
+
 ### 2026-10-11 — 0.102.0: the Orca-gap batch
 
 From the 2026-10-11 gap analysis against Orca: Caprock keeps the computer

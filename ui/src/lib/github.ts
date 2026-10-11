@@ -7,6 +7,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { ApiError, deviceToken, errText } from './api'
 import { live } from './live'
+import type { GitHubItems } from './fromGitHub'
 
 /** A GitHub failure, as the daemon says it: `error` is the whole sentence. */
 export interface GitHubError {
@@ -165,6 +166,9 @@ export const githubApi = {
     send<CreatePRResult>(wt(projectId, worktree, '/pr'), 'POST', req),
   createRepo: (projectId: string | number, req: { name: string; owner?: string; private: boolean; description?: string; protocol: 'https' | 'ssh'; push: boolean }) =>
     send<CreateRepoResult>(`/v1/projects/${encodeURIComponent(String(projectId))}/github/repo`, 'POST', req),
+  /** A project's open issues and pull requests, for New agent's From GitHub (lib/fromGitHub.ts). */
+  items: (projectId: string | number, q = '') =>
+    send<GitHubItems>(`/v1/projects/${encodeURIComponent(String(projectId))}/github/items${q ? `?q=${encodeURIComponent(q)}` : ''}`, 'GET'),
 }
 
 /** The sentence to show for a failure: the daemon's `error` (what was being done, and what GitHub said). */

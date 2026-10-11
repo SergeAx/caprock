@@ -570,6 +570,18 @@ error word for word), *Tell me when CI fails or a review arrives*, and
   you when a check fails or a review arrives. Failing checks and a pull
   request that conflicts with its base have **Fix with agent** (see
   [Fix with agent](#the-window) above).
+- **Start an agent from an issue or a pull request.** In *New agent*, for a
+  project on GitHub, click *From a GitHub issue or pull request…* (or ⌘K →
+  *New agent from issue…*) and pick one of the open ones; type to search by
+  number, words, author or label. An issue fills in a new copy named after
+  it (`issue-123-short-slug`) and a first message with its title, link and
+  text. A pull request does the same and starts the copy at the pull
+  request's latest commit, fetched with your own git credentials — from a
+  fork too — so the agent can review it or carry on. Change anything before
+  *Start*; attempts, `.worktreeinclude` and the setup command work as
+  usual. The copy is on a branch of its own (`caprock/pr-13-…`): pushing it
+  opens a new branch on GitHub, not the pull request's, so to add to that
+  pull request push to its branch yourself.
 - **From the phone** you can read all of it; a phone you let control
   sessions can also open a pull request. Connecting, disconnecting and
   creating repositories happen on the computer.

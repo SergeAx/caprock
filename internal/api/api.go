@@ -558,6 +558,7 @@ func New(d Deps) *Server {
 	m.HandleFunc("GET /v1/github/prs", s.handleGitHubPRs)
 	m.HandleFunc("GET /v1/projects/{id}/github", s.handleWorktreeGitHub)
 	m.HandleFunc("POST /v1/projects/{id}/github/refresh", s.handleWorktreeGitHubRefresh)
+	m.HandleFunc("GET /v1/projects/{id}/github/items", s.handleGitHubItems)
 	m.HandleFunc("POST /v1/projects/{id}/github/pr", s.handleCreatePR)
 	m.HandleFunc("POST /v1/projects/{id}/github/repo", s.handleCreateRepo)
 	// Saved prompts and commands (saved.go, ADR-051).

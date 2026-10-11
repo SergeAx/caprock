@@ -226,6 +226,21 @@ func (s *Server) handleWorktreeGitHub(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, info)
 }
 
+// handleGitHubItems lists the open issues and pull requests of a project's
+// repository, for New agent's "From GitHub" picker (a read, like the others).
+func (s *Server) handleGitHubItems(w http.ResponseWriter, r *http.Request) {
+	id, _, ok := s.githubTarget(w, r, false)
+	if !ok {
+		return
+	}
+	items, err := s.d.GitHub.Items(r.Context(), id, r.URL.Query().Get("q"))
+	if err != nil {
+		githubFail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
 func (s *Server) handleWorktreeGitHubRefresh(w http.ResponseWriter, r *http.Request) {
 	id, wt, ok := s.githubTarget(w, r, true)
 	if !ok {

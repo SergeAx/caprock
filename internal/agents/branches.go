@@ -154,3 +154,50 @@ func startPoint(ctx context.Context, repo, base string, pull bool) (string, erro
 	}
 	return point, nil
 }
+
+// prRefPrefix is where a pull request's head is fetched to for the moment a
+// new copy is made from it; the ref is removed once the copy exists (its own
+// branch then holds the commit), so nothing lingers in the repository.
+const prRefPrefix = "refs/caprock/pull/"
+
+// prStartPoint fetches GitHub pull request n's head — refs/pull/<n>/head,
+// which GitHub keeps for every pull request, from a fork too — from the
+// repository's remote (origin, else the only one) and returns the local ref
+// it was fetched to. The fetch is git's, with the user's own credentials,
+// like a pull of the base branch.
+func prStartPoint(ctx context.Context, repo string, n int) (string, error) {
+	if n <= 0 {
+		return "", fmt.Errorf("agents: %d is not a pull request number", n)
+	}
+	out, err := gitOut(ctx, repo, "remote")
+	if err != nil {
+		return "", errors.New("agents: worktree requested but cwd is not a git repository")
+	}
+	remotes := strings.Fields(out)
+	remote := ""
+	for _, r := range remotes {
+		if r == "origin" {
+			remote = r
+		}
+	}
+	if remote == "" && len(remotes) == 1 {
+		remote = remotes[0]
+	}
+	if remote == "" {
+		return "", errors.New("agents: no remote to fetch the pull request from (want origin)")
+	}
+	ref := prRefPrefix + strconv.Itoa(n)
+	fctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	if _, err := gitOut(fctx, repo, "fetch", "--quiet", "--no-tags", remote, "+refs/pull/"+strconv.Itoa(n)+"/head:"+ref); err != nil {
+		return "", fmt.Errorf("agents: could not fetch pull request #%d from %s: %w", n, remote, err)
+	}
+	return ref, nil
+}
+
+// dropPRRef removes what prStartPoint fetched. Best effort.
+func dropPRRef(ctx context.Context, repo, ref string) {
+	if strings.HasPrefix(ref, prRefPrefix) {
+		_, _ = gitOut(context.WithoutCancel(ctx), repo, "update-ref", "-d", ref)
+	}
+}

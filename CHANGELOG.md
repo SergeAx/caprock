@@ -7,6 +7,20 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Added
+
+- **Start an agent from a GitHub issue or pull request.** In *New agent*,
+  for a project on GitHub with GitHub connected in Settings, *From a GitHub
+  issue or pull request…* lists the open ones — number, title, author,
+  labels — searchable by any of them; ⌘K → *New agent from issue…* opens
+  it directly. An issue fills in a new copy named after it
+  (`issue-123-short-slug`) and a first message with its title, link and
+  text. A pull request also starts the copy at its latest commit, fetched
+  with your own git credentials (a fork's too), with a message to review
+  and continue it. Everything stays editable before *Start*. The list is
+  read only when you open the picker, through the GitHub connection you
+  already have.
+
 ### Changed
 
 - **Each terminal takes about half the memory.** The process that keeps a

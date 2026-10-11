@@ -402,8 +402,9 @@ pub fn monitor(app: AppHandle, sup: Arc<Supervisor>) {
                 }
             };
             let mut state = sup.observe(found, absent_for);
-            // macOS: a Homebrew daemon moves onto the app's own, and the
-            // app's own is replaced when the bundle carries another (ADR-040).
+            // On macOS a Homebrew daemon moves onto the app's own; on every
+            // OS the app's own is replaced when the bundle carries another
+            // (ADR-040).
             // A launch decides this before the first page loads (main.rs), so
             // this is the late case: a daemon that came up after launch. Not
             // before the window's first page has committed: a WebView whose

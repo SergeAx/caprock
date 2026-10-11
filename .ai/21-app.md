@@ -834,9 +834,13 @@ one lean terminal; they stay below Orca (420–541 MB idle) and a Chrome tab.
 - **The daemon supervisor** reads `runtime.json`, starts the bundled binary
   when no daemon answers, and never stops a daemon it did not start — save
   one case on macOS: a Homebrew formula's daemon, moved onto the app's own
-  once when that is not older (ADR-040). On macOS it also replaces its own
-  daemon once per launch when the bundle carries a different one (ADR-040,
-  amended), so the daemon follows the app up, down and to a local build.
+  once when that is not older (ADR-040). On every OS it also replaces its
+  own daemon once per launch when the bundle carries a different one
+  (ADR-040, amended), so the daemon follows the app up, down and to a local
+  build. Until 0.106.0 that replacement ran on macOS alone, and a Windows
+  app updated past its daemon kept the old one running for good. On
+  Windows the running `caprock.exe` is renamed aside before the copy (a
+  running exe can be renamed, not overwritten).
   A launch decides that replacement before the window loads anything, and
   the window waits on the fallback page ("Updating the daemon") until the
   new daemon answers (§ Updating the daemon).

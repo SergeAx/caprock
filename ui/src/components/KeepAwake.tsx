@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react'
 import { api, errText, isPairedDevice, type KeepAwakeMode, type KeepAwakeStatus, type Settings } from '@/lib/api'
 import { useApi } from '@/lib/useApi'
 import { Choice, Section } from './SettingsParts'
-import { CoffeeIcon } from './AppIcons'
+import { CloseIcon, CoffeeIcon } from './AppIcons'
 
 const OPTIONS: { value: KeepAwakeMode; label: string }[] = [
   { value: 'off', label: 'Off' },
@@ -25,6 +25,24 @@ const HINT: Record<KeepAwakeMode, string> = {
   off: 'Your computer sleeps on its usual schedule, even mid-task.',
   working: 'Your computer does not fall asleep while an agent is working or waiting for approval. The screen can still turn off.',
   always: 'Your computer does not fall asleep while Caprock runs. The screen can still turn off.',
+}
+
+/** The popover's one line per mode: the settings page keeps the longer HINT. */
+const SHORT: Record<KeepAwakeMode, string> = {
+  off: 'Sleeps as usual.',
+  working: 'Stays awake while agents work.',
+  always: 'Stays awake while Caprock runs.',
+}
+
+/** What is happening now, in a few words, for the popover's headline. */
+function nowLine(st: KeepAwakeStatus | undefined, mode: KeepAwakeMode): { text: string; awake: boolean } {
+  if (st?.error) return { text: 'Could not keep it awake', awake: false }
+  if (mode === 'off') return { text: 'Off', awake: false }
+  if (st?.holding) {
+    if (mode === 'always' || !st.working) return { text: 'Awake now', awake: true }
+    return { text: `Awake now · ${st.working} ${st.working === 1 ? 'agent' : 'agents'} working`, awake: true }
+  }
+  return { text: 'May sleep · no agent working', awake: false }
 }
 
 /** A status line for the setting: what is happening now, or why it cannot. */
@@ -143,24 +161,33 @@ function KeepAwakePopover({ status, onClose, onChanged }: { status?: KeepAwakeSt
       setError(errText(e))
     }
   }
-  const line = keepAwakeLine(status && { ...status, mode })
+  const now = nowLine(status, mode)
   return (
     <>
       <span aria-hidden className="fixed inset-0 z-40" onClick={onClose} />
       <div role="dialog" aria-label="Keep awake" data-keep-awake-popover
-        className="absolute bottom-[calc(100%+8px)] right-0 z-50 grid w-[320px] gap-2 rounded-[10px] border border-border-strong bg-panel p-3 text-left text-[12px] text-fg shadow-lg">
-        <div className="flex items-center gap-1.5 font-medium"><CoffeeIcon size={13} />Keep awake</div>
-        <span className="inline-flex flex-wrap gap-1 rounded-md bg-panel-2 p-0.5" role="radiogroup" aria-label="Stay awake">
+        className="absolute bottom-[calc(100%+8px)] right-0 z-50 grid w-[300px] gap-3 rounded-[10px] border border-border-strong bg-panel p-3.5 text-left text-fg shadow-lg">
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-2 text-[15px] font-semibold"><CoffeeIcon size={15} />Keep awake</span>
+          <button type="button" aria-label="Close" title="Close (Esc)" onClick={onClose}
+            className="-mr-1 grid h-7 w-7 place-items-center rounded-md text-fg-muted hover:bg-[var(--app-row-hover)] hover:text-fg">
+            <CloseIcon size={14} />
+          </button>
+        </div>
+        <p data-keep-awake-now className={`flex items-center gap-2 text-[16px] font-medium ${now.awake ? 'text-fg' : 'text-fg-muted'}`}>
+          <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${now.awake ? 'bg-ok' : 'bg-fg-faint'}`} />
+          {now.text}
+        </p>
+        <span className="flex gap-1 rounded-md bg-panel-2 p-1" role="radiogroup" aria-label="Stay awake">
           {OPTIONS.map((o) => (
             <button key={o.value} type="button" role="radio" aria-checked={mode === o.value} onClick={() => void save(o.value)}
-              className={`rounded-[5px] px-2 py-0.5 ${mode === o.value ? 'bg-accent font-medium text-panel' : 'text-fg-muted hover:text-fg'}`}>
+              className={`flex-auto whitespace-nowrap rounded-[5px] px-2 py-1.5 text-[13px] ${mode === o.value ? 'bg-accent font-medium text-panel' : 'text-fg-muted hover:text-fg'}`}>
               {o.label}
             </button>
           ))}
         </span>
-        <p className="leading-relaxed text-fg-muted">{HINT[mode]} Closing a laptop&apos;s lid still puts it to sleep.</p>
-        {line && mode !== 'off' && <p className="text-fg-muted">{line}</p>}
-        {error && <p className="text-danger">{error}</p>}
+        <p className="text-[14px] text-fg">{SHORT[mode]}</p>
+        {error && <p className="text-[13px] text-danger">{error}</p>}
       </div>
     </>
   )

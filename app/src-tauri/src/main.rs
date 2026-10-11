@@ -89,7 +89,7 @@ fn main() {
     // The first look is synchronous so a running daemon's dashboard is the
     // first page the window loads: no fallback flash on the common path.
     let first = sup.observe(discovery::find(&sup.data_dir), std::time::Duration::ZERO);
-    // macOS (ADR-040): whether that daemon is replaced by the app's own is
+    // Whether that daemon is replaced by the app's own (ADR-040) is
     // decided here, before any page loads. Decided after, the window loaded
     // the old daemon's UI and kept it once the new daemon came up (0.78.2:
     // the strip read 0.78.1 for the rest of the run).

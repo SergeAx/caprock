@@ -57,11 +57,20 @@ const (
 	// summaryTTL is the same for the 7d, 30d and all-time summaries. They are
 	// asked for less often and move more slowly than the history strip.
 	summaryTTL = 10 * time.Second
+	// todayTTL is how long today's summary is served as it is. It is the
+	// figure people watch move, so it is never served stale: past this it is
+	// renewed if nothing was written, and otherwise counted while the caller
+	// waits. Several components ask for it every few seconds.
+	todayTTL = 2 * time.Second
 	// answerMaxStale bounds stale-while-revalidate. An answer older than this
 	// — a dashboard reopened the next morning — is recomputed while the caller
 	// waits rather than shown, because a figure from hours ago presented as
 	// the current one is a wrong number, not a slow one.
 	answerMaxStale = 30 * time.Minute
+	// answerRecheck bounds how long an answer is renewed on an unchanged
+	// version alone. A write that removes rows (retention, removing a
+	// session) adds no event, so past this an answer is recomputed anyway.
+	answerRecheck = 10 * time.Minute
 )
 
 // answerEntry is one key's cached answer, or the in-flight computation of it.
@@ -72,6 +81,9 @@ type answerEntry struct {
 	val  any
 	err  error
 	at   time.Time
+	// ver is the data version read just before the answer was computed, or
+	// -1 when there was no version to read.
+	ver int64
 	// refreshing is set while a background refresh of this entry runs, so a
 	// burst of stale hits starts one refresh, not one each. Guarded by the
 	// cache's mutex.
@@ -87,6 +99,13 @@ type answerCache struct {
 	ttl      time.Duration
 	maxStale time.Duration
 	now      func() time.Time
+	// version, when set, reads the data's version: an expired answer whose
+	// version has not moved is still right, and is renewed instead of being
+	// computed again. Nil means every expired answer is recomputed.
+	version func(context.Context) (int64, error)
+	// recheck bounds how long an answer is renewed on an unchanged version
+	// alone (answerRecheck unless set).
+	recheck time.Duration
 	// bg tracks background refreshes so tests can wait for them.
 	bg sync.WaitGroup
 }
@@ -120,6 +139,18 @@ func (c *answerCache) get(ctx context.Context, key string, fn func() (any, error
 				c.mu.Unlock()
 				return e.val, e.err
 			}
+			if c.version != nil && e.ver >= 0 && age < c.recheckAfter() {
+				if c.unchanged(ctx, key, e) {
+					return e.val, e.err
+				}
+				c.mu.Lock()
+				if c.m[key] != e {
+					// Replaced while the version was read; start over.
+					c.mu.Unlock()
+					return c.get(ctx, key, fn)
+				}
+				age = c.now().Sub(e.at)
+			}
 			if age < c.maxStale {
 				// Stale but presentable: hand it back now and let one
 				// background refresh replace it.
@@ -148,6 +179,7 @@ func (c *answerCache) get(ctx context.Context, key string, fn func() (any, error
 	c.m[key] = e
 	c.mu.Unlock()
 
+	e.ver = c.readVersion(ctx)
 	e.val, e.err = fn()
 	e.at = c.now()
 	close(e.done)
@@ -170,6 +202,7 @@ func (c *answerCache) get(ctx context.Context, key string, fn func() (any, error
 // next stale hit try again.
 func (c *answerCache) refresh(key string, old *answerEntry, fn func() (any, error)) {
 	defer c.bg.Done()
+	ver := c.readVersion(context.Background())
 	val, err := fn()
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -182,9 +215,57 @@ func (c *answerCache) refresh(key string, old *answerEntry, fn func() (any, erro
 		// entry wins.
 		return
 	}
-	fresh := &answerEntry{done: make(chan struct{}), val: val, at: c.now()}
+	fresh := &answerEntry{done: make(chan struct{}), val: val, at: c.now(), ver: ver}
 	close(fresh.done)
 	c.m[key] = fresh
+}
+
+// unchanged is called with c.mu held and an expired, settled entry. It reads
+// the data's version without the lock and, when the version is the one the
+// answer was computed at, renews the entry and returns true with c.mu
+// released. Otherwise it returns false with c.mu released, and the caller
+// takes the lock again.
+func (c *answerCache) unchanged(ctx context.Context, key string, e *answerEntry) bool {
+	c.mu.Unlock()
+	v := c.readVersion(ctx)
+	if v < 0 || v != e.ver {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.m[key] != e {
+		return true // a newer answer is installed; this one was still right
+	}
+	renewed := &answerEntry{done: make(chan struct{}), val: e.val, err: e.err, at: c.now(), ver: e.ver}
+	close(renewed.done)
+	c.m[key] = renewed
+	return true
+}
+
+// versioned makes c renew expired answers whose data version has not moved,
+// for at most recheck after each was computed. It returns c.
+func (c *answerCache) versioned(version func(context.Context) (int64, error), recheck time.Duration) *answerCache {
+	c.version, c.recheck = version, recheck
+	return c
+}
+
+func (c *answerCache) recheckAfter() time.Duration {
+	if c.recheck > 0 {
+		return c.recheck
+	}
+	return answerRecheck
+}
+
+// readVersion is the data version, or -1 when there is none to read.
+func (c *answerCache) readVersion(ctx context.Context) int64 {
+	if c.version == nil {
+		return -1
+	}
+	v, err := c.version(context.WithoutCancel(ctx))
+	if err != nil {
+		return -1
+	}
+	return v
 }
 
 // wait blocks until every background refresh started so far has finished.

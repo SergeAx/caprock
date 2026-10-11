@@ -271,3 +271,72 @@ func TestAnswerCacheKeepsTheStaleAnswerWhenARefreshFails(t *testing.T) {
 		t.Errorf("got %v, want the answer of the retried refresh", v)
 	}
 }
+
+func TestAnswerCacheRenewsWhileNothingWasWritten(t *testing.T) {
+	// The dashboard asks for all-time history every minute from five places.
+	// With no agent working nothing changed, and each ask past the TTL used to
+	// count the whole history again.
+	now := time.Unix(0, 0)
+	var ver atomic.Int64
+	c := newAnswerCache(3*time.Second, 30*time.Minute, func() time.Time { return now }).
+		versioned(func(context.Context) (int64, error) { return ver.Load(), nil }, 10*time.Minute)
+	var calls atomic.Int64
+	get := func() any {
+		t.Helper()
+		v, err := c.get(context.Background(), "all", func() (any, error) { return calls.Add(1), nil })
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.wait()
+		return v
+	}
+
+	get()
+	for range 5 {
+		now = now.Add(time.Minute)
+		get()
+	}
+	if n := calls.Load(); n != 1 {
+		t.Fatalf("computed %d times over five idle minutes, want 1", n)
+	}
+
+	// Something was written: the next ask is answered from the cache and one
+	// refresh counts it again, as before.
+	ver.Add(1)
+	now = now.Add(time.Minute)
+	get()
+	if n := calls.Load(); n != 2 {
+		t.Fatalf("computed %d times after a write, want 2", n)
+	}
+	if v := get(); v != int64(2) {
+		t.Fatalf("got %v after the refresh, want the recounted answer", v)
+	}
+
+	// Past the recheck an answer is counted again even on the same version:
+	// removing rows writes no event.
+	now = now.Add(11 * time.Minute)
+	get()
+	if n := calls.Load(); n != 3 {
+		t.Fatalf("computed %d times past the recheck, want 3", n)
+	}
+}
+
+func TestAnswerCacheTodayIsNeverServedStale(t *testing.T) {
+	// Today's cost is the figure people watch move: past its TTL with a write
+	// since, the caller waits for the new count rather than seeing the old one.
+	now := time.Unix(0, 0)
+	var ver atomic.Int64
+	c := newAnswerCache(todayTTL, todayTTL, func() time.Time { return now }).
+		versioned(func(context.Context) (int64, error) { return ver.Load(), nil }, time.Minute)
+	var calls atomic.Int64
+	_, _ = c.get(context.Background(), "today", func() (any, error) { return calls.Add(1), nil })
+	now = now.Add(5 * time.Second)
+	if v, _ := c.get(context.Background(), "today", func() (any, error) { return calls.Add(1), nil }); v != int64(1) {
+		t.Fatalf("got %v with nothing written, want the cached answer", v)
+	}
+	ver.Add(1)
+	now = now.Add(5 * time.Second)
+	if v, _ := c.get(context.Background(), "today", func() (any, error) { return calls.Add(1), nil }); v != int64(2) {
+		t.Fatalf("got %v after a write, want the new count", v)
+	}
+}

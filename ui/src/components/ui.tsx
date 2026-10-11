@@ -3,24 +3,65 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Health } from '@/lib/api'
 
-export function Panel({ title, center, right, children, className = '', onMouseEnter, onMouseLeave }: { title?: ReactNode; center?: ReactNode; right?: ReactNode; children: ReactNode; className?: string; onMouseEnter?: () => void; onMouseLeave?: () => void }) {
+/** Which folded panels are closed, by their `fold` key; kept per viewer. */
+export const PANEL_FOLDS_KEY = 'caprock.panel.folds'
+
+function readFolds(): Set<string> {
+  try {
+    const v = JSON.parse(localStorage.getItem(PANEL_FOLDS_KEY) ?? '[]') as unknown
+    return new Set(Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+
+/** Open or closed for one foldable panel, remembered across reloads. */
+export function usePanelFold(key: string | undefined): [boolean, () => void] {
+  const [closed, setClosed] = useState(() => (key ? readFolds().has(key) : false))
+  const toggle = () => {
+    if (!key) return
+    const next = readFolds()
+    if (closed) next.delete(key)
+    else next.add(key)
+    try { localStorage.setItem(PANEL_FOLDS_KEY, JSON.stringify([...next])) } catch { /* this page only */ }
+    setClosed(!closed)
+  }
+  return [!closed, toggle]
+}
+
+/**
+ * A titled panel. With `fold` (a key unique on the screen) its title folds the
+ * body away and back, remembered per viewer (owner, 2026-10-11, translated:
+ * "let me hide some blocks").
+ */
+export function Panel({ title, center, right, children, className = '', onMouseEnter, onMouseLeave, fold }: { title?: ReactNode; center?: ReactNode; right?: ReactNode; children: ReactNode; className?: string; onMouseEnter?: () => void; onMouseLeave?: () => void; fold?: string }) {
+  const [open, toggle] = usePanelFold(fold)
   return (
     <section
       className={`border border-border bg-panel rounded-[var(--radius-panel)] shadow-[var(--shadow-panel)] min-w-0 ${className}`}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
+      data-panel-fold={fold}
     >
       {(title || center || right) && (
         // The header sits on panel-2 so chrome reads as a recess rather than
         // as body text with a rule under it.
-        <header className="relative flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2 border-b border-border bg-panel-2/60 rounded-t-[var(--radius-panel)]">
-          <h2 className="text-[11px] uppercase tracking-[0.12em] text-fg-muted font-medium">{title}</h2>
+        <header className={`relative flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2 bg-panel-2/60 ${open ? 'border-b border-border rounded-t-[var(--radius-panel)]' : 'rounded-[var(--radius-panel)]'}`}>
+          <h2 className="text-[11px] uppercase tracking-[0.12em] text-fg-muted font-medium">
+            {fold ? (
+              <button type="button" onClick={toggle} aria-expanded={open} title={open ? 'Fold this panel' : 'Unfold this panel'}
+                className="inline-flex items-center gap-1.5 uppercase tracking-[0.12em] hover:text-fg">
+                <span aria-hidden className={`inline-block transition-transform motion-reduce:transition-none ${open ? 'rotate-90' : ''}`}>›</span>
+                {title}
+              </button>
+            ) : title}
+          </h2>
           {/* A middle slot for a control that governs the panel rather than
             * annotating it. Absolutely positioned so it centres on the panel,
             * not on the space left over between the title and the right-hand
             * note — those two differ in width, and a control that drifts as
             * the note changes reads as a rendering accident. */}
-          {center ? (
+          {center && open ? (
             // On a phone there is no room to centre it over the title and the
             // note, so it takes its own row underneath instead of covering them.
             <div className="order-last w-full sm:order-none sm:w-auto sm:absolute sm:left-1/2 sm:-translate-x-1/2">{center}</div>
@@ -28,7 +69,7 @@ export function Panel({ title, center, right, children, className = '', onMouseE
           <div className="min-w-0 text-[11px] text-fg-muted">{right}</div>
         </header>
       )}
-      <div>{children}</div>
+      {open && <div>{children}</div>}
     </section>
   )
 }
@@ -44,7 +85,7 @@ export function Stat({ label, value, sub, tone, size = 'default' }: {
   size?: 'hero' | 'default' | 'compact'
 }) {
   const toneCls = tone === 'ok' ? 'text-ok' : tone === 'warn' ? 'text-warn' : tone === 'danger' ? 'text-danger' : tone === 'info' ? 'text-info' : 'text-fg'
-  const valueCls = size === 'hero' ? 'text-[34px] leading-[1.05]' : size === 'compact' ? 'text-[17px] leading-tight' : 'text-[24px] leading-[1.1]'
+  const valueCls = size === 'hero' ? 'text-[34px] leading-[1.05]' : size === 'compact' ? 'text-[22px] leading-tight' : 'text-[28px] leading-[1.1]'
   return (
     // A column with the caption pushed to the bottom, so captions line up
     // across a row whatever sits above them. One tile's caption wrapping to two

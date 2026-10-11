@@ -21,6 +21,8 @@ import { colorOf, Donut, Ring, sharePct, topN, type Segment } from '@/components
 
 const OPEN_KEY = 'caprock-glance-open'
 const VIEW_KEY = 'caprock-glance-view'
+/** The agents row folded to one line of characters with their shares. */
+const AGENTS_KEY = 'caprock-glance-agents'
 
 function read(key: string, fallback: string): string {
   try { return localStorage.getItem(key) ?? fallback } catch { return fallback }
@@ -90,6 +92,7 @@ export function glanceCharts(h: History | undefined, g: Glance | undefined): Gla
 export function AtAGlancePanel() {
   const [open, setOpen] = useState(() => read(OPEN_KEY, '1') !== '0')
   const [view, setView] = useState<'charts' | 'numbers'>(() => (read(VIEW_KEY, 'charts') === 'numbers' ? 'numbers' : 'charts'))
+  const [agentsSmall, setAgentsSmall] = useState(() => read(AGENTS_KEY, 'cards') === 'icons')
   const h = useApi(() => api.history('all'), [], { intervalMs: 60000 })
   const g = useApi(() => api.glance(), [], { intervalMs: 60000 })
   const c = glanceCharts(h.data, g.data)
@@ -99,6 +102,7 @@ export function AtAGlancePanel() {
 
   const toggle = () => { const v = !open; setOpen(v); write(OPEN_KEY, v ? '1' : '0') }
   const pick = (v: 'charts' | 'numbers') => { setView(v); write(VIEW_KEY, v) }
+  const foldAgents = () => { const v = !agentsSmall; setAgentsSmall(v); write(AGENTS_KEY, v ? 'icons' : 'cards') }
   const lead = (segs: Segment[], total: number) => (segs[0] ? sharePct(segs[0].value, total) : '—')
   const readRe = c.bill.find((s) => s.key === 'cache_read')
 
@@ -135,8 +139,26 @@ export function AtAGlancePanel() {
             <Donut title="Most-used tools" segments={c.tools} center={lead(c.tools, c.toolTotal)} centerLabel={c.tools[0]?.label ?? ''}
               ariaLabel={`Tool calls by tool: ${c.tools.map((s) => `${s.label} ${s.display}, ${sharePct(s.value, c.toolTotal)}`).join('; ')}`} />
           </div>
-          {rows.length > 0 && (
-            <div className="flex flex-wrap gap-2.5 border-t border-border px-3 py-3">
+          {rows.length > 0 && agentsSmall && (
+            // Folded: each agent as its character and its share, one line
+            // (owner, 2026-10-11, translated: "fold blocks like DeepSeek's
+            // into an icon").
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border px-3 py-2" data-agents-folded>
+              {rows.map((r) => {
+                const share = sharePct(r.cost, agentTotal)
+                return (
+                  <span key={r.key} title={`${r.name}: ${r.turns.toLocaleString('en-US')} turns · ${fmtUSD(r.cost)} · ${share} of all-time spend`} className="inline-flex items-center gap-1.5">
+                    <AgentCharacter who={r.who} size={26} />
+                    <span className="num text-[12px] text-fg">{share}</span>
+                  </span>
+                )
+              })}
+              <button type="button" onClick={foldAgents} className="ml-auto text-[11px] text-fg-faint hover:text-accent">show cards</button>
+            </div>
+          )}
+          {rows.length > 0 && !agentsSmall && (
+            <div className="relative flex flex-wrap gap-2.5 border-t border-border px-3 py-3">
+              <button type="button" onClick={foldAgents} title="Fold the agents to icons" className="absolute right-3 top-1.5 text-[11px] text-fg-faint hover:text-accent">fold to icons</button>
               {rows.map((r) => {
                 // The ring is this agent's share of all-time spend across
                 // every agent. The owner read "81%" and could not tell of

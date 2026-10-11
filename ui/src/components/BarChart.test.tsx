@@ -54,7 +54,7 @@ describe('BarReadout', () => {
 
   it('shows that day’s figures while a bar is active', () => {
     render(<BarReadout bars={bars} active="2026-08-19" total={50} />)
-    expect(screen.getByText('2026-08-19')).toBeTruthy()
+    expect(screen.getByTitle('2026-08-19').textContent).toMatch(/^Wed 19 Aug · /)
     expect(screen.getByText('$40.00')).toBeTruthy()
     expect(screen.getByText('5 sessions')).toBeTruthy()
   })
@@ -85,5 +85,16 @@ describe('BarChart survives bad data', () => {
       (el) => (el as HTMLElement).style.height,
     )
     expect(heights.every((h) => h !== '' && !h.includes('NaN'))).toBe(true)
+  })
+})
+
+describe('the day readout', () => {
+  it('names the weekday and how long ago', async () => {
+    const { dayName, daysAgo } = await import('./BarChart')
+    expect(dayName('2026-08-07')).toBe('Fri 7 Aug')
+    const noon = new Date(2026, 9, 11, 15).getTime()
+    expect(daysAgo('2026-10-11', noon)).toBe('today')
+    expect(daysAgo('2026-10-10', noon)).toBe('yesterday')
+    expect(daysAgo('2026-08-07', noon)).toBe('65 days ago')
   })
 })

@@ -101,15 +101,15 @@ export function WorkMix({ summary }: { summary?: Summary }) {
   const colors = sliceColors(segs)
   const total = rows.reduce((a, w) => a + w.cost_usd, 0)
   return (
-    <Panel title="What it went on" right={<span title={WORK_RULE}>by cost</span>}>
+    <Panel fold="cost.work" title="What it went on" right={<span title={WORK_RULE}>by cost</span>}>
       {!s ? <Skeleton rows={4} /> : rows.length === 0 && <Empty title="No priced turns in range" />}
       <CutDonut segments={segs} what="kind of work" />
       <table className="w-full text-[12px]">
         <thead>
           <tr className="text-[10px] uppercase tracking-[0.08em] text-fg-faint">
             <th className="px-3 pb-1 text-left font-normal">work</th>
-            <th className="hidden px-3 pb-1 text-right font-normal 2xl:table-cell">turns</th>
-            <th className="hidden px-3 pb-1 text-right font-normal 2xl:table-cell">tokens</th>
+            <th className="hidden px-3 pb-1 text-right font-normal min-[2200px]:table-cell">turns</th>
+            <th className="hidden px-3 pb-1 text-right font-normal min-[2200px]:table-cell">tokens</th>
             <th className="px-3 pb-1 text-right font-normal">cost</th>
             <th className="px-3 pb-1 text-right font-normal">share</th>
           </tr>
@@ -120,8 +120,8 @@ export function WorkMix({ summary }: { summary?: Summary }) {
               <td className="px-3 py-1 whitespace-nowrap" title={LABELS[w.kind]?.title}>
                 <SliceDot color={colors.get(w.kind)} />{LABELS[w.kind]?.label ?? w.kind}
               </td>
-              <td className="hidden px-3 py-1 num text-right text-fg-muted whitespace-nowrap 2xl:table-cell">{w.turns.toLocaleString('en-US')}</td>
-              <td className="hidden px-3 py-1 num text-right text-fg-muted whitespace-nowrap 2xl:table-cell">{fmtTokens(w.tokens)}</td>
+              <td className="hidden px-3 py-1 num text-right text-fg-muted whitespace-nowrap min-[2200px]:table-cell">{w.turns.toLocaleString('en-US')}</td>
+              <td className="hidden px-3 py-1 num text-right text-fg-muted whitespace-nowrap min-[2200px]:table-cell">{fmtTokens(w.tokens)}</td>
               <td className="px-3 py-1 num text-right whitespace-nowrap">{fmtUSD(w.cost_usd)}</td>
               <td className="px-3 py-1 text-right text-fg-faint w-[5.5rem] whitespace-nowrap"><ShareBar value={w.cost_usd} total={total} color={colors.get(w.kind)} /></td>
             </tr>

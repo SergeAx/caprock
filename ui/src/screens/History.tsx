@@ -148,7 +148,7 @@ export function HistoryScreen() {
       {/* Money first and largest, on the left: it is what this screen is
         * opened for. Then the two figures that say what it means per unit of
         * work, then the cache, then the counts at reading size below. */}
-      <Panel title={`Lifetime · ${range}`} right={<span>everything you ran through Caprock · measured, not estimated</span>}>
+      <Panel fold="lifetime.totals" title={`Lifetime · ${range}`} right={<span>everything you ran through Caprock · measured, not estimated</span>}>
         <div className="grid sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr] divide-y sm:divide-y-0 sm:divide-x divide-border">
           <Big hero label={costLabel(plan)} tone="text-accent" value={measured ? fmtUSD(f.cost) : '—'}
             sub={<span title={costBasisLong(plan)}>{measured ? costBasis(plan) : 'nothing measured yet'}</span>} />
@@ -180,19 +180,20 @@ export function HistoryScreen() {
         * whole history, "clear, beautiful, real activity" (2026-10-11,
         * translated), was at the bottom of the page. */}
       <Panel
+        fold="lifetime.daily"
         title="Daily cost"
         right={<BarReadout bars={days} active={activeDay} total={days.reduce((a, x) => a + x.cost, 0)} />}
       >
         {!h.data ? <Skeleton rows={2} /> : days.length === 0 && <Empty title="No history yet" />}
         {days.length > 0 && (
-          <BarChart bars={days} active={activeDay} onActive={setActiveDay} height={72} showDayLabels={false} />
+          <BarChart bars={days} active={activeDay} onActive={setActiveDay} height={72} showDayLabels={false} axis />
         )}
       </Panel>
 
       {/* Top projects lead: "which repository did this go into" is the first
         * question after "how much". The donut gives the shape; the table
         * beside it the exact figures, every row with its share. */}
-      <Panel title="Top projects" right={<span>by cost</span>}>
+      <Panel fold="lifetime.projects" title="Top projects" right={<span>by cost</span>}>
         {!d ? <Skeleton rows={4} /> : f.projects.length === 0 ? <Empty title="No priced work in a project yet" /> : (
           <div className="grid gap-x-8 gap-y-4 px-3 py-3 md:grid-cols-[auto_1fr] items-center">
             <Donut title="" segments={f.projects} size={168} legend={false}
@@ -225,7 +226,7 @@ export function HistoryScreen() {
       </Panel>
 
       <div className="grid gap-3 lg:grid-cols-2">
-        <Panel title="Tool usage" right={<span className="text-[10px] uppercase tracking-[0.08em]">calls · open a row for detail</span>}>
+        <Panel fold="lifetime.tools" title="Tool usage" right={<span className="text-[10px] uppercase tracking-[0.08em]">calls · open a row for detail</span>}>
           {!d ? <Skeleton rows={5} /> : d.tools.length === 0 && <Empty title="No tool calls yet" />}
           {d && d.tools.length > 0 && view === 'charts' && (
             <div className="px-3 py-3">
@@ -257,7 +258,7 @@ export function HistoryScreen() {
           )}
         </Panel>
         <div className="grid gap-3 content-start">
-          <Panel title="Model mix" right={<span>by cost</span>}>
+          <Panel fold="lifetime.models" title="Model mix" right={<span>by cost</span>}>
             {!d ? <Skeleton rows={3} /> : d.summary.models.length === 0 && <Empty title="No priced turns" />}
             {d && f.models.length > 0 && view === 'charts' && (
               <div className="px-3 py-3">

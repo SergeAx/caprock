@@ -9,6 +9,14 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Changed
 
+- **Dashboard panels fold.** The arrow on a panel's title folds it to that
+  title and back, remembered; the agents row on Now folds to one line of
+  characters with their shares.
+- **Plan limits and the daily cap lead the Cost screen.** They were below the
+  month; they are what the screen is opened to check.
+- **Daily cost has a time axis.** Months and Monday ticks run under the
+  bars, and the hovered day reads as a weekday and how many days ago.
+- **Larger figures** in the dashboard's stat tiles.
 - **The version in the status bar opens what you need about updates.** A
   click shows whether a newer release is out and when Caprock last checked,
   the one-click update (or the command for how it was installed), the first

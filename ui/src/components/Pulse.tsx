@@ -125,6 +125,7 @@ export function PulsePanel({ sessions, now }: { sessions: SessionSummary[]; now:
 
   return (
     <Panel
+      fold="now.pulse"
       title="Live pulse"
       right={<span className="text-[11px] text-fg-faint">last {PULSE_MINUTES} minutes · one bar per minute</span>}
     >

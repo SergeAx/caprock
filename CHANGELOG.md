@@ -18,6 +18,16 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   changed, what it has cost so far and how long it has run, with *Open* and
   *Review changes* on each. Nothing is merged for you; keep the one you want.
 
+- **Clean up copies.** A project's ⋯ menu, or ⌘K → *Clean up copies…*,
+  lists every git worktree of the project with its branch, last commit, size
+  on disk and whether it is merged, pushed, has uncommitted changes or has an
+  agent running in it, plus the total the copies take. Tick the ones you are
+  done with (*Select merged and clean* picks those that lose nothing) and
+  remove them, optionally with their merged branches. Only copies Caprock
+  made are removed, never the main checkout; one with work not saved
+  anywhere else asks again and says exactly what would be lost, and one with
+  a session running in it stays.
+
 - **Saved prompts and commands.** Save what you type over and over — *Run the
   tests and fix what fails*, or a shell line like `pnpm dev` — with a name,
   for every project or for one (Settings → *Saved prompts and commands*).

@@ -2,7 +2,7 @@
  * A project's menu in the app's sidebar: its row's ⋯ button, a right-click
  * on the row, or Shift+F10 / the context-menu key on it. Hide it from the
  * list (or show it again), close every tab of it, open its folder in an
- * editor, or remove it from Caprock.
+ * editor, clean up its copies (worktrees), or remove it from Caprock.
  *
  * Closing tabs never stops anything: the sessions and shells in them keep
  * running, as with ⌘W (rule 7: nothing here signals a process). Removing
@@ -14,7 +14,7 @@
  */
 import { useState } from 'react'
 import { errText, type EditorList } from '@/lib/api'
-import { CloseIcon, ExternalIcon, EyeIcon, EyeOffIcon, TrashIcon } from './AppIcons'
+import { BranchIcon, CloseIcon, ExternalIcon, EyeIcon, EyeOffIcon, TrashIcon } from './AppIcons'
 import { MenuBox, MenuItem as Item, MenuSeparator as Separator } from './RowMenu'
 
 export interface ProjectMenuAt {
@@ -35,6 +35,10 @@ export interface ProjectMenuProps {
   onHide?: (hide: boolean) => void
   onCloseTabs: () => void
   onOpenInEditor?: (editorId: string) => void
+  /** Opens Clean up copies (components/CopiesSheet); absent for a folder that is not a repository. */
+  onCopies?: () => void
+  /** Linked worktrees it has, for the hint beside Clean up copies. */
+  copies?: number
   /** Unlists it; absent where it cannot be removed (Other folders). */
   onRemove?: () => Promise<void> | void
   onClose: () => void
@@ -97,6 +101,14 @@ export function ProjectMenu(props: ProjectMenuProps) {
             disabled={tabs === 0}
             onClick={pick(props.onCloseTabs)}
           />
+          {props.onCopies && (
+            <Item
+              icon={<BranchIcon size={14} />}
+              label="Clean up copies…"
+              hint={props.copies ? (props.copies === 1 ? '1 copy' : `${props.copies} copies`) : 'sizes, merged'}
+              onClick={pick(props.onCopies)}
+            />
+          )}
           {ordered.length > 0 && props.onOpenInEditor && (
             <>
               <Separator />

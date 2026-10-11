@@ -12,6 +12,7 @@
  */
 import { ApiError, deviceToken, type SessionSummary } from './api'
 import { branchLabel, uniqueSuffixes } from './sessionLabels'
+import type { CopiesView, CopyRemoved } from './copies'
 
 export interface Worktree {
   /** The worktree's name: git's name for it, or `main` for the primary checkout. */
@@ -323,6 +324,20 @@ export const projectsApi = {
   },
   removeWorktree: (id: string, name: string) =>
     call<void>('Removing a worktree', `/v1/projects/${encodeURIComponent(id)}/worktrees/${encodeURIComponent(name)}`, { method: 'DELETE', body: {} }),
+  /** GET /v1/projects/{id}/copies: every worktree, the main checkout first, with state and size (lib/copies). */
+  copies: async (id: string): Promise<CopiesView> => {
+    const v = await call<CopiesView>('Copies', `/v1/projects/${encodeURIComponent(id)}/copies`)
+    const copies = Array.isArray(v?.copies) ? v.copies.filter((c) => c && typeof c.path === 'string').map((c) => ({ ...c, live: Array.isArray(c.live) ? c.live : [] })) : []
+    return { ...v, copies, total: typeof v?.total === 'number' ? v.total : 0, has_remote: !!v?.has_remote }
+  },
+  /** POST /v1/projects/{id}/copies/remove: one result per copy asked for. */
+  removeCopies: async (id: string, copies: { path: string; force?: boolean }[], deleteMergedBranches: boolean): Promise<CopyRemoved[]> => {
+    const v = await call<{ results?: CopyRemoved[] }>('Removing copies', `/v1/projects/${encodeURIComponent(id)}/copies/remove`, {
+      method: 'POST',
+      body: { copies, delete_merged_branches: deleteMergedBranches },
+    })
+    return Array.isArray(v?.results) ? v.results : []
+  },
   /** POST /v1/shells: a login shell under a pty-host, attached like a session. */
   startShell: async (req: ShellRequest): Promise<ApiShell> => {
     const v = await call<{ shell?: ApiShell }>('Shell tabs', '/v1/shells', { method: 'POST', body: req })

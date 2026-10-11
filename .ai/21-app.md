@@ -247,7 +247,9 @@ One window, three regions:
   again, close its tabs (the `close-project` workspace action drops every
   tab whose `projectId` it is, splits included; nothing is signalled, so the
   sessions and shells keep running — rule 7), *Open in* each editor from
-  `GET /v1/editors`, and *Remove from Caprock…*, which confirms inline and
+  `GET /v1/editors`, *Clean up copies…* for a repository (every worktree
+  with its state and size, removing Caprock's; `CopiesSheet.tsx`,
+  [04-ui.md](04-ui.md)), and *Remove from Caprock…*, which confirms inline and
   then unlists (`DELETE /v1/projects/{id}`, or the page's local list on a
   derived source) and closes the project's tabs. There is no "Open in
   Finder": no endpoint reveals a folder, and the editors cover opening it.

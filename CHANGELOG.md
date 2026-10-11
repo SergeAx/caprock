@@ -21,6 +21,9 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   current pace runs out first. A click shows the details; the plan itself
   is in the header, to confirm or change.
 
+- **app:** the update card says it in one line, large — *Update 0.107.6 →
+  0.107.7* — with one short line under it and bigger buttons.
+
 ### Changed
 
 - **app:** the version panel is the version, whether it is current, when it

@@ -73,6 +73,14 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-11 — 0.104.0: queued messages, / and @ pickers
+
+A message sent mid-turn from the chat field (phone or desktop) waits in a
+daemon-side queue and goes in one per turn, on the session's Stop hook,
+never into a prompt on screen (ADR-053). The chat field gains / (commands
+and skills) and @ (files) pickers. The desktop app compares its bundled
+daemon in chunks instead of reading it whole.
+
 ### 2026-10-11 — unreleased: queued messages and the `/` and `@` pickers
 
 The chat field's two Orca gaps, phone first ([ADR-053](08-decisions.md)).

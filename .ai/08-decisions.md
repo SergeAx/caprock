@@ -2606,6 +2606,63 @@ daemon, on a timer).
 **Revisit if** Claude Code or Codex add a documented account switch that does
 not move the whole configuration directory, or stop keying credentials to it.
 
+## ADR-049 — Caprock keeps the computer awake while agents work; on by default
+
+**Date:** 2026-10-11 · **Status:** accepted
+
+An agent left on a long task overnight stops when the Mac idles to sleep, and
+the morning finds half a run. Orca, a competitor, offers *on / while working /
+off*. Caprock already knows which sessions are working, of every agent and
+whoever started them, so it is the right place to hold the machine awake.
+
+**Decision.**
+
+- **Three modes**, `keep_awake` in `config.json`: *Off*, *While agents work*
+  and *Always* (while Caprock runs). Settings → *Keep awake*.
+- **Idle system sleep only, never display sleep.** The screen still dims and
+  locks, and a laptop's lid still sleeps it. macOS: `caffeinate -i -w <daemon
+  pid>`, a child that exits with the daemon, crash included. Windows:
+  `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)` from one OS
+  thread kept for the purpose; Windows drops it when the process exits.
+  Linux: `systemd-inhibit --what=idle:sleep --mode=block` around a shell loop
+  that ends once the daemon's pid is gone; without `systemd-inhibit` the
+  setting says it cannot, rather than pretending.
+- **Working** means a session, of any agent, whose turn is in progress: the
+  main thread mid-turn, subagents still at work after it, or a permission
+  dialog waiting for an answer — the machine must stay reachable for an
+  approval sent from the phone. A finished turn waiting for the next prompt
+  does not count. Thirty minutes of silence ends it whatever the last event
+  said: a tool call in flight sends nothing until it returns, so a long
+  build is believed for half an hour, and a session whose process died
+  mid-turn stops holding the machine after that.
+- **The daemon checks every 15 seconds** and on a changed setting at once,
+  takes the assertion when wanted and releases it when not, and on exit.
+- **Nothing here may break anything.** The OS call sits behind an interface;
+  a helper that will not start is logged once, reported on the setting, and
+  tried again after five minutes; one that dies on its own counts as a
+  failure, not a hold. A failed query counts as nothing working, so a
+  broken check lets go rather than holding forever. Tests never run the
+  real helpers; the smoke run and in-process test daemons get no holder.
+- **Default: *While agents work*.** It is safe because it is narrow: idle
+  sleep only, released within a check of the last agent stopping, bounded by
+  the half-hour silence rule, never across a closed lid, and costing one
+  sleeping child process (none on Windows) only while held. Off by default
+  would leave the feature where nobody finds it until a night's run is lost,
+  which is the complaint it answers. A status-strip mark (*awake*, a cup)
+  says when it is holding, so the machine staying up is never unexplained.
+
+**Not rule 7.** Nothing is signalled or typed into an agent: the only
+process Caprock stops here is the helper it started.
+
+**Rejected.** IOPMAssertion through cgo (the binary is static and
+cgo-free; `caffeinate` does the same through the same API); holding display
+sleep too (a screen left on all night is a battery and a privacy cost the
+user did not ask for); counting a session waiting at the prompt as working
+(it would hold the machine for as long as a terminal stayed open).
+
+**Revisit if** users report the machine staying up when nothing visibly
+works, or ask for the display to stay on as well.
+
 ## ADR-050 — A new copy is ready to run: .worktreeinclude files come along, and a project's setup command runs in the agent's terminal first
 
 **Date:** 2026-10-11 · **Status:** accepted

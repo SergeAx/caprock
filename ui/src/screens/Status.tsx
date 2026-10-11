@@ -40,6 +40,7 @@ import { DefaultFolderSetting } from '@/components/DefaultFolderSetting'
 import { CustomAgentsSetting } from '@/components/CustomAgentsSetting'
 import { SubscriptionsSetting } from '@/components/SubscriptionsSetting'
 import { SpawnModeSetting } from '@/components/SpawnModeSetting'
+import { KeepAwakeSetting } from '@/components/KeepAwake'
 import { GitHubSettings } from '@/components/GitHubSettings'
 import { WindowStopSetting } from '@/components/WindowStopSetting'
 import { Locked } from '@/components/Locked'
@@ -93,6 +94,7 @@ export function StatusScreen() {
       {isAppMode() && (
         <>
           {owner && <SpawnModeSetting />}
+          {owner && <KeepAwakeSetting />}
           <AppearanceSection />
           {/* The phone high up: eighth of eleven, people asked where it was. */}
           {owner && <Pairing />}
@@ -120,6 +122,7 @@ export function StatusScreen() {
           {owner && <WindowStopSection />}
           <AppearanceSection />
           {owner && <SpawnModeSetting />}
+          {owner && <KeepAwakeSetting />}
           {owner && <EditorSetting />}
           {owner && <DefaultFolderSetting />}
           {owner && <SubscriptionsSetting />}

@@ -398,6 +398,14 @@ it: nothing that updates behind the sheet takes it from the field you are in.
   the window up from any app, and hides it when it is already in front.
   Change it or turn it off in Settings → *Global shortcut*. Wayland does not
   give apps global shortcuts; the tray's *Show Caprock* still works there.
+- **Keeping the computer awake.** While an agent is working or waiting for
+  your approval, Caprock stops the computer from falling asleep for
+  inactivity, and lets it sleep again once nothing works (or after half an
+  hour without a word from a session). The screen can still turn off, and
+  closing a laptop's lid still sleeps it. *awake* with a cup in the status
+  bar says it is happening. Settings → *Keep awake* turns it off or keeps the
+  computer awake for as long as Caprock runs. On Linux it needs
+  `systemd-inhibit`.
 - **Closing the window.** On macOS Caprock stays in the menu bar; ⌘Q quits.
   On Windows and Linux closing quits. Quitting never stops the daemon or a
   session.

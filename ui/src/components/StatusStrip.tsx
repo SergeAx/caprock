@@ -1,7 +1,7 @@
 /**
  * The status strip along the bottom of the app (.ai/21-app.md § What the user
- * sees): the connection, the plan limits, today's spend, and the terminal in
- * front. Read-only; each figure is the dashboard's own. The plan limits and
+ * sees): the connection, the plan limits, today's spend, the terminal in
+ * front, and a mark while Caprock keeps the computer awake. Read-only; each figure is the dashboard's own. The plan limits and
  * the spend show only while the sidebar is closed: open, its Today strip
  * carries them, and the same figures twice on one screen read as two.
  */
@@ -18,6 +18,7 @@ import type { PaneStatus } from './TerminalPane'
 import { ConnectionState } from './ConnectionState'
 import { AppUpdateNotice } from './AppUpdateNotice'
 import { StaleUiPill } from './StaleUiPill'
+import { KeepAwakeIndicator } from './KeepAwake'
 import { SessionLoad } from './ResourceMeter'
 import { useAppUpdate } from '@/lib/appupdate'
 
@@ -69,6 +70,8 @@ export function StatusStrip({ summary, pane, session, version, figures = true }:
         {pane && pane.status !== 'live' && (
           <span title="The terminal in front">{pane.status}</span>
         )}
+        {/* Only while the daemon holds the machine awake (ADR-049). */}
+        <KeepAwakeIndicator />
         <StaleUiPill />
         <AppUpdateNotice />
         {shown && (

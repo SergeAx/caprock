@@ -42,6 +42,7 @@ import (
 	"github.com/dspv/caprock/internal/hookd"
 	"github.com/dspv/caprock/internal/hooks"
 	"github.com/dspv/caprock/internal/ingest"
+	"github.com/dspv/caprock/internal/keepawake"
 	"github.com/dspv/caprock/internal/lan"
 	"github.com/dspv/caprock/internal/license"
 	"github.com/dspv/caprock/internal/logcap"
@@ -118,6 +119,10 @@ type Options struct {
 	HolderExe string
 	// OnReady is called once the server is listening (with the bound URL).
 	OnReady func(url string)
+	// KeepAwake holds the computer awake while agents work (ADR-049).
+	// cmd/caprock passes keepawake.NewOS(); nil — tests, the smoke run —
+	// reports the feature unavailable and never touches the OS.
+	KeepAwake keepawake.Holder
 }
 
 // Daemon is a running instance.
@@ -190,6 +195,9 @@ type Daemon struct {
 	cap *cap.Guard
 	// winStop is the plan-window stop (Premium), built beside the cap.
 	winStop *cap.WindowGuard
+	// awake keeps the computer from idle-sleeping while agents work
+	// (keepawake.go); never nil once run() has started.
+	awake *keepawake.Keeper
 	// cfgMu guards opt.Config, which the settings endpoint mutates at runtime.
 	cfgMu sync.RWMutex
 	// hiveMu guards board, orch and opt.HiveDir/opt.RepoCwd. The task runner can
@@ -527,6 +535,7 @@ func (d *Daemon) run(ctx context.Context) error {
 		Store: d.store, Bus: d.bus, Table: d.table, Log: d.log, Hook: hh, Version: d.opt.Version, Reporter: d, Alerts: d, Telegram: d.tg,
 		Status: d.status, InstallHooks: d.installHooks, BypassAccepted: bypassAccepted, AcceptBypass: acceptBypass, Storage: d.storageReport, WindowStop: d.windowStopStatus,
 		Resources:   d.resources,
+		KeepAwake:   d.keepAwakeStatus,
 		ReapOrphans: func(ctx context.Context) (any, error) { return d.reapOrphans(ctx, true) },
 		RateLimitsRecorded: func(ctx context.Context) {
 			if d.winStop != nil {
@@ -674,6 +683,7 @@ func (d *Daemon) run(ctx context.Context) error {
 	d.relink(ctx, reattached)
 
 	go d.sweep(ctx)
+	d.startKeepAwake(ctx)
 	d.loadReportState(ctx)
 	go d.weeklyLoop(ctx)
 	go d.backfillToolLinks(ctx)
@@ -1431,6 +1441,7 @@ func (a *settingsAdapter) Get() api.Settings {
 		Prompts:          maps.Clone(c.Prompts),
 		AlertLastError:   alertErr,
 		AlertLastSentMs:  alertSent,
+		KeepAwake:        keepawake.Normalize(c.KeepAwake),
 	}
 }
 
@@ -1480,6 +1491,14 @@ func (a *settingsAdapter) Set(in api.Settings) error {
 	a.d.opt.Config.NotifyApproval = &notifyApproval
 	a.d.opt.Config.NotifyFinished = &notifyFinished
 	a.d.opt.Config.Prompts = maps.Clone(in.Prompts)
+	// Stored only when it changes, so an install that never chose keeps
+	// following the default rather than having it written down by the next
+	// unrelated save (GET returns the effective mode, and a screen writes
+	// back what it read).
+	keepAwakeChanged := in.KeepAwake != "" && in.KeepAwake != keepawake.Normalize(a.d.opt.Config.KeepAwake)
+	if keepAwakeChanged {
+		a.d.opt.Config.KeepAwake = in.KeepAwake
+	}
 	cfg := a.d.opt.Config
 	a.d.cfgMu.Unlock()
 	if capChanged && a.d.cap != nil {
@@ -1488,6 +1507,10 @@ func (a *settingsAdapter) Set(in api.Settings) error {
 	if a.d.tg != nil {
 		// A switch turned or a bot cleared: start or stop reading updates.
 		defer a.d.tg.Wake()
+	}
+	if keepAwakeChanged && a.d.awake != nil {
+		// Take or let go of the hold now, not at the next tick.
+		a.d.awake.Wake()
 	}
 	if windowChanged && a.d.winStop != nil {
 		// The next tick or status-line sample checks against the new share.

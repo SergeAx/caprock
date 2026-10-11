@@ -15,6 +15,14 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   still sleeps it. *awake* in the status bar says when it is holding.
   Settings → *Keep awake*: Off, While agents work (the default), or Always.
 
+- **New copies are ready to run.** A new copy of a branch from *New agent*
+  (or the sidebar) gets the ignored files your repository lists in
+  `.worktreeinclude`, such as `.env`, copied from the project's folder. Give
+  a project a setup command (*Setup*, under the new copy in *New agent*), such
+  as `npm install`, and it runs in the agent's terminal before the agent
+  starts, with its output there; Ctrl+C skips it, and a failure or ten
+  minutes starts the agent anyway.
+
 ## [0.101.3] - 2026-10-11
 
 ### Changed

@@ -622,3 +622,34 @@ func TestCloneMakesMissingParentsAndExpandsHome(t *testing.T) {
 		t.Fatalf("parent not created: %v", err)
 	}
 }
+
+// A project's setup command is stored trimmed, read for any folder inside the
+// project, refused over the limit, and kept beside the other defaults.
+func TestProjectSetupCommand(t *testing.T) {
+	needGit(t)
+	repo := newRepo(t, filepath.Join(t.TempDir(), "p"))
+	s, _, _ := newService(t)
+	start(t, s)
+	v, _, _ := s.Add(context.Background(), repo)
+	if got := s.SetupCommand(repo); got != "" {
+		t.Fatalf("a new project has a setup command: %q", got)
+	}
+	d := jsonRaw(`{"system_prompt":"Use make.","setup_command":"  npm install\n"}`)
+	if _, err := s.Update(context.Background(), v.ID, Patch{Defaults: &d}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.SetupCommand(filepath.Join(repo, "sub")); got != "npm install" {
+		t.Fatalf("setup command = %q", got)
+	}
+	if got := s.SystemPrompt(repo); got != "Use make." {
+		t.Fatalf("instructions lost beside the setup command: %q", got)
+	}
+	p, _ := s.Project(v.ID)
+	if SetupCommandOf(p.Defaults) != "npm install" {
+		t.Fatalf("SetupCommandOf(%q)", p.Defaults)
+	}
+	long := jsonRaw(`{"setup_command":"` + strings.Repeat("x", 5000) + `"}`)
+	if _, err := s.Update(context.Background(), v.ID, Patch{Defaults: &long}); err == nil {
+		t.Fatal("a setup command over the limit was accepted")
+	}
+}

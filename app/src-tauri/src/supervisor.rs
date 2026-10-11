@@ -641,10 +641,32 @@ pub fn version_of(s: &str) -> &str {
 }
 
 /// Whether two files have the same bytes; false when either cannot be read.
+///
+/// Compared in small chunks, never read whole: the daemon is tens of
+/// megabytes, and reading it (twice) into memory on every start left the
+/// app's footprint that much higher afterwards.
 fn same_file(a: &Path, b: &Path) -> bool {
-    match (std::fs::read(a), std::fs::read(b)) {
-        (Ok(x), Ok(y)) => x == y,
-        _ => false,
+    use std::io::Read;
+    let (Ok(fa), Ok(fb)) = (std::fs::File::open(a), std::fs::File::open(b)) else {
+        return false;
+    };
+    match (fa.metadata(), fb.metadata()) {
+        (Ok(ma), Ok(mb)) if ma.len() == mb.len() => {}
+        _ => return false,
+    }
+    let (mut ra, mut rb) = (std::io::BufReader::new(fa), std::io::BufReader::new(fb));
+    let (mut ba, mut bb) = ([0u8; 64 * 1024], [0u8; 64 * 1024]);
+    loop {
+        let n = match ra.read(&mut ba) {
+            Ok(n) => n,
+            Err(_) => return false,
+        };
+        if n == 0 {
+            return true;
+        }
+        if rb.read_exact(&mut bb[..n]).is_err() || ba[..n] != bb[..n] {
+            return false;
+        }
     }
 }
 
@@ -682,9 +704,13 @@ pub fn install_bin(src: &Path, dst: &Path) -> Result<(), String> {
 /// Copies `src` to `dst` when it differs, atomically (write a sibling, then
 /// rename over: a running binary is never written in place).
 fn copy_bin(src: &Path, dst: &Path) -> Result<(), String> {
-    let want = std::fs::read(src)
-        .map_err(|e| format!("read the bundled daemon {}: {e}", src.display()))?;
-    if std::fs::read(dst).is_ok_and(|have| have == want) {
+    if !src.is_file() {
+        return Err(format!(
+            "read the bundled daemon {}: not a file",
+            src.display()
+        ));
+    }
+    if same_file(src, dst) {
         return Ok(());
     }
     let dir = dst.parent().ok_or("no bin directory")?;
@@ -695,7 +721,7 @@ fn copy_bin(src: &Path, dst: &Path) -> Result<(), String> {
         .unwrap_or(EXE)
         .to_owned();
     let tmp = dir.join(format!(".{name}.new"));
-    std::fs::write(&tmp, &want).map_err(|e| format!("write {}: {e}", tmp.display()))?;
+    std::fs::copy(src, &tmp).map_err(|e| format!("write {}: {e}", tmp.display()))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -797,6 +823,25 @@ mod tests {
             State::FirstRun
         );
         assert_eq!(s.settings(), None);
+    }
+
+    #[test]
+    fn same_file_compares_bytes_across_chunks() {
+        let s = sup("same");
+        std::fs::create_dir_all(&s.data_dir).unwrap();
+        let p = |n: &str| s.data_dir.join(n);
+        let (a, b, c) = (p("a"), p("b"), p("c"));
+        let big: Vec<u8> = (0..200_000u32).map(|i| (i % 251) as u8).collect();
+        std::fs::write(&a, &big).unwrap();
+        std::fs::write(&b, &big).unwrap();
+        let mut other = big.clone();
+        other[150_000] ^= 1;
+        std::fs::write(&c, &other).unwrap();
+        assert!(same_file(&a, &b));
+        assert!(!same_file(&a, &c));
+        assert!(!same_file(&a, &p("missing")));
+        std::fs::write(&c, &big[..1000]).unwrap();
+        assert!(!same_file(&a, &c));
     }
 
     #[test]

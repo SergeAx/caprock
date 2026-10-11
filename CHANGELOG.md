@@ -7,6 +7,13 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Changed
+
+- **The desktop app no longer reads its daemon whole to see whether it
+  changed.** On every start it compared the bundled daemon and terminal
+  holder with the installed copies by reading each file into memory; it now
+  compares them in small chunks and copies with the file system.
+
 ## [0.103.0] - 2026-10-11
 
 ### Added

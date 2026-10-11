@@ -344,11 +344,20 @@ One window, three regions:
   *Thinking after …* with its clock; taller, the last three calls), *Spent*
   (`stats.cost_usd`, the last priced call; taller, turns and tool calls),
   *Context* (`context.pct`, the bar, `next_call_usd`; taller, tokens of the
-  window), *Plan* (the agent's 5-hour and weekly windows, `planWindowsFor`;
-  taller, the reset clock), *Changes* (the sidebar's `changed` for the
-  session's worktree, taller only) and the session's last hour as one bar
-  per minute (`buildPulse` and the Now screen's `PulseCanvas` over the
-  main thread's calls and turns). A figure the agent does not report is
+  window), *Branch* (the sidebar's branch for the session's checkout, how
+  many files are not committed and commits not pushed, *Review changes*)
+  and *Pull requests* — the session's latest three (`session_prs`) with
+  their CI and review from `GET /v1/sessions/{id}/prs`, a dot per PR
+  (green passed, amber running, red failed or changes requested, violet
+  merged), a click opens it on GitHub. Asked every 20 s while a check runs,
+  else every minute, never while the window is hidden; the daemon keeps
+  each PR as long, so a poll costs GitHub nothing. While GitHub is not
+  connected the rows show what the session recorded (open, merged) and
+  *connect GitHub for CI* turns the integration on through the `gh` login
+  in one click (ADR-047: this click is the user turning it on), else opens
+  Settings. The minute chart and the plan windows left the deck on
+  2026-10-11 (owner, translated: "we already have charts everywhere"; the
+  sidebar carries the plan windows). A figure the agent does not report is
   left out, never drawn as zero. The bars cover the hour only while the 400
   calls and turns held reach back that far; when they do not, the window
   starts at the oldest one held and says so (*Last 23 min*), rather than

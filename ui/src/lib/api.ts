@@ -1,6 +1,7 @@
 // Typed client for the daemon API (.ai/03-contracts.md § HTTP API). snake_case
 // on the wire, kept as-is in the types so the contract is visible in the code.
 import type { ReapResult, ResourceReport } from './resources'
+import type { PullRequest } from './github'
 
 export type Health = 'working' | 'idle' | 'waiting-on-you' | 'looping' | 'error' | 'ended'
 
@@ -406,6 +407,12 @@ export interface RepoLink {
 }
 
 /** A pull request a session opened or merged, from its own `gh pr` output. */
+/** One of a session's PRs with what GitHub says of it now (`GET /v1/sessions/{id}/prs`). */
+export interface SessionPRLive extends SessionPR {
+  /** Absent while GitHub is not connected or could not be read. */
+  live?: PullRequest
+  error?: { message: string }
+}
 export interface SessionPR {
   session_id: string
   url: string
@@ -1275,6 +1282,8 @@ export const api = {
   /** The subagents working in a session now, and how many finished lately. */
   subagents: (id: string) => get<SubagentsNow>(`/v1/sessions/${encodeURIComponent(id)}/subagents`),
   diff: (id: string) => get<DiffResult>(`/v1/sessions/${encodeURIComponent(id)}/diff`),
+  /** The session's latest PRs, with CI and review when GitHub is connected (the session deck). */
+  sessionPRs: (id: string) => get<{ connected: boolean; prs: SessionPRLive[] }>(`/v1/sessions/${encodeURIComponent(id)}/prs`),
   notes: (id: string, limit = 200) => get<AssistantNote[]>(`/v1/sessions/${encodeURIComponent(id)}/notes?limit=${limit}`),
   /** `before` pages backwards: pass the lowest event_id already shown. */
   searchNotes: (q: string, limit = 100, before = 0) =>

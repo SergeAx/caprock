@@ -7,10 +7,12 @@
  * this new area show data useful to me while I work"), and the room it makes
  * carries the session's live figures in one dense row: what it is doing now,
  * what it has cost and what the next call costs, how full its context is,
- * the plan windows, and its last hour as one bar per minute.
+ * the branch with what is not committed or pushed, and the session's latest
+ * pull requests with their CI. No chart: the dashboard has those (owner,
+ * 2026-10-11: "we already have charts everywhere").
  *
- * Every figure is one the workspace already holds: the session row the sidebar
- * polls, the day's summary, and the session's own calls and turns — fetched
+ * Every figure but the pull requests' is one the workspace already holds: the
+ * session row the sidebar polls and the session's own calls and turns — fetched
  * once and followed on the live socket, shared with the cockpit
  * (lib/sessionEvents.ts). Nothing is estimated, and a figure the agent does
  * not report is left out rather than drawn as zero.
@@ -22,19 +24,16 @@
  * frame. Arrow keys on the divider settle the same way.
  */
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import type { RateWindow, SessionSummary, Summary } from '@/lib/api'
-import { useSessionEvents, EVENTS_HELD } from '@/lib/sessionEvents'
+import { api, type SessionPRLive, type SessionSummary, type Summary } from '@/lib/api'
+import { useSessionEvents } from '@/lib/sessionEvents'
 import { useNow } from '@/lib/useNow'
 import { fmtPct, fmtTokens, fmtUSD } from '@/lib/format'
-import { cockpitState, fmtRun, planWindowsFor, runningTool, toolRuns, turnCosts, type CockpitState, type ToolRun } from '@/lib/cockpit'
-import { buildPulse, windowCost, windowEvents } from '@/lib/pulse'
-import { DECK_DEFAULT, DECK_MAX_SHARE, DECK_TALL, clampDeck, deckKeyStep, pulseMinutes } from '@/lib/deck'
-import { readWindow } from './PlanLimits'
-import { PulseCanvas } from './Pulse'
-import { agentName } from './Characters'
+import { cockpitState, fmtRun, runningTool, toolRuns, turnCosts, type CockpitState, type ToolRun } from '@/lib/cockpit'
+import { DECK_DEFAULT, DECK_MAX_SHARE, DECK_TALL, clampDeck, deckKeyStep } from '@/lib/deck'
+import { githubApi, prTone, type PRTone } from '@/lib/github'
+import { openExternal } from '@/lib/nudges'
 import { CloseIcon } from './AppIcons'
 import { keys } from '@/lib/appkeys'
-import { countdown, resetClock } from '@/lib/limitclock'
 
 /** How long arrow keys on the divider rest before the terminal is fitted to the new height. */
 export const KEY_SETTLE_MS = 250
@@ -63,6 +62,9 @@ export interface SessionDeckProps {
   summary?: Summary
   /** Files changed in the session's checkout, as the sidebar counts them; absent when not known. */
   changed?: number
+  /** The checkout's branch and commits not pushed, as the sidebar knows them. */
+  branch?: string
+  ahead?: number
   onReviewChanges?: () => void
   /** The height kept, in CSS pixels. */
   height: number
@@ -163,19 +165,13 @@ export function SessionDeck(props: SessionDeckProps) {
   )
 }
 
-function DeckBody({ s, sessionId, hasPermission, summary, changed, onReviewChanges, onClose, tall }: SessionDeckProps & { tall: boolean }) {
+function DeckBody({ s, sessionId, hasPermission, changed, branch, ahead, onReviewChanges, onClose, tall }: SessionDeckProps & { tall: boolean }) {
   const main = useSessionEvents(sessionId)
   const now = useNow(1000)
   const runs = useMemo(() => toolRuns(main), [main])
   const turns = useMemo(() => turnCosts(main), [main])
   const state = cockpitState(s, hasPermission)
   const running = state === 'working' || state === 'looping' ? runningTool(runs, now) : undefined
-  const plan = planWindowsFor(s.agent, summary)
-  // Rounded to the minute, as on the Now screen, so the bars are rebuilt once
-  // a minute and when an event arrives, not every second.
-  const minute = Math.floor(now / 60_000) * 60_000
-  const minutes = pulseMinutes(main, minute, EVENTS_HELD)
-  const pulse = useMemo(() => buildPulse([...main], minute, minutes), [main, minute, minutes])
   const st = s.stats
   const last = turns[turns.length - 1]
   const ctx = s.context
@@ -198,31 +194,8 @@ function DeckBody({ s, sessionId, hasPermission, summary, changed, onReviewChang
         </Cell>
       )}
       {ctx && <Context ctx={ctx} tall={tall} />}
-      {plan && (
-        <Cell label="Plan" className="w-[176px] shrink-0" below={720} right={<span title={`Every ${agentName(s.agent ?? 'claude')} session shares these windows`}>all sessions</span>}>
-          {plan.five_hour && <Window label="5-hour" w={plan.five_hour} now={now} tall={tall} />}
-          {plan.seven_day && <Window label="Weekly" w={plan.seven_day} now={now} tall={tall} />}
-        </Cell>
-      )}
-      {tall && typeof changed === 'number' && (
-        <Cell label="Changes" className="w-[100px] shrink-0" below={1000}>
-          <p className="num text-[15px] font-medium leading-tight text-fg">{changed} {changed === 1 ? 'file' : 'files'}</p>
-          {onReviewChanges && changed > 0 && (
-            <button type="button" onClick={onReviewChanges} className="w-fit text-left text-[11px] text-accent underline-offset-2 hover:underline">Review</button>
-          )}
-        </Cell>
-      )}
-      <Cell
-        label={`Last ${minutes} min`}
-        className="min-w-[188px] flex-[2.2_1_0]"
-        right={windowEvents(pulse) > 0 ? <span className="num" title={`What this session spent in the last ${minutes} minutes`}>{fmtUSD(windowCost(pulse))}</span> : <span>one bar per minute</span>}
-        grow
-      >
-        {/* As tall as the figures beside it, not the whole deck: the bars
-            are one cell among several (owner, 2026-10-11: the big chart
-            distracts). */}
-        <PulseCanvas pulse={pulse} now={minute} sessionID={sessionId} />
-      </Cell>
+      <Branch branch={branch || s.git_branch} changed={changed} ahead={ahead} onReview={onReviewChanges} />
+      <PRs sessionId={sessionId} />
       <div className="flex shrink-0 items-start pr-1.5 pt-1.5">
         <button
           type="button"
@@ -334,19 +307,130 @@ function Context({ ctx, tall }: { ctx: NonNullable<SessionSummary['context']>; t
   )
 }
 
-function Window({ label, w, now, tall }: { label: string; w: RateWindow; now: number; tall: boolean }) {
-  const { pct, stale, resetsAt } = readWindow(w, now)
-  const resetMs = w.resets_at * 1000
-  const tone = pct > 85 ? 'danger' : pct >= 60 ? 'warn' : 'accent'
+
+/** How often the PR cell asks again: sooner while a check is running. The
+ *  daemon keeps each pull request for about as long, so a poll it can answer
+ *  from what it holds costs GitHub nothing. */
+const PRS_PENDING_MS = 20_000
+const PRS_IDLE_MS = 60_000
+
+const PR_DOT: Record<PRTone, string> = {
+  ok: 'bg-ok', fail: 'bg-danger', pending: 'bg-warn', merged: 'bg-[#a371f7]', closed: 'bg-fg-faint', none: 'bg-fg-faint/70',
+}
+
+/** The branch the session works on, what is not committed and what is not pushed. */
+function Branch({ branch, changed, ahead, onReview }: { branch?: string; changed?: number; ahead?: number; onReview?: () => void }) {
+  if (!branch) return null
+  const bits = [
+    typeof changed === 'number' ? (changed ? `${changed} not committed` : 'clean') : '',
+    ahead ? `${ahead} not pushed` : '',
+  ].filter(Boolean)
   return (
-    <div className="grid grid-cols-[44px_minmax(0,1fr)_32px] items-center gap-x-2" title={stale ? undefined : resetsAt ? `resets ${resetClock(resetMs, now)} · in ${countdown(resetMs - now)}` : undefined}>
-      <span className="text-[11px] text-fg-muted">{label}</span>
-      <div className="cockpit-track h-[5px] overflow-hidden rounded-full" role="meter" aria-label={`${label} window used`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
-        <div className="cockpit-fill h-full rounded-full" data-tone={tone} style={{ width: `${Math.max(1.5, Math.min(100, pct))}%` }} />
-      </div>
-      <span className={`num text-right text-[11.5px] font-medium ${tone === 'danger' ? 'text-danger' : tone === 'warn' ? 'text-warn' : 'text-fg'}`}>{pct}%</span>
-      {tall && <><span />
-      <span className="col-span-2 truncate text-[10.5px] text-fg-faint">{stale ? 'reset time stale' : resetsAt ? `resets ${resetClock(resetMs, now)}` : ''}</span></>}
-    </div>
+    <Cell label="Branch" className="w-[176px] shrink-0" below={720}>
+      <p className="mono truncate text-[13px] font-medium text-fg" title={branch}>{branch}</p>
+      {bits.length > 0 && <p className={`truncate text-[11.5px] ${changed || ahead ? 'text-warn' : 'text-fg-muted'}`}>{bits.join(' · ')}</p>}
+      {onReview && !!changed && (
+        <button type="button" onClick={onReview} className="w-fit text-left text-[11.5px] text-accent underline-offset-2 hover:underline">Review changes</button>
+      )}
+    </Cell>
+  )
+}
+
+/** One PR's state in a few characters: CI first, then the review. */
+function prStatus(p: SessionPRLive): { text: string; tone: PRTone } {
+  const pr = p.live
+  if (!pr) {
+    if (p.merged_at) return { text: 'merged', tone: 'merged' }
+    if (p.closed_at) return { text: 'closed', tone: 'closed' }
+    return { text: 'open', tone: 'none' }
+  }
+  const tone = prTone(pr)
+  if (pr.state !== 'open') return { text: pr.state, tone }
+  const c = pr.checks
+  const total = c.items.length
+  let ci = ''
+  if (c.state === 'fail') {
+    const failed = c.items.filter((i) => i.state === 'fail').map((i) => i.name)
+    ci = `CI failed: ${failed.slice(0, 1).join('')}${failed.length > 1 ? ` +${failed.length - 1}` : ''}`
+  } else if (c.state === 'pending') ci = `CI ${total - c.pending}/${total}`
+  else if (c.state === 'pass') ci = 'CI passed'
+  const review = pr.review === 'approved' ? 'approved' : pr.review === 'changes_requested' ? 'changes requested' : ''
+  return { text: [pr.draft ? 'draft' : '', ci || 'no CI', review].filter(Boolean).join(' · '), tone }
+}
+
+const STATUS_TEXT: Record<PRTone, string> = {
+  ok: 'text-ok', fail: 'text-danger', pending: 'text-warn', merged: 'text-[#a371f7]', closed: 'text-fg-faint', none: 'text-fg-muted',
+}
+
+/**
+ * The session's latest pull requests and their CI (owner, 2026-10-11: "I'd
+ * look at the statuses of the latest PRs, CI on them if possible"). Asked of
+ * the daemon while the deck is open and the window is visible: every 20 s
+ * while a check runs, else every minute.
+ */
+function PRs({ sessionId }: { sessionId: string }) {
+  const [data, setData] = useState<{ connected: boolean; prs: SessionPRLive[] }>()
+  const [connecting, setConnecting] = useState(false)
+  const [n, setN] = useState(0)
+  useEffect(() => {
+    let alive = true
+    let timer = 0
+    const tick = async () => {
+      let next = PRS_IDLE_MS
+      if (!document.hidden) {
+        try {
+          const d = await api.sessionPRs(sessionId)
+          if (!alive) return
+          setData(d)
+          if (d.prs.some((p) => p.live?.checks.state === 'pending')) next = PRS_PENDING_MS
+        } catch { /* the last answer stays */ }
+      }
+      if (alive) timer = window.setTimeout(() => void tick(), next)
+    }
+    void tick()
+    const onVisible = () => { if (!document.hidden) { window.clearTimeout(timer); void tick() } }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { alive = false; window.clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible) }
+  }, [sessionId, n])
+
+  // One click turns the integration on through the GitHub CLI's own login
+  // (ADR-047: off until the user turns it on; this button is that). Without
+  // a usable `gh`, Settings is where a token goes.
+  const connect = async () => {
+    setConnecting(true)
+    try {
+      const st = await githubApi.connect('gh')
+      if (st.connected) setN((x) => x + 1)
+      else location.hash = '#/settings'
+    } catch {
+      location.hash = '#/settings'
+    } finally {
+      setConnecting(false)
+    }
+  }
+  const prs = data?.prs ?? []
+  return (
+    <Cell label="Pull requests" className="min-w-[220px] flex-[2.2_1_0]"
+      right={data && !data.connected && prs.length > 0
+        ? <button type="button" disabled={connecting} onClick={() => void connect()} title="Reads CI and reviews through your GitHub CLI login; turn it off in Settings → GitHub" className="text-accent hover:underline disabled:opacity-60">{connecting ? 'connecting…' : 'connect GitHub for CI'}</button>
+        : undefined}>
+      {data && prs.length === 0 && <p className="text-[12px] text-fg-faint">No PR from this session yet.</p>}
+      <ul className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1">
+        {prs.map((p) => {
+          const st = prStatus(p)
+          return (
+            <li key={p.url} data-deck-pr={p.number} className="min-w-0">
+              <button type="button" onClick={() => openExternal(p.live?.url || p.url)} title={`${p.live?.title || p.title || ''}\nOpen on GitHub`}
+                className="flex w-full min-w-0 items-center gap-2 rounded-[5px] text-left text-[12.5px] hover:bg-[var(--app-row-hover)]">
+                <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${PR_DOT[st.tone]}`} />
+                <span className="num shrink-0 text-fg">#{p.number}</span>
+                <span className="min-w-0 flex-1 truncate text-fg-muted">{p.live?.title || p.title}</span>
+                <span className={`shrink-0 whitespace-nowrap font-medium ${STATUS_TEXT[st.tone]}`}>{st.text}</span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </Cell>
   )
 }

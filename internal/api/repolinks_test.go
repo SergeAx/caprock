@@ -69,6 +69,19 @@ func TestSessionAndProjectLinkTheRepoAndPRs(t *testing.T) {
 		t.Fatalf("second PR = %+v, want #8, not merged", det.PRs[1])
 	}
 
+	// The deck's PR cell: the same PRs, and nothing asked of GitHub while it
+	// is not connected.
+	var deck struct {
+		Connected bool            `json:"connected"`
+		PRs       []SessionPRLive `json:"prs"`
+	}
+	if code := e.get(t, "/v1/sessions/s1/prs", &deck); code != 200 {
+		t.Fatalf("prs: %d", code)
+	}
+	if deck.Connected || len(deck.PRs) != 2 || deck.PRs[0].Number != 7 || deck.PRs[0].Live != nil || deck.PRs[0].Error != nil {
+		t.Fatalf("deck prs = %+v", deck)
+	}
+
 	var sum SummaryResponse
 	if code := e.get(t, "/v1/stats/summary?range=all", &sum); code != 200 {
 		t.Fatalf("summary: %d", code)

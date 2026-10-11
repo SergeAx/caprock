@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { TermState } from '@/lib/termv2'
+import { useSavedPromptsFor } from '@/lib/saved'
 
 /** A newline inside the prompt: ESC CR, what a terminal sends for Alt+Enter
  *  (see Terminal.tsx — a bare line feed submits once text is typed). */
@@ -64,7 +65,7 @@ function saveHeld(sessionId: string | undefined, held: readonly Held[]): void {
  * keys are buttons, and the text goes in a field big enough to read what is
  * being sent before sending it, rather than letter by letter into a canvas.
  */
-export function TerminalKeys({ send, attach, initial = '', state, isPromptWaiting, sessionId }: {
+export function TerminalKeys({ send, attach, initial = '', state, isPromptWaiting, sessionId, chips = false }: {
   send: (bytes: string) => void
   /** Attaches photos; the paths it returns, if any, go into the field (the chat). */
   attach?: (files: File[]) => Promise<void | readonly string[]>
@@ -75,6 +76,8 @@ export function TerminalKeys({ send, attach, initial = '', state, isPromptWaitin
   isPromptWaiting?: () => Promise<boolean>
   /** Keys the held messages kept across a reload. */
   sessionId?: string
+  /** Show the saved prompts for this session as chips above the field (ADR-051). */
+  chips?: boolean
 }) {
   const [text, setText] = useState(initial)
   const live = state === undefined || state === 'live'
@@ -229,6 +232,16 @@ export function TerminalKeys({ send, attach, initial = '', state, isPromptWaitin
           ))}
         </ul>
       )}
+      {chips && sessionId && (
+        <SavedChips
+          sessionId={sessionId}
+          onPick={(t) => {
+            // Into the field, not sent: one more tap on Send, with a chance
+            // to add a file name or take a word out first.
+            setText((cur) => (cur.trim() ? `${cur.replace(/\s+$/, '')}\n${t}` : t))
+          }}
+        />
+      )}
       {/* The field on a row of its own, full width: beside Photo and Send it
         * was a third of a 320px screen. */}
       <div className="grid gap-2">
@@ -311,6 +324,34 @@ export function TerminalKeys({ send, attach, initial = '', state, isPromptWaitin
           </button>
         ))}
       </div>
+    </div>
+  )
+}
+
+/**
+ * The saved prompts for a session — every project's and its own project's —
+ * as a row of chips above the field (ADR-051). A tap puts the prompt in the
+ * field; Send sends it. Nothing when there are none: the row is not an
+ * advertisement for the feature.
+ */
+function SavedChips({ sessionId, onPick }: { sessionId: string; onPick: (text: string) => void }) {
+  const items = useSavedPromptsFor(sessionId)
+  if (items.length === 0) return null
+  return (
+    <div role="group" aria-label="Saved prompts" className="-mx-2 flex gap-1.5 overflow-x-auto px-2 pb-0.5 [scrollbar-width:none]">
+      {items.map((v) => (
+        <button
+          key={v.id}
+          type="button"
+          title={v.text}
+          // Keep the field's focus (and a phone's keyboard) where it was.
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onPick(v.text)}
+          className="min-h-[36px] max-w-[220px] shrink-0 truncate rounded-full border border-border-strong bg-panel-2 px-3 text-[13px] text-fg hover:border-accent active:bg-accent/15"
+        >
+          {v.name}
+        </button>
+      ))}
     </div>
   )
 }

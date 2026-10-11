@@ -1015,7 +1015,8 @@ machine, never from a forge's API (rule 4):
   guarded recent folder without checking that it still exists.
 
 ```
-POST   /v1/agents                    {cwd?, chat?, create?, worktree?, worktree_base?, worktree_pull?, agent?, subscription?, model?, permission_mode?, resume?, fork?, command?, args?} → {session_id, cwd}
+POST   /v1/agents                    {cwd?, chat?, create?, worktree?, worktree_base?, worktree_pull?, agent?, subscription?, model?, permission_mode?, resume?, fork?, command?, args?, attempts?} → {session_id, cwd, session_ids?, attempt_group?, error?}
+GET    /v1/attempts/{group}          → {group, base?, attempts: [AttemptView]}; 404 for an unknown group
 GET    /v1/agents/models?agent=      {agent, default?, models:[{id,label}]}
 GET    /v1/agents/catalog            → {agents: [CatalogEntry], licensed, home?}
 GET    /v1/agents/custom             → {agents: [CustomAgent], licensed}
@@ -1109,6 +1110,31 @@ who wants an unattended run turns the setting off.
 The endpoints answer 501 only when
 **no** agent can be started (`claude_available`, `codex_available`,
 `opencode_available` and `gemini_available` all false on `/v1/status`).
+
+**`attempts` on `POST /v1/agents`** — one prompt, N attempts
+([ADR-052](08-decisions.md)). A whole number from 1 to 4; absent or 1 is an
+ordinary start. From 2 it needs `worktree` and refuses `resume`,
+`relay_from` and `chat` (`400`). The daemon starts the same request once per
+attempt, in order, with `worktree` = `<worktree>-1` … `<worktree>-N`;
+`worktree_pull` applies to the first only, and the rest get `worktree_base`
+= the commit the first copy started from, so every attempt starts from the
+same code. Each started session gets an `attempts` row. The first failure
+stops the rest: with none started it is `400 {error}`; otherwise `200` with
+`session_ids` (in order), `session_id` (the first), `attempt_group`, and
+`error` naming the attempt that did not start, and the group's total is what
+started. Bypass consent and a controller's limits are checked once, before
+any start.
+
+- **`AttemptView`** — `{session_id, group_id, n, total, base?, base_commit?,
+  created_at, session: Session, stats: Stats, changes?: {files, additions,
+  deletions, binary?}, changes_error?}`. `changes` is what the copy changed
+  since `base_commit` (`gitdiff.Since`): committed, uncommitted and untracked
+  files git does not ignore, an untracked file's lines read from its first
+  1 MiB, at most 2000 of them read; absent with `changes_error` when the
+  folder is gone (*its copy has been removed*), is not a repository, or git
+  failed. Read concurrently, 10 s each. Open to every paired device.
+- **`Session`** carries `attempt_group`, `attempt` and `attempts` (omitted
+  when not one of a group), on every list, detail and `session` frame.
 
 **`prompt` and `relay_from` on `POST /v1/agents`** — a relay ([ADR-032](08-decisions.md)).
 `prompt` is the new session's first message, passed on the agent's command
@@ -1409,7 +1435,7 @@ GET    /v1/projects/{id}/worktrees         → {worktrees: [Worktree]}
 POST   /v1/projects/{id}/worktrees         {branch, create?, base?} → {worktree: {path, branch, tracks?, copied?}}
 GET    /v1/projects/{id}/branches          → {branches: [{name, main?, default?, local?, remote?, committed_ms}]}
 DELETE /v1/projects/{id}/worktrees/{name}  → 204; 409 {error} when it has any change
-POST   /v1/shells                          {cwd | project_id, cols?, rows?, replaces?} → {shell: Shell}
+POST   /v1/shells                          {cwd | project_id, cols?, rows?, replaces?, type?, run?} → {shell: Shell}
 GET    /v1/shells?project=<id>             → {shells: [Shell]}; every running shell without project
 ```
 
@@ -1503,6 +1529,10 @@ GET    /v1/shells?project=<id>             → {shells: [Shell]}; every running 
   shell's prompt once the shell has drawn it and gone quiet, never followed by
   Enter: an agent's install or sign-in command that the user reads and runs.
   Anything from the first line break on is dropped; ignored with `replaces`.
+- **`run`** on `POST /v1/shells` (2026-10-11, [ADR-051](08-decisions.md))
+  presses Enter after `type`, on its own write 80 ms later: a saved command
+  the user picked to run. Still one line: anything from the first line break
+  on is dropped, so what runs is what the user saw.
 - **`replaces`** on `POST /v1/shells` names the session whose program exited
   and whose tab the shell takes over. Every window showing that tab asks; the
   first starts the shell and the rest get the same one while it runs. The map
@@ -1550,6 +1580,39 @@ GET    /v1/shells?project=<id>             → {shells: [Shell]}; every running 
   are read from files. An agent's `tool.post` of an edit or shell tool asks
   git again after 2 s; a session starting, stopping, asking or ending sends a
   `project` frame after 1 s. Nothing runs on a timer: idle projects run no git.
+
+### Saved prompts and commands
+
+Short text the user sends to an agent, and one-line shell commands, each with
+a name, for every project or for one ([ADR-051](08-decisions.md)). Code:
+`internal/api/saved.go`, `internal/store/saved.go`, `ui/src/lib/saved.ts`.
+
+```
+GET    /v1/saved-prompts[?session=<id>]    → {items: [SavedPrompt], max}; ?session keeps every project's and that session's project's
+POST   /v1/saved-prompts                   {kind, name, text, project_id?, sort?} → {item: SavedPrompt}
+PATCH  /v1/saved-prompts/{id}              {kind?, name?, text?, project_id?, sort?} → {item: SavedPrompt}
+DELETE /v1/saved-prompts/{id}              → 204
+```
+
+- **`SavedPrompt`** — `{id, kind: "prompt"|"command", name, text,
+  project_id?, project_root?, project_name?, sort, created_at, updated_at}`
+  (unix ms). `project_id` absent (0 in a request) is every project;
+  `project_root` and `project_name` are joined from `projects`, and stay
+  while the project is unlisted. Listed every-project first, then by project
+  name, `sort`, name.
+- **Limits.** `name` trimmed, 1–80 characters, one line; `text` trimmed, no
+  NUL, valid UTF-8; a prompt at most 8 KiB and any number of lines, a command
+  at most 1 KiB and one line. At most 200 rows: the 201st `POST` is `409`.
+  `project_id` must name a project (`400`). An unknown id is `404`.
+- **`?session=<id>`** keeps the rows for every project and those whose
+  `project_root` holds the session's `cwd` (segment boundaries; `404` for an
+  unknown session): the phone's chips.
+- **Who.** `GET` is open to every paired device; `POST`, `PATCH` and
+  `DELETE` to none (`403`): they change what this machine types and runs.
+- **Using one is not an endpoint.** A prompt is typed into a session Caprock
+  started with `POST /v1/agents/{id}/input` — the text with each line break as
+  ESC CR, then `\r` on its own 80 ms later, as the message field does; a
+  command is `POST /v1/shells {cwd, type: <text>, run: true}`.
 
 ### Changes: a worktree's status, diff, commit and push
 
@@ -2186,6 +2249,48 @@ before any event arrives, and a session cannot move between sign-ins. Written
 by `POST /v1/agents`, by any hook or transcript line whose transcript path is
 under `<data dir>/profiles/<id>/`, and by a subscription's Codex importer.
 `SessionSummary` carries it as `subscription`, omitted when empty.
+
+### Saved prompts DDL (migration 0045)
+
+```sql
+CREATE TABLE IF NOT EXISTS saved_prompts (
+  id         INTEGER PRIMARY KEY,
+  kind       TEXT    NOT NULL CHECK (kind IN ('prompt','command')),
+  name       TEXT    NOT NULL,
+  text       TEXT    NOT NULL,
+  project_id INTEGER,                -- NULL = every project
+  sort       INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,       -- unix ms
+  updated_at INTEGER NOT NULL        -- unix ms
+);
+CREATE INDEX IF NOT EXISTS idx_saved_prompts_project ON saved_prompts(project_id);
+```
+
+Saved prompts and commands ([ADR-051](08-decisions.md), § Saved prompts and
+commands). No foreign key: unlisting a project (`archived_at`) keeps its
+rows, and nothing deletes a project row.
+
+### Attempts DDL (migration 0046)
+
+```sql
+CREATE TABLE IF NOT EXISTS attempts (
+  session_id  TEXT    PRIMARY KEY,
+  group_id    TEXT    NOT NULL,
+  n           INTEGER NOT NULL,
+  total       INTEGER NOT NULL,
+  base        TEXT    NOT NULL DEFAULT '',
+  base_commit TEXT    NOT NULL DEFAULT '',
+  created_at  INTEGER NOT NULL          -- unix ms
+);
+CREATE INDEX IF NOT EXISTS idx_attempts_group ON attempts(group_id);
+```
+
+One prompt, N attempts ([ADR-052](08-decisions.md)). `group_id` is 16 hex
+characters from the daemon; `base` the branch asked for (empty for HEAD);
+`base_commit` the commit the copy's HEAD named when it started. Sessions read
+it with a correlated subquery in `sessionCols` (one primary-key lookup per
+row). Nothing deletes a row: removing a session or its copy leaves the
+record of what was tried.
 
 ### Pending permission DDL (migrations 0039, 0042, 0043)
 

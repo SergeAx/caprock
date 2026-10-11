@@ -104,7 +104,13 @@ export function dotOf(s: SessionSummary, hasPermission: boolean): Dot {
 export function sessionTitle(s: SessionSummary): string {
   const branch = branchLabel(s.git_branch)
   if (s.kind === 'shell') return branch ? `shell · ${branch}` : 'shell'
-  return (s.title || s.description || '').trim() || (branch ? `on ${branch}` : 'new session')
+  const title = (s.title || s.description || '').trim() || (branch ? `on ${branch}` : 'new session')
+  return attemptLabel(s) ? `${attemptLabel(s)} · ${title}` : title
+}
+
+/** "attempt 2/3" for one of several started on one first message (ADR-052); '' otherwise. */
+export function attemptLabel(s: Pick<SessionSummary, 'attempt' | 'attempts'>): string {
+  return s.attempts && s.attempts > 1 && s.attempt ? `attempt ${s.attempt}/${s.attempts}` : ''
 }
 
 function ms(v: string | number | undefined): number {

@@ -41,6 +41,10 @@ export interface Session {
   kind?: 'agent' | 'shell'
   /** A shell's foreground program (`GET /v1/shells`): "claude", "npm"; absent while it is idle. */
   program?: string
+  /** One prompt, N attempts (ADR-052): the group, which attempt this is and of how many. */
+  attempt_group?: string
+  attempt?: number
+  attempts?: number
 }
 
 export interface Stats {
@@ -963,6 +967,24 @@ export interface AgentCatalog { agents: CatalogEntry[]; licensed: boolean; home?
 /** A coding agent the user added by command (Settings → Agents, Premium). */
 export interface CustomAgent { id?: string; name: string; command: string; args?: string[]; models?: string[] }
 
+/** A saved prompt or command (ADR-051); see lib/saved.ts. */
+export interface SavedPrompt {
+  id: number
+  kind: 'prompt' | 'command'
+  name: string
+  text: string
+  /** Absent for every project. */
+  project_id?: number
+  project_root?: string
+  project_name?: string
+  sort: number
+  created_at: number
+  updated_at: number
+}
+
+/** What a saved prompt is made or changed from; project_id 0 is every project. */
+export interface SavedDraft { kind: 'prompt' | 'command'; name: string; text: string; project_id: number }
+
 /** The agents that have subscriptions (ADR-048). */
 export type SubscriptionAgentId = 'claude' | 'codex'
 
@@ -1031,7 +1053,40 @@ export interface SpawnRequest {
   /** The session this new one carries on (a relay). The folder defaults to
    *  that session's when `cwd` is left out. */
   relay_from?: string
+  /** One prompt, N attempts (ADR-052): 2 to 4 sessions, one new copy each
+   *  (`<worktree>-1` …), the same first message; needs `worktree`. */
+  attempts?: number
 }
+
+/** What POST /v1/agents answers; the attempt fields only for `attempts` > 1. */
+export interface SpawnResult {
+  session_id: string
+  cwd: string
+  session_ids?: string[]
+  attempt_group?: string
+  /** Why an attempt after the first did not start; the ones before it run. */
+  error?: string
+}
+
+/** What one attempt's copy changed since the commit the group started from. */
+export interface AttemptChanges { files: number; additions: number; deletions: number; binary?: number }
+
+/** One attempt as GET /v1/attempts/{group} returns it. */
+export interface AttemptView {
+  session_id: string
+  group_id: string
+  n: number
+  total: number
+  base?: string
+  base_commit?: string
+  created_at: number
+  session: Session & { exit_code?: number; worked_at?: number }
+  stats: Stats
+  changes?: AttemptChanges
+  changes_error?: string
+}
+
+export interface AttemptsResponse { group: string; base?: string; attempts: AttemptView[] }
 
 /**
  * The device token, for a dashboard being read from a tablet.
@@ -1311,7 +1366,9 @@ export const api = {
   openInEditor: (req: { path: string; line?: number; editor?: string }) => post<{ editor: Editor }>('/v1/editors/open', req),
   /** Remove sessions from Caprock for good — the machine only (ADR-037). */
   removeSessions: (req: { ids?: string[]; cwd_prefix?: string; dry_run?: boolean }) => post<RemoveResult>('/v1/sessions/remove', req),
-  spawn: (req: SpawnRequest) => post<{ session_id: string; cwd: string }>('/v1/agents', req),
+  spawn: (req: SpawnRequest) => post<SpawnResult>('/v1/agents', req),
+  /** GET /v1/attempts/{group}: the attempts started together, with their spend and changes (ADR-052). */
+  attempts: (group: string) => get<AttemptsResponse>(`/v1/attempts/${encodeURIComponent(group)}`),
   /** The models an agent's own CLI lists — Codex's on-disk catalog and its
    *  configured default. Empty for the other agents. */
   /** The proposed brief for carrying a session on in a new one (a relay). */
@@ -1321,6 +1378,13 @@ export const api = {
   customAgents: () => get<{ agents: CustomAgent[]; licensed: boolean }>('/v1/agents/custom'),
   /** PUT /v1/agents/custom: replaces the list; 402 without an active licence. */
   saveCustomAgents: (agents: CustomAgent[]) => post<{ agents: CustomAgent[]; licensed: boolean }>('/v1/agents/custom', { agents }, 'PUT'),
+  /** Saved prompts and commands (ADR-051): all of them, or a session's — every project's and its own project's. */
+  savedPrompts: (sessionId?: string) =>
+    get<{ items: SavedPrompt[]; max: number }>(`/v1/saved-prompts${sessionId ? `?session=${encodeURIComponent(sessionId)}` : ''}`),
+  /** The machine only; a paired device gets 403. */
+  addSavedPrompt: (d: SavedDraft) => post<{ item: SavedPrompt }>('/v1/saved-prompts', d),
+  updateSavedPrompt: (id: number, d: Partial<SavedDraft>) => post<{ item: SavedPrompt }>(`/v1/saved-prompts/${id}`, d, 'PATCH'),
+  removeSavedPrompt: (id: number) => post<void>(`/v1/saved-prompts/${id}`, {}, 'DELETE'),
   /** Settings → Subscriptions (ADR-048). */
   subscriptions: () => get<SubscriptionsResponse>('/v1/subscriptions'),
   /** 402 at the free number without a licence. */

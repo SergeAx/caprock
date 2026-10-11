@@ -9,6 +9,23 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Added
 
+- **One prompt, several attempts, compared by cost.** In *New agent*, with
+  *New copy from a branch*, set *Attempts* to 2, 3 or 4: the same agent gets
+  the same first message in that many separate copies, all from the same
+  commit, each with your `.worktreeinclude` files and setup command. They
+  open as tabs (*attempt 1/3 · …*). *Compare attempts* (⌘K, or *Compare* in
+  the inspector) sets them side by side: what each is doing, files and lines
+  changed, what it has cost so far and how long it has run, with *Open* and
+  *Review changes* on each. Nothing is merged for you; keep the one you want.
+
+- **Saved prompts and commands.** Save what you type over and over — *Run the
+  tests and fix what fails*, or a shell line like `pnpm dev` — with a name,
+  for every project or for one (Settings → *Saved prompts and commands*).
+  Press ⌘K, or + in the tab strip → *Run saved…*: a prompt goes to the agent
+  in front (or opens *New agent* with it), a command runs in a new shell tab
+  in the folder in front. On your phone, your prompts are chips above the
+  message field: tap one, then Send.
+
 - **Caprock keeps your computer awake while agents work.** A long run no
   longer stops because the computer idled to sleep. It lets go once nothing
   is working; the screen can still turn off, and closing a laptop's lid

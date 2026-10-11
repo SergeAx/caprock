@@ -23,8 +23,9 @@ make app-release TAG=vX.Y.Z       # macOS: the universal .dmg for a release (doc
 ```
 
 Each target first builds the daemon from this checkout into
-`src-tauri/binaries/caprock-<rust host triple>`, which Tauri bundles as a
-sidecar. Bundle id `dev.caprock.app`, minimum macOS 13. Builds are unsigned
+`src-tauri/binaries/caprock-<rust host triple>`, and the terminal holder into
+`src-tauri/binaries/caprock-pty-host-<rust host triple>`, which Tauri bundles
+as sidecars; the app installs both into its data directory's `bin/`. Bundle id `dev.caprock.app`, minimum macOS 13. Builds are unsigned
 (ad-hoc on macOS) until the owner's signing decisions say otherwise.
 
 ## Trying a change on your own Mac

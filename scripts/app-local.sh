@@ -199,6 +199,9 @@ step "daemon (sidecar)"
 CGO_ENABLED=0 go build -trimpath \
   -ldflags "-s -w -X github.com/dspv/caprock/internal/version.Version=$VERSION" \
   -o "app/src-tauri/binaries/caprock-$TRIPLE" ./cmd/caprock
+CGO_ENABLED=0 go build -trimpath \
+  -ldflags "-s -w -X github.com/dspv/caprock/internal/version.Version=$VERSION" \
+  -o "app/src-tauri/binaries/caprock-pty-host-$TRIPLE" ./cmd/caprock-pty-host
 took "daemon"
 
 # --- app ----------------------------------------------------------------------

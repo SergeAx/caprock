@@ -403,7 +403,7 @@ func (d *Daemon) findHosts(ctx context.Context, tab *procstat.Table, self int32)
 			argv = procstat.Cmdline(ctx, pid)
 			d.res.argv[k] = argv
 		}
-		if len(argv) < 2 || argv[1] != "pty-host" {
+		if len(argv) < 2 || argv[1] != ptyhost.Arg {
 			continue
 		}
 		env, ok := d.res.env[k]

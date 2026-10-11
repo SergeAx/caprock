@@ -13,8 +13,9 @@ import (
 	"github.com/dspv/caprock/internal/ptyhost"
 )
 
-// holderBinary returns a copy of this binary under the data directory, named
-// by its content hash, and starts holders from that.
+// holderBinary returns a copy of the holder binary self (caprock-pty-host.exe,
+// or this binary when that is absent) under the data directory, named by its
+// content hash, and starts holders from that.
 //
 // Windows will not replace or delete an executable while a process runs from
 // it, and a holder runs for as long as its session does. Started from the
@@ -40,7 +41,7 @@ func holderBinary(self, dataDir string) string {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return self
 	}
-	name := "caprock-" + sum + ".exe"
+	name := strings.TrimSuffix(filepath.Base(self), ".exe") + "-" + sum + ".exe"
 	dst := filepath.Join(dir, name)
 	// Copies of earlier binaries go once nothing runs from them; a running
 	// holder's copy cannot be deleted, which is exactly the protection wanted.

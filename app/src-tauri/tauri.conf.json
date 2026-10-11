@@ -54,7 +54,8 @@
       "icons/icon.ico"
     ],
     "externalBin": [
-      "binaries/caprock"
+      "binaries/caprock",
+      "binaries/caprock-pty-host"
     ],
     "category": "DeveloperTool",
     "shortDescription": "Mission control for coding agents",

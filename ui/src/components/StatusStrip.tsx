@@ -6,12 +6,8 @@
  * carries them, and the same figures twice on one screen read as two.
  */
 import { useState } from 'react'
-import { createPortal } from 'react-dom'
-import type { SessionSummary, Summary } from '@/lib/api'
+import type { SessionSummary, Summary, UpdateStatus } from '@/lib/api'
 import { useUpdateStatus } from './AppUpdateNotice'
-import { NotesDialog } from './Shell'
-import { openExternal } from '@/lib/nudges'
-import { v } from '@/lib/appupdate'
 import { live, useLiveLink } from '@/lib/live'
 import { fmtUSD } from '@/lib/format'
 import type { PaneStatus } from './TerminalPane'
@@ -21,6 +17,7 @@ import { StaleUiPill } from './StaleUiPill'
 import { KeepAwakeIndicator } from './KeepAwake'
 import { SessionLoad } from './ResourceMeter'
 import { useAppUpdate } from '@/lib/appupdate'
+import { VersionPanel } from './VersionPanel'
 
 export function StatusStrip({ summary, pane, session, version, figures = true }: {
   summary?: Summary
@@ -35,13 +32,10 @@ export function StatusStrip({ summary, pane, session, version, figures = true }:
   // In the app, its own version: the one an update changes at once. The
   // daemon's follows within a minute of the move (AppShell asks again).
   const app = useAppUpdate()
-  const st = useUpdateStatus()
-  const [notes, setNotes] = useState(false)
+  const polled = useUpdateStatus()
+  const [checked, setStatus] = useState<UpdateStatus>()
+  const status = checked ?? polled
   const shown = app?.version || version
-  // "What's new" opens the release's own notes when the release check has
-  // them for the version running; otherwise the changelog on the site.
-  const ownNotes = Boolean(st?.notes && st.notes_for && shown && v(st.notes_for) === v(shown))
-  const whatsNew = () => (ownNotes ? setNotes(true) : openExternal('https://caprock.dev/changelog'))
   const five = figures ? summary?.rate_limits?.five_hour : undefined
   const seven = figures ? summary?.rate_limits?.seven_day : undefined
   // The front terminal's protocol and size are for debugging, not for
@@ -74,13 +68,7 @@ export function StatusStrip({ summary, pane, session, version, figures = true }:
         <KeepAwakeIndicator />
         <StaleUiPill />
         <AppUpdateNotice />
-        {shown && (
-          <button type="button" onClick={whatsNew} className="flex items-center gap-1.5 text-fg-faint hover:text-accent" title={[`What changed in ${shown}`, versionTitle].filter(Boolean).join('\n')}>
-            <span className="mono">{shown}</span>
-            <span>what&apos;s new</span>
-          </button>
-        )}
-        {notes && st && createPortal(<NotesDialog u={st} onClose={() => setNotes(false)} />, document.body)}
+        {shown && <VersionPanel shown={shown} title={versionTitle} status={status} onStatus={setStatus} />}
       </span>
     </footer>
   )

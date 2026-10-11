@@ -7,6 +7,20 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Changed
+
+- **The version in the status bar opens what you need about updates.** A
+  click shows whether a newer release is out and when Caprock last checked,
+  the one-click update (or the command for how it was installed), the first
+  lines of what changed and *Check now*; a dot beside the version says an
+  update is out. It replaces the bare *what's new* link.
+
+### Fixed
+
+- **Links to the browser open from the desktop app on Windows.** *download
+  it* in the update banner opened nothing there; every link meant for the
+  browser now goes through the app's own opener.
+
 ## [0.105.0] - 2026-10-11
 
 ### Added

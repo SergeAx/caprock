@@ -483,6 +483,10 @@ it: nothing that updates behind the sheet takes it from the field you are in.
   the window up from any app, and hides it when it is already in front.
   Change it or turn it off in Settings → *Global shortcut*. Wayland does not
   give apps global shortcuts; the tray's *Show Caprock* still works there.
+- **The version in the status bar.** Click it to see whether an update is
+  out and when Caprock last checked, update in one click (sessions keep
+  running) or copy the command, read the first lines of what changed, or
+  check now. An accent dot beside the version means an update is out.
 - **Keeping the computer awake.** While an agent is working or waiting for
   your approval, Caprock stops the computer from falling asleep for
   inactivity, and lets it sleep again once nothing works (or after half an

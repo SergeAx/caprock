@@ -12,6 +12,7 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { api, ApiError, errText, type SessionSummary } from '@/lib/api'
 import { APP_ROUTE, isMacPlatform, isTauri, isWorkspaceHash } from '@/lib/appmode'
 import { stepUiScale } from '@/lib/uiscale'
+import { installExternalLinks } from '@/lib/externalLinks'
 import { FIND_EVENT, keys, matchAppShortcut, type AppCommand } from '@/lib/appkeys'
 import { parseHash } from '@/lib/router'
 import { NotSupportedError, projectsApi, type Project } from '@/lib/projects'
@@ -208,6 +209,8 @@ export default function AppRoot() {
   }, [])
   // The first tab of a launch opens on a warm terminal (lib/termwarm.ts).
   useEffect(() => warmTerminal(), [])
+  // Links meant for the browser open there, never in the webview.
+  useEffect(() => installExternalLinks(), [])
   useEffect(() => {
     const root = document.documentElement
     root.setAttribute('data-app', '')

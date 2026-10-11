@@ -94,6 +94,8 @@ describe('KeepAwakeIndicator', () => {
     const pop = await screen.findByRole('dialog', { name: 'Keep awake' })
     expect(within(pop).getByRole('radio', { name: 'While agents work' }).getAttribute('aria-checked')).toBe('true')
     expect(within(pop).getByText(/2 agents working/)).toBeTruthy()
+    fireEvent.click(within(pop).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog', { name: 'Keep awake' })).toBeNull()
   })
 
   it('shows a mark while holding, with why in its title', async () => {

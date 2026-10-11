@@ -1,9 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { UpdateStatus } from '@/lib/api'
+import type { AppUpdateInfo } from '@/lib/appupdate'
 import { VersionPanel, notesPreview } from './VersionPanel'
 
-afterEach(() => vi.unstubAllGlobals())
+const app: { info?: AppUpdateInfo } = {}
+vi.mock('@/lib/appupdate', async (orig) => ({ ...(await orig<typeof import('@/lib/appupdate')>()), useAppUpdate: () => app.info }))
+
+afterEach(() => { vi.unstubAllGlobals(); app.info = undefined })
 
 const base: UpdateStatus = { enabled: true, current: '0.104.0', update_available: false }
 
@@ -34,6 +38,20 @@ describe('the version panel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Check now' }))
     await waitFor(() => expect(onStatus).toHaveBeenCalled())
     expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toMatch(/\/v1\/update\/check/)
+  })
+
+  it('warns when the daemon runs another version than the app', () => {
+    app.info = { version: '0.106.0', supported: true, asked: true, phase: 'idle' }
+    render(<VersionPanel shown="0.106.0" title="" onStatus={() => {}} status={{ ...base, current: '0.97.8', latest: '0.106.0', checked_at: Date.now() }} />)
+    expect(document.querySelector('[data-version-apart]')).not.toBeNull()
+    fireEvent.click(screen.getByText('0.106.0'))
+    expect(screen.getByRole('dialog').querySelector('[data-apart]')?.textContent).toMatch(/app is v0\.106\.0, its daemon v0\.97\.8/)
+  })
+
+  it('says nothing when the app and its daemon agree', () => {
+    app.info = { version: '0.106.0', supported: true, asked: true, phase: 'idle' }
+    render(<VersionPanel shown="0.106.0" title="" onStatus={() => {}} status={{ ...base, current: 'v0.106.0' }} />)
+    expect(document.querySelector('[data-version-apart]')).toBeNull()
   })
 
   it('previews the first lines of the notes, plain', () => {

@@ -7,6 +7,18 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Fixed
+
+- **app:** on Windows and Linux the desktop app now replaces its own daemon
+  when an update brings a new one, as it already did on macOS. Before, the
+  app updated and its daemon stayed on the old version, so the status strip
+  and the update banner reported a version the app had left behind.
+- **app:** when the app and its daemon still run different versions, the
+  version in the status strip gets an amber dot and its panel says which is
+  which and what to do.
+- **app:** the Keep awake panel says what is happening in a few large words,
+  has one short line per mode and a close button.
+
 ## [0.106.0] - 2026-10-11
 
 ### Changed

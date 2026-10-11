@@ -55,6 +55,10 @@ export function VersionPanel({ shown, title, status, onStatus }: {
   const offer = offerFor(info, st, '')
   const commands = st ? upgradeCommands(st) : []
   const notesFor = st?.notes_for ? v(st.notes_for) : undefined
+  // The app and the daemon behind it should run one version: the app replaces
+  // its own daemon on launch (ADR-040). When they still differ, say so.
+  const daemon = st?.current ? v(st.current) : undefined
+  const apart = Boolean(info?.version && daemon && v(info.version) !== daemon)
   const notes = notesPreview(st?.notes)
   const check = async () => {
     setChecking(true)
@@ -73,8 +77,8 @@ export function VersionPanel({ shown, title, status, onStatus }: {
   return (
     <span ref={box} className="relative inline-flex">
       <button type="button" data-version onClick={() => setOpen((o) => !o)} aria-expanded={open}
-        className="flex items-center gap-1.5 text-fg-faint hover:text-accent" title={[available ? `Caprock ${latest} is available` : 'Updates and what changed', title].filter(Boolean).join('\n')}>
-        {available && <span aria-hidden className="h-[6px] w-[6px] rounded-full bg-accent" />}
+        className="flex items-center gap-1.5 text-fg-faint hover:text-accent" title={[apart ? `The daemon runs ${daemon}` : available ? `Caprock ${latest} is available` : 'Updates and what changed', title].filter(Boolean).join('\n')}>
+        {(available || apart) && <span aria-hidden data-version-apart={apart || undefined} className={`h-[6px] w-[6px] rounded-full ${apart ? 'bg-warn' : 'bg-accent'}`} />}
         <span className="mono">{shown}</span>
       </button>
       {open && (
@@ -93,6 +97,11 @@ export function VersionPanel({ shown, title, status, onStatus }: {
               ? 'Release checks are off in Settings → Privacy.'
               : st?.checked_at ? `Last checked ${fmtAgo(st.checked_at, now)}.` : 'Not checked yet.'}
           </p>
+          {apart && (
+            <p data-apart className="rounded-[7px] border border-warn/40 bg-warn/10 px-2.5 py-2 text-[13px] text-fg">
+              The app is <span className="mono">{v(info!.version)}</span>, its daemon <span className="mono">{daemon}</span>. Quit and reopen Caprock to update the daemon — sessions keep running.
+            </p>
+          )}
           {available && offer.kind === 'install' && (
             <button type="button" onClick={() => { setOpen(false); void appUpdate.install() }}
               className="rounded-[7px] bg-accent px-3 py-1.5 text-left font-medium text-panel hover:opacity-90">

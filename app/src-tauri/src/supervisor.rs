@@ -118,9 +118,10 @@ pub struct Supervisor {
     pub data_dir: PathBuf,
     /// The sidecar shipped next to the app's executable.
     bundled: PathBuf,
-    /// The app runs from a `.app` bundle, not from `cargo run`: only then is
-    /// its sidecar the daemon it was shipped with, and only then does it
-    /// replace a running daemon of its own (`make app` leaves it alone).
+    /// The app runs as installed (a `.app` bundle, the NSIS install, an
+    /// AppImage or a package), not from `cargo run`: only then is its sidecar
+    /// the daemon it was shipped with, and only then does it replace a
+    /// running daemon of its own (`make app` leaves it alone).
     in_bundle: bool,
     inner: Mutex<Inner>,
 }
@@ -149,10 +150,7 @@ impl Supervisor {
 
     /// A supervisor whose sidecar is `bundled`.
     pub fn with_bundled(data_dir: PathBuf, bundled: PathBuf) -> Arc<Self> {
-        let in_bundle = bundled
-            .to_string_lossy()
-            .replace('\\', "/")
-            .contains(".app/Contents/MacOS/");
+        let in_bundle = installed_app(&bundled);
         Arc::new(Self {
             data_dir,
             bundled,
@@ -320,9 +318,9 @@ impl Supervisor {
     /// app's own copy, once per run and never when app.json says
     /// `"own_daemon": false`. Two cases:
     ///
-    /// - a Homebrew formula's daemon, when the bundled one is not older
-    ///   (moved onto the app's own);
-    /// - the app's own daemon, when this bundle carries a different one —
+    /// - macOS only: a Homebrew formula's daemon, when the bundled one is
+    ///   not older (moved onto the app's own);
+    /// - on every OS: the app's own daemon, when this bundle carries a different one —
     ///   another version, or the same version built differently. The bundle
     ///   is what that daemon was copied from, so it wins either way: a new
     ///   release, a local build (`make app-local`) and a step back to a
@@ -331,7 +329,7 @@ impl Supervisor {
     /// `bundled` is the bundled daemon's `caprock version`, asked only when the
     /// rest holds.
     pub fn should_adopt(&self, bundled: impl FnOnce() -> Option<String>) -> bool {
-        if !cfg!(target_os = "macos") || self.settings().is_some_and(|s| !s.own_daemon) {
+        if self.settings().is_some_and(|s| !s.own_daemon) {
             return false;
         }
         let (rt, running, ours) = {
@@ -362,7 +360,9 @@ impl Supervisor {
                 None => false,
             };
         }
-        if !is_formula(&rt.exe) {
+        // Moving a Homebrew daemon is macOS's alone (ADR-040): elsewhere the
+        // app starts a formula's daemon itself and leaves it to `brew`.
+        if !cfg!(target_os = "macos") || !is_formula(&rt.exe) {
             return false;
         }
         self.lock().adopt_tried = true;
@@ -608,6 +608,18 @@ pub fn brew_daemon(candidates: &[&str]) -> Option<PathBuf> {
     })
 }
 
+/// Whether the sidecar at `bundled` belongs to an installed app rather than to
+/// `cargo run`: inside a macOS `.app` bundle; elsewhere anywhere but a cargo
+/// `target/debug` or `target/release` directory (the NSIS install, the
+/// AppImage's mount, `/usr/bin` of a package).
+fn installed_app(bundled: &Path) -> bool {
+    let p = bundled.to_string_lossy().replace('\\', "/");
+    if cfg!(target_os = "macos") {
+        return p.contains(".app/Contents/MacOS/");
+    }
+    !(p.contains("/target/debug/") || p.contains("/target/release/"))
+}
+
 /// Whether `exe` resolves into a Homebrew Cellar: the formula's daemon.
 pub fn is_formula(exe: &str) -> bool {
     !exe.is_empty()
@@ -731,9 +743,17 @@ fn copy_bin(src: &Path, dst: &Path) -> Result<(), String> {
     #[cfg(windows)]
     {
         // A running .exe cannot be replaced, but it can be renamed aside.
+        // The last update's copy may still run (a terminal holder outlives
+        // the daemon, ADR-033) and then cannot be removed: set this one aside
+        // under a name of its own.
         let old = dir.join(format!(".{name}.old"));
         let _ = std::fs::remove_file(&old);
-        let _ = std::fs::rename(dst, &old);
+        if dst.exists() && std::fs::rename(dst, &old).is_err() {
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos());
+            let _ = std::fs::rename(dst, dir.join(format!(".{name}.old.{nanos}")));
+        }
     }
     std::fs::rename(&tmp, dst).map_err(|e| format!("install {}: {e}", dst.display()))
 }
@@ -1022,6 +1042,29 @@ mod adopt_tests {
     }
 
     #[test]
+    fn an_installed_app_is_anything_but_a_cargo_build() {
+        assert!(!installed_app(Path::new(
+            "/src/app/src-tauri/target/debug/caprock"
+        )));
+        assert!(!installed_app(Path::new(
+            r"C:\src\app\src-tauri\target\release\caprock.exe"
+        )));
+        if cfg!(target_os = "macos") {
+            assert!(installed_app(Path::new(
+                "/Applications/Caprock.app/Contents/MacOS/caprock"
+            )));
+            assert!(!installed_app(Path::new("/usr/local/bin/caprock")));
+        } else {
+            assert!(installed_app(Path::new(
+                r"C:\Program Files\Caprock\caprock.exe"
+            )));
+            assert!(installed_app(Path::new(
+                "/tmp/.mount_CaprXy/usr/bin/caprock"
+            )));
+        }
+    }
+
+    #[test]
     fn version_of_reads_both_ways_a_daemon_says_it() {
         assert_eq!(
             version_of("caprock 0.78.2-dev+abc1234 (darwin/arm64)\n"),
@@ -1032,16 +1075,19 @@ mod adopt_tests {
         assert_eq!(version_of(""), "");
     }
 
-    /// A supervisor running from a `.app` whose sidecar holds `sidecar`, with
+    /// A supervisor running from an installed app whose sidecar holds `sidecar`, with
     /// its own daemon installed as `installed` and connected at `running`.
-    #[cfg(target_os = "macos")]
     fn own(name: &str, sidecar: &[u8], installed: &[u8], running: &str) -> Arc<Supervisor> {
         let d = std::env::temp_dir().join(format!("caprock-own-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
-        let macos = d.join("Caprock.app/Contents/MacOS");
-        std::fs::create_dir_all(&macos).unwrap();
-        std::fs::write(macos.join("caprock"), sidecar).unwrap();
-        let s = Supervisor::with_bundled(d.join("data"), macos.join("caprock"));
+        let app = if cfg!(target_os = "macos") {
+            d.join("Caprock.app/Contents/MacOS")
+        } else {
+            d.join("Caprock")
+        };
+        std::fs::create_dir_all(&app).unwrap();
+        std::fs::write(app.join(EXE), sidecar).unwrap();
+        let s = Supervisor::with_bundled(d.join("data"), app.join(EXE));
         std::fs::create_dir_all(s.bin().parent().unwrap()).unwrap();
         std::fs::write(s.bin(), installed).unwrap();
         connect(&s, &s.bin().to_string_lossy(), running);
@@ -1049,9 +1095,8 @@ mod adopt_tests {
         s
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
-    fn macos_replaces_its_own_daemon_when_the_bundle_carries_another() {
+    fn it_replaces_its_own_daemon_when_the_bundle_carries_another() {
         // A local build over a release, and a release back over a local build.
         let s = own("newer", b"new", b"old", "0.78.1");
         assert!(s.should_adopt(|| Some("caprock 0.78.2-dev+abc1234 (darwin/arm64)".into())));
@@ -1066,9 +1111,8 @@ mod adopt_tests {
         assert!(s.should_adopt(|| Some("caprock 0.78.2-dev+abc1234 (darwin/arm64)".into())));
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
-    fn macos_keeps_its_own_daemon_when_it_matches_the_bundle() {
+    fn it_keeps_its_own_daemon_when_it_matches_the_bundle() {
         let s = own("same", b"same", b"same", "0.78.1");
         assert!(!s.should_adopt(|| Some("caprock 0.78.1 (darwin/arm64)".into())));
         // A sidecar that does not run is no reason to stop a daemon that does.

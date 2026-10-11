@@ -9,6 +9,16 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Changed
 
+- **The daemon starts lighter.** Shortly after a start Caprock counts a
+  whole-history report for the share dialog, and that count used to read
+  every tool call's full payload — an edit's payload carries the whole file
+  it edited. It now reads only the fields it counts, keeps a command's output
+  only where it can mark a commit or a pull request, and normalises tool
+  inputs in one pass instead of four regular expressions. On a copy of a
+  1.9 GB database, measured 2026-10-11, the daemon's memory footprint 90
+  seconds after a start fell from 678 MB to 85 MB, and the report's figures
+  are byte for byte the same.
+
 - **The block at the bottom of the sidebar folds.** The arrow beside
   *Send feedback* collapses feedback, Dashboard, Settings and the theme
   switch to one row of icons, and the arrow there brings the rows back.

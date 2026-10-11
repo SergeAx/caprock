@@ -7,6 +7,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+## [0.107.3] - 2026-10-11
+
 ### Changed
 
 - **app:** the session deck's pull requests line up in columns — CI, then

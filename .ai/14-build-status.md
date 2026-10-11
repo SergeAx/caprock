@@ -73,6 +73,11 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-11 — 0.107.3: deck PRs in columns, CI opens the run
+
+The deck's PR rows line up (CI, then state); a click on the CI opens the
+failing or running job, else the PR's Checks tab. The deck's edge glows less.
+
 ### 2026-10-11 — 0.107.2: a large Tasks page before the runner is on
 
 Tasks with the task runner off is a headline, three big numbered steps and a

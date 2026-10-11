@@ -73,6 +73,16 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-11 — 0.102.0: the Orca-gap batch
+
+From the 2026-10-11 gap analysis against Orca: Caprock keeps the computer
+awake while agents work (ADR-049); a new copy brings its `.worktreeinclude`
+files and runs the project's setup command first (ADR-050); saved prompts
+and commands, also as phone chips (ADR-051); one prompt in up to four
+copies with a Compare view by changes and cost (ADR-052); review notes on
+the diff sent to the agent; Fix with agent on a refused hook, conflicts and
+failing checks; Clean up copies with each worktree's state and size.
+
 ### 2026-10-11 — unreleased: Fix with agent
 
 The Changes view hands a failure to the worktree's agent through the review

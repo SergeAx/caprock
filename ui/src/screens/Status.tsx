@@ -249,7 +249,7 @@ function InterfaceSize() {
         onChange={(v) => setUiScale(Number(v) as UiScale)}
       />
       <p className="text-[12px] text-fg-muted">
-        Or {isMac ? '⌘+ and ⌘−, ⌘0 to reset' : 'Ctrl+Shift+= and Ctrl+Shift+−, Ctrl+Shift+0 to reset'}.
+        Or {isMac ? '⌘+ and ⌘−, ⇧⌘0 to reset' : 'Ctrl+Shift+= and Ctrl+Shift+−; reset from ⌘K'}.
       </p>
     </div>
   )

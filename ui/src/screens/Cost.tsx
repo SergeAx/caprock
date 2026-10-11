@@ -16,6 +16,7 @@ import { Locked } from '@/components/Locked'
 import { SpendCap } from '@/components/SpendCap'
 import { GeminiPanel } from '@/components/Gemini'
 import { UnpricedNote } from '@/components/Unpriced'
+import { CutDonut, ShareBar, SliceDot, cutSegments, sliceColors } from '@/components/Donut'
 import { WorkMix } from '@/components/WorkMix'
 
 type Range = 'today' | '7d' | '30d' | 'all'
@@ -36,6 +37,10 @@ export function CostScreen({ section }: { section?: string } = {}) {
   const [activeDay, setActiveDay] = useState<string | null>(null)
   const [dayView, setDayView] = useState<'calendar' | 'bars'>('calendar')
   const s = summary.data
+  const modelSegs = cutSegments((s?.models ?? []).map((m) => ({ key: m.model, label: m.model ? fmtModel(m.model) : 'unknown', value: m.cost_usd })), fmtUSD)
+  const modelColors = sliceColors(modelSegs)
+  const projectSegs = cutSegments((s?.projects ?? []).map((p) => ({ key: p.project, label: p.project || 'unknown', value: p.cost_usd })), fmtUSD)
+  const projectColors = sliceColors(projectSegs)
   // Arriving from the plan-limit alert: bring its explanation into view once
   // there is something to show, rather than leaving the reader at the top.
   useEffect(() => {
@@ -122,6 +127,7 @@ export function CostScreen({ section }: { section?: string } = {}) {
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <Panel title="Model mix" right={<span>by cost</span>}>
           {!s ? <Skeleton rows={4} /> : s.models.length === 0 && <Empty title="No priced turns in range" />}
+          <CutDonut segments={modelSegs} what="model" />
           <div className="overflow-x-auto">
             {/* Scrolls inside itself on a narrow screen: the table is wide, and a
             * body that scrolls sideways takes every other panel with it. */}
@@ -132,8 +138,8 @@ export function CostScreen({ section }: { section?: string } = {}) {
               <thead>
                 <tr className="text-[10px] uppercase tracking-[0.08em] text-fg-faint">
                   <th className="px-3 pb-1 text-left font-normal">model</th>
-                  <th className="px-3 pb-1 text-right font-normal">turns</th>
-                  <th className="px-3 pb-1 text-right font-normal">tokens</th>
+                  <th className="hidden px-3 pb-1 text-right font-normal 2xl:table-cell">turns</th>
+                  <th className="hidden px-3 pb-1 text-right font-normal 2xl:table-cell">tokens</th>
                   <th className="px-3 pb-1 text-right font-normal">cost</th>
                   <th className="px-3 pb-1 text-right font-normal">share</th>
                 </tr>
@@ -141,13 +147,13 @@ export function CostScreen({ section }: { section?: string } = {}) {
               <tbody>
                 {(s?.models ?? []).map((m) => (
                   <tr key={m.model} className="border-b border-border/60 last:border-0">
-                    <td className="px-3 py-1 mono" title={m.model || undefined}>{m.model ? fmtModel(m.model) : 'unknown'}</td>
-                    <td className="px-3 py-1 num text-right text-fg-muted">{m.turns} turns</td>
-                    <td className="px-3 py-1 num text-right text-fg-muted">{fmtTokens(m.tokens)}</td>
+                    <td className="px-3 py-1 mono whitespace-nowrap max-w-[11rem] truncate" title={m.model || undefined}><SliceDot color={modelColors.get(m.model)} />{m.model ? fmtModel(m.model) : 'unknown'}</td>
+                    <td className="hidden px-3 py-1 num text-right text-fg-muted whitespace-nowrap 2xl:table-cell">{m.turns.toLocaleString('en-US')}</td>
+                    <td className="hidden px-3 py-1 num text-right text-fg-muted whitespace-nowrap 2xl:table-cell">{fmtTokens(m.tokens)}</td>
                     {/* An unpriced model summed to 0 and rendered "$0.00",
                         which reads as free. It has no price, so it shows none. */}
-                    <td className="px-3 py-1 num text-right">{(s?.unpriced?.models ?? []).includes(m.model) ? <span className="text-warn" title="this model is not in the pricing table, so its cost is unknown">unpriced</span> : fmtUSD(m.cost_usd)}</td>
-                    <td className="px-3 py-1 num text-right text-fg-faint w-14">{s && s.cost_usd > 0 && !(s.unpriced?.models ?? []).includes(m.model) ? fmtPct((100 * m.cost_usd) / s.cost_usd) : '—'}</td>
+                    <td className="px-3 py-1 num text-right whitespace-nowrap">{(s?.unpriced?.models ?? []).includes(m.model) ? <span className="text-warn" title="this model is not in the pricing table, so its cost is unknown">unpriced</span> : fmtUSD(m.cost_usd)}</td>
+                    <td className="px-3 py-1 text-right text-fg-faint w-[5.5rem] whitespace-nowrap">{s && s.cost_usd > 0 && !(s.unpriced?.models ?? []).includes(m.model) ? <ShareBar value={m.cost_usd} total={s.cost_usd} color={modelColors.get(m.model)} /> : '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -160,6 +166,7 @@ export function CostScreen({ section }: { section?: string } = {}) {
         <WorkMix summary={s} />
         <Panel title="Per project" right={<span>by cost</span>}>
           {!s ? <Skeleton rows={4} /> : s.projects.length === 0 && <Empty title="No priced turns in range" />}
+          <CutDonut segments={projectSegs} what="project" />
           <div className="overflow-x-auto">
             {/* Scrolls inside itself on a narrow screen: the table is wide, and a
             * body that scrolls sideways takes every other panel with it. */}
@@ -167,7 +174,7 @@ export function CostScreen({ section }: { section?: string } = {}) {
               <thead>
                 <tr className="text-[10px] uppercase tracking-[0.08em] text-fg-faint">
                   <th className="px-3 pb-1 text-left font-normal">project</th>
-                  <th className="px-3 pb-1 text-right font-normal">tokens</th>
+                  <th className="hidden px-3 pb-1 text-right font-normal 2xl:table-cell">tokens</th>
                   <th className="px-3 pb-1 text-right font-normal">cost</th>
                   <th className="px-3 pb-1 text-right font-normal">share</th>
                 </tr>
@@ -175,10 +182,10 @@ export function CostScreen({ section }: { section?: string } = {}) {
               <tbody>
                 {(s?.projects ?? []).map((p) => (
                   <tr key={p.project} className="border-b border-border/60 last:border-0">
-                    <td className="px-3 py-1">{p.project || 'unknown'}</td>
-                    <td className="px-3 py-1 num text-right text-fg-muted">{fmtTokens(p.tokens)}</td>
-                    <td className="px-3 py-1 num text-right">{fmtUSD(p.cost_usd)}</td>
-                    <td className="px-3 py-1 num text-right text-fg-faint w-14">{s && s.cost_usd > 0 ? fmtPct((100 * p.cost_usd) / s.cost_usd) : '—'}</td>
+                    <td className="px-3 py-1 whitespace-nowrap max-w-[12rem] truncate" title={p.project || undefined}><SliceDot color={projectColors.get(p.project)} />{p.project || 'unknown'}</td>
+                    <td className="hidden px-3 py-1 num text-right text-fg-muted whitespace-nowrap 2xl:table-cell">{fmtTokens(p.tokens)}</td>
+                    <td className="px-3 py-1 num text-right whitespace-nowrap">{fmtUSD(p.cost_usd)}</td>
+                    <td className="px-3 py-1 text-right text-fg-faint w-[5.5rem] whitespace-nowrap">{s && s.cost_usd > 0 ? <ShareBar value={p.cost_usd} total={s.cost_usd} color={projectColors.get(p.project)} /> : '—'}</td>
                   </tr>
                 ))}
               </tbody>

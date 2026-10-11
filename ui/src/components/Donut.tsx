@@ -175,3 +175,64 @@ export function Ring({
     </span>
   )
 }
+
+/**
+ * A donut over one of the Cost screen's three tables (by model, by kind of
+ * work, by project), so the shape of the split reads before the rows do
+ * (owner, 2026-10-11, translated: "pie charts are clearly missing here"). The
+ * table under it is the legend: each of the top rows carries its slice's
+ * colour (`SliceDot`), so the picture never holds a figure the rows do not.
+ */
+export interface Cut {
+  key: string
+  label: string
+  value: number
+}
+
+/** The donut's segments for a cut: the top four by value and "other". */
+export function cutSegments(rows: Cut[], fmt: (v: number) => string): Segment[] {
+  return topN(rows.map((r) => ({ ...r, display: fmt(r.value) })), 4, fmt)
+}
+
+/** Each top row's slice colour, by key; a row folded into "other" has none. */
+export function sliceColors(segs: Segment[]): Map<string, string> {
+  const m = new Map<string, string>()
+  segs.forEach((s, i) => { if (s.key !== '__other') m.set(s.key, colorOf(s, i)) })
+  return m
+}
+
+export function CutDonut({ segments, what }: { segments: Segment[]; what: string }) {
+  const total = segments.reduce((a, s) => a + s.value, 0)
+  if (segments.length === 0 || total <= 0) return null
+  const lead = segments[0]!
+  return (
+    <div className="flex justify-center px-3 pb-2 pt-1">
+      <Donut title="" segments={segments} size={156} legend={false}
+        center={sharePct(lead.value, total)} centerLabel={lead.label}
+        ariaLabel={`Cost by ${what}: ${segments.map((s) => `${s.label} ${s.display}, ${sharePct(s.value, total)}`).join('; ')}`} />
+    </div>
+  )
+}
+
+/** The swatch beside a table row whose slice is in the donut above it. */
+export function SliceDot({ color }: { color?: string }) {
+  return <span aria-hidden className="mr-2 inline-block h-[8px] w-[8px] shrink-0 rounded-[2px] align-middle" style={{ background: color ?? 'transparent' }} />
+}
+
+/**
+ * A share as a bar and its figure, for the share column of a table: the
+ * numbers view draws the split too, so it reads at a glance without the
+ * donut (owner, 2026-10-11, translated: "the numbers should also show the
+ * percentages graphically").
+ */
+export function ShareBar({ value, total, color }: { value: number; total: number; color?: string }) {
+  const pct = total > 0 ? Math.max(0, Math.min(100, (100 * value) / total)) : 0
+  return (
+    <span className="inline-flex w-full items-center justify-end gap-2">
+      <span aria-hidden className="h-[6px] w-10 shrink-0 overflow-hidden rounded-sm bg-panel-2">
+        <span className="block h-full rounded-sm" style={{ width: `${pct}%`, background: color ?? 'var(--color-accent)' }} />
+      </span>
+      <span className="num w-8 shrink-0 text-right">{sharePct(value, total)}</span>
+    </span>
+  )
+}

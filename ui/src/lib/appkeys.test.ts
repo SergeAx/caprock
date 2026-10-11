@@ -117,11 +117,13 @@ describe('the jump key on a tab', () => {
 
 describe('zoom keys', () => {
   const k = (key: string, code: string, mods: Partial<KeyLike>) => ({ key, code, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, ...mods })
-  it('maps ⌘= ⌘+ ⌘- ⌘0 on macOS', () => {
+  it('maps ⌘= ⌘+ ⌘- ⇧⌘0 on macOS, and ⌘0 to the Dashboard', () => {
     expect(matchAppShortcut(k('=', 'Equal', { metaKey: true }), true)).toEqual({ kind: 'zoom', step: 1 })
     expect(matchAppShortcut(k('+', 'Equal', { metaKey: true, shiftKey: true }), true)).toEqual({ kind: 'zoom', step: 1 })
     expect(matchAppShortcut(k('-', 'Minus', { metaKey: true }), true)).toEqual({ kind: 'zoom', step: -1 })
-    expect(matchAppShortcut(k('0', 'Digit0', { metaKey: true }), true)).toEqual({ kind: 'zoom', step: 0 })
+    expect(matchAppShortcut(k(')', 'Digit0', { metaKey: true, shiftKey: true }), true)).toEqual({ kind: 'zoom', step: 0 })
+    expect(matchAppShortcut(k('0', 'Digit0', { metaKey: true }), true)).toEqual({ kind: 'dashboard' })
+    expect(matchAppShortcut(k('D', 'KeyD', { metaKey: true, shiftKey: true }), true)).toEqual({ kind: 'dashboard' })
   })
   it('maps Ctrl+Shift elsewhere and leaves Ctrl alone to the terminal', () => {
     expect(matchAppShortcut(k('+', 'Equal', { ctrlKey: true, shiftKey: true }), false)).toEqual({ kind: 'zoom', step: 1 })

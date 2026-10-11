@@ -1238,6 +1238,30 @@ never sends `J`, and a holder from before it is met by a daemon that
 deduplicates itself and counts that holder's offsets from its own clock.
 [03-contracts.md § Terminal holders](03-contracts.md#terminal-holders-caprock-pty-host).
 
+**Amendment (2026-10-11, the holder ships as its own binary).** A local
+benchmark against another terminal manager found Caprock's memory growing
+fastest per terminal, one holder each. A Go process pays for every package its
+binary links before `main` runs, and `caprock` links the whole daemon. The
+largest single cost is the SQLite driver's pure-Go libc, which reads
+`/etc/services` and `/etc/protocols` into tables at start-up on macOS: a holder
+built with nothing but `internal/ptyhost` measured 4.45 MB physical footprint,
+the same with that libc linked 9.09 MB, and the full `caprock pty-host` about
+11 MB (M1 Pro, macOS 27, 2026-10-11, a login shell in each, median of three).
+Freeing those tables after start-up gave nothing back: on that system the Go
+runtime's release of freed heap did not lower the footprint (50 MB of garbage
+freed with `debug.FreeOSMemory` took the footprint from about 56 MB to
+49–52 MB in two runs), and neither did
+`GOGC`, `GOMEMLIMIT` or `GOMAXPROCS` for the holder. So the holder became
+`cmd/caprock-pty-host`, a separate binary over the same package, which the
+daemon prefers when it sits beside `caprock`; releases, the Homebrew formula
+and the desktop app ship it. Through a preview daemon opening four login
+shells, three runs, median per holder: 11.2 MB before, 4.7 MB after (resident
+20.3 MB → 10.9 MB). It is invoked as `caprock-pty-host pty-host`, so the sweep
+for orphaned holders, which goes by `argv[1]`, finds both kinds; the protocol,
+registry and lifecycle are this ADR's unchanged. A missing holder binary falls
+back to `caprock pty-host`, so a single-binary build loses nothing but the
+saving.
+
 **Revisit if** a holder is ever seen orphaned without a registry entry (a leak
 the cleanup cannot see), if a service manager is found that kills detached
 processes by some other grouping (a launchd coalition, a Windows job without
@@ -2284,7 +2308,7 @@ up` rather than through launchd.
   (`app/src-tauri/Info.plist`, merged by the bundler): the sentence macOS
   shows when the app is the responsible program.
 - **Checked at build time.** `scripts/check-app-mic.sh`, run by CI's macOS
-  app job and by `scripts/app-release.sh`, fails when either binary lacks the entitlement or the Info.plist lacks the
+  app job and by `scripts/app-release.sh`, fails when the app, the daemon or the terminal holder (`caprock-pty-host`, ADR-033) lacks the entitlement or the Info.plist lacks the
   string.
 - Nothing else is asked for: no camera, no other entitlement.
 

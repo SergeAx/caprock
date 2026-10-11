@@ -36,6 +36,15 @@ const EXE: &str = if cfg!(windows) {
     "caprock"
 };
 
+/// The terminal holder the daemon starts one of per terminal, shipped beside
+/// it (cmd/caprock-pty-host, ADR-033). The daemon looks for it next to its
+/// own binary and runs `caprock pty-host` when it is not there.
+const HOLDER_EXE: &str = if cfg!(windows) {
+    "caprock-pty-host.exe"
+} else {
+    "caprock-pty-host"
+};
+
 /// Where Homebrew links the `caprock` formula's binary, by prefix.
 const BREW_BINS: &[&str] = &[
     "/opt/homebrew/bin/caprock",
@@ -653,9 +662,26 @@ fn launch_agent_registered() -> bool {
     })
 }
 
-/// Copies the bundled daemon to `dst` when it differs, atomically (write a
-/// sibling, then rename over: a running binary is never written in place).
+/// Copies the bundled daemon to `dst` when it differs, and the terminal
+/// holder bundled beside it to beside `dst`, where the daemon looks for it.
+///
+/// The holder goes first, so a daemon started from `dst` finds it. It is
+/// best-effort: without it the daemon holds terminals in `caprock pty-host`,
+/// as it did before the holder shipped on its own, so a failure to copy it is
+/// no reason to fail the daemon's install.
 pub fn install_bin(src: &Path, dst: &Path) -> Result<(), String> {
+    if let (Some(from), Some(to)) = (src.parent(), dst.parent()) {
+        let holder = from.join(HOLDER_EXE);
+        if holder.is_file() {
+            let _ = copy_bin(&holder, &to.join(HOLDER_EXE));
+        }
+    }
+    copy_bin(src, dst)
+}
+
+/// Copies `src` to `dst` when it differs, atomically (write a sibling, then
+/// rename over: a running binary is never written in place).
+fn copy_bin(src: &Path, dst: &Path) -> Result<(), String> {
     let want = std::fs::read(src)
         .map_err(|e| format!("read the bundled daemon {}: {e}", src.display()))?;
     if std::fs::read(dst).is_ok_and(|have| have == want) {
@@ -663,7 +689,12 @@ pub fn install_bin(src: &Path, dst: &Path) -> Result<(), String> {
     }
     let dir = dst.parent().ok_or("no bin directory")?;
     std::fs::create_dir_all(dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
-    let tmp = dir.join(format!(".{EXE}.new"));
+    let name = dst
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(EXE)
+        .to_owned();
+    let tmp = dir.join(format!(".{name}.new"));
     std::fs::write(&tmp, &want).map_err(|e| format!("write {}: {e}", tmp.display()))?;
     #[cfg(unix)]
     {
@@ -674,7 +705,7 @@ pub fn install_bin(src: &Path, dst: &Path) -> Result<(), String> {
     #[cfg(windows)]
     {
         // A running .exe cannot be replaced, but it can be renamed aside.
-        let old = dir.join(format!(".{EXE}.old"));
+        let old = dir.join(format!(".{name}.old"));
         let _ = std::fs::remove_file(&old);
         let _ = std::fs::rename(dst, &old);
     }
@@ -790,6 +821,31 @@ mod tests {
             );
         }
         assert!(install_bin(&s.data_dir.join("missing"), &s.bin()).is_err());
+    }
+
+    #[test]
+    fn install_bin_brings_the_terminal_holder_along() {
+        let s = sup("holder");
+        let bundle = s.data_dir.join("bundle");
+        std::fs::create_dir_all(&bundle).unwrap();
+        std::fs::write(bundle.join(EXE), b"daemon").unwrap();
+        // An app from before the holder shipped on its own: the daemon alone.
+        install_bin(&bundle.join(EXE), &s.bin()).unwrap();
+        let holder = s.bin().parent().unwrap().join(HOLDER_EXE);
+        assert!(!holder.exists());
+        std::fs::write(bundle.join(HOLDER_EXE), b"holder v1").unwrap();
+        install_bin(&bundle.join(EXE), &s.bin()).unwrap();
+        assert_eq!(std::fs::read(&holder).unwrap(), b"holder v1");
+        std::fs::write(bundle.join(HOLDER_EXE), b"holder v2").unwrap();
+        install_bin(&bundle.join(EXE), &s.bin()).unwrap();
+        assert_eq!(std::fs::read(&holder).unwrap(), b"holder v2");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&holder).unwrap().permissions().mode();
+            assert_eq!(mode & 0o111, 0o111, "the holder must be executable");
+        }
+        assert_eq!(std::fs::read(s.bin()).unwrap(), b"daemon");
     }
 
     #[cfg(unix)]

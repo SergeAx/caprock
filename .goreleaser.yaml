@@ -22,6 +22,17 @@ builds:
     ldflags: ["-s -w -X github.com/dspv/caprock/internal/version.Version={{.Version}}"]
     goos: [darwin, linux, windows]
     goarch: [amd64, arm64]
+  # The terminal holder on its own (ADR-033): the daemon starts it, one per
+  # terminal, when it sits beside caprock. It links nothing but the holder, so
+  # a terminal does not pay for the whole daemon's start-up.
+  - id: caprock-pty-host
+    main: ./cmd/caprock-pty-host
+    binary: caprock-pty-host
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X github.com/dspv/caprock/internal/version.Version={{.Version}}"]
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
 
 universal_binaries:
   - id: caprock-universal
@@ -30,10 +41,13 @@ universal_binaries:
   - id: caprock-hook-universal
     ids: [caprock-hook]
     replace: false
+  - id: caprock-pty-host-universal
+    ids: [caprock-pty-host]
+    replace: false
 
 archives:
   - id: default
-    ids: [caprock, caprock-hook]
+    ids: [caprock, caprock-hook, caprock-pty-host]
     formats: [tar.gz]
     format_overrides:
       - goos: windows
@@ -111,6 +125,7 @@ brews:
     install: |
       bin.install "caprock"
       bin.install "caprock-hook"
+      bin.install "caprock-pty-host"
     caveats: |
       Start it with:  caprock up
       Then open:      http://127.0.0.1:22776

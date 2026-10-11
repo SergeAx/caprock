@@ -26,7 +26,7 @@ How the system is built: the daemon, its two data planes, cross-platform rules, 
 
 Two data planes, mirroring what works in Munder Difflin, but in Go:
 
-- **Terminal plane** — `ptyman` spawns each agent as a `claude` process in a PTY, streams bytes to the UI (xterm.js in browser), accepts stdin writes. Shipped in Control (v0.2.0); see [ADR-006](08-decisions.md#adr-006--pty-backend-conpty-capable-wrapper-behind-our-own-ptyman-interface) for the backend choice. The PTY is not held by the daemon: each owned session runs under its own `caprock pty-host` process, which outlives the daemon, so a restart or an upgrade leaves the session running and the next daemon reattaches it ([ADR-033](08-decisions.md#adr-033--an-owned-session-outlives-the-daemon-its-terminal-lives-in-a-pty-host)).
+- **Terminal plane** — `ptyman` spawns each agent as a `claude` process in a PTY, streams bytes to the UI (xterm.js in browser), accepts stdin writes. Shipped in Control (v0.2.0); see [ADR-006](08-decisions.md#adr-006--pty-backend-conpty-capable-wrapper-behind-our-own-ptyman-interface) for the backend choice. The PTY is not held by the daemon: each owned session runs under its own `caprock pty-host` process, which outlives the daemon, so a restart or an upgrade leaves the session running and the next daemon reattaches it ([ADR-033](08-decisions.md#adr-033--an-owned-session-outlives-the-daemon-its-terminal-lives-in-a-pty-host)). The holder is the separate `caprock-pty-host` binary when it sits beside `caprock` (releases ship both), so a terminal does not pay for the whole daemon's package initialisation; without it, `caprock pty-host` runs the same code.
 - **Event plane** — `hookd` is a local HTTP server; a tiny shim registered in each agent's `.claude/settings.json` POSTs hook payloads (PreToolUse, PostToolUse, Stop, SubagentStop, SessionStart, SessionEnd, PreCompact, …). **This is the source of truth for "what is the agent doing."**
 
 **Why not Electron:** the only thing Electron buys is bundling Chromium. A Go daemon + browser tab gives the same UI with zero ABI pain, one `go build` per platform, and the option of a TUI later. Desktop wrapper (Tauri/Wails) is a packaging decision for later, not an architecture decision now ([ADR-003](08-decisions.md#adr-003--ui-stack-react--vite-embedded-in-the-go-binary-via-goembed)).
@@ -256,6 +256,7 @@ Ending is reversible: a later event on the same id makes the session active agai
 ```
 cmd/caprock/          # daemon + CLI (up/down/status/hooks/tasks/statusline/service/version …, hidden `hook` fallback shim)
 cmd/caprock-hook/     # the shim binary (thin main over internal/shim)
+cmd/caprock-pty-host/ # the terminal holder on its own (thin main over internal/ptyhost; ADR-033)
 internal/shim/        # shim logic: stdin → POST, silent, Stop request-response
 internal/statusline/  # `caprock statusline`: Claude Code status JSON → one-line render + best-effort rate-limit POST; `--rich` adds the daemon's session counters under a hard budget
 internal/codex/       # OpenAI Codex: rollout-transcript parser + poller (read-only, priced by our own table)

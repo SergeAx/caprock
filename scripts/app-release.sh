@@ -69,16 +69,19 @@ OUT="app/src-tauri/target/app-release"
 rm -rf "$OUT" && mkdir -p "$OUT" app/src-tauri/binaries
 
 echo "→ daemon $VERSION, universal"
-for arch in arm64 amd64; do
-  CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" go build -trimpath \
-    -ldflags "-s -w -X github.com/dspv/caprock/internal/version.Version=$VERSION" \
-    -o "$OUT/caprock-$arch" ./cmd/caprock
+# caprock and caprock-pty-host, the binary the daemon holds terminals in.
+for bin in caprock caprock-pty-host; do
+  for arch in arm64 amd64; do
+    CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" go build -trimpath \
+      -ldflags "-s -w -X github.com/dspv/caprock/internal/version.Version=$VERSION" \
+      -o "$OUT/$bin-$arch" "./cmd/$bin"
+  done
+  # tauri-build checks for each architecture's sidecar while compiling it; the
+  # bundler then takes the universal one.
+  cp "$OUT/$bin-arm64" "app/src-tauri/binaries/$bin-aarch64-apple-darwin"
+  cp "$OUT/$bin-amd64" "app/src-tauri/binaries/$bin-x86_64-apple-darwin"
+  lipo -create -output "app/src-tauri/binaries/$bin-universal-apple-darwin" "$OUT/$bin-arm64" "$OUT/$bin-amd64"
 done
-# tauri-build checks for each architecture's sidecar while compiling it; the
-# bundler then takes the universal one.
-cp "$OUT/caprock-arm64" app/src-tauri/binaries/caprock-aarch64-apple-darwin
-cp "$OUT/caprock-amd64" app/src-tauri/binaries/caprock-x86_64-apple-darwin
-lipo -create -output app/src-tauri/binaries/caprock-universal-apple-darwin "$OUT/caprock-arm64" "$OUT/caprock-amd64"
 
 # The signed updater bundle (F20, ADR-042): Caprock.app.tar.gz and its
 # minisign .sig, made when the signing key is in the environment
@@ -119,7 +122,7 @@ plist() { /usr/libexec/PlistBuddy -c "Print :$1" "$APP/Contents/Info.plist"; }
 [[ "$(plist CFBundleShortVersionString)" == "$VERSION" ]] || die "app version is $(plist CFBundleShortVersionString)"
 codesign --verify --deep --strict "$APP" || die "the signature does not verify"
 codesign -dv "$APP" 2>&1 | grep -q '^Signature=adhoc' || die "the app is not ad-hoc signed"
-for bin in caprock-app caprock; do
+for bin in caprock-app caprock caprock-pty-host; do
   archs="$(lipo -archs "$APP/Contents/MacOS/$bin")"
   [[ "$archs" == *x86_64* && "$archs" == *arm64* ]] || die "$bin is $archs, not universal"
 done

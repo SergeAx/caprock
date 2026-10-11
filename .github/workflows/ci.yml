@@ -139,6 +139,7 @@ jobs:
         run: |
           if (-not (Test-Path bin/caprock.exe)) { throw "bin/caprock.exe missing" }
           if (-not (Test-Path bin/caprock-hook.exe)) { throw "bin/caprock-hook.exe missing" }
+          if (-not (Test-Path bin/caprock-pty-host.exe)) { throw "bin/caprock-pty-host.exe missing" }
 
   # The desktop app (app/, Tauri v2; ADR-038): fmt, clippy and tests on every
   # OS, then a release bundle so a packaging break shows up in the PR rather

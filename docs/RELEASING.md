@@ -107,7 +107,7 @@ install command that is missing.
    `verify` job that re-runs `make check` + the Windows cross-build on the exact
    tagged commit (the full 3-OS matrix already ran on master before you tagged);
    a tag on a red commit never publishes. On success it produces:
-   - `caprock` and `caprock-hook` for darwin/linux/windows × amd64/arm64,
+   - `caprock`, `caprock-hook` and `caprock-pty-host` for darwin/linux/windows × amd64/arm64,
    - a macOS **universal** binary,
    - a Homebrew formula pushed to `dspv/homebrew-tap` and a Scoop manifest pushed
      to `dspv/scoop-bucket` — both **automatically**, because the release is no

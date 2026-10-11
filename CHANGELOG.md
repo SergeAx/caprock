@@ -7,6 +7,20 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Changed
+
+- **Each terminal takes about half the memory.** The process that keeps a
+  terminal alive across a Caprock restart (one per shell or agent tab) is now
+  a small program of its own, `caprock-pty-host`, shipped beside `caprock`,
+  instead of the whole of Caprock run in a special mode. Measured on an M1 Pro
+  Mac, macOS 27, on 2026-10-11, twelve idle login shells over three runs, each
+  holder process: 11.2 MB of memory before and 4.7 MB after (median physical
+  footprint, as Activity Monitor counts it; resident size 20.3 MB before,
+  10.9 MB after). Sessions behave exactly as before, and a session started
+  before the upgrade keeps running in the holder it started in. If
+  `caprock-pty-host` is missing — a `go install` build, say — terminals are
+  held by `caprock` itself, as before.
+
 ## [0.102.0] - 2026-10-11
 
 ### Added

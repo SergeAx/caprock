@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+
+	"github.com/dspv/caprock/internal/procstat"
 )
 
 // ADR-033, end to end: a session Caprock starts survives the daemon
@@ -49,6 +51,10 @@ func TestOwnedSessionSurvivesDaemonRestart(t *testing.T) {
 	}
 	caprock := filepath.Join(bin, "caprock"+exe)
 	goBuild(t, caprock, "./cmd/caprock")
+	// Beside caprock, as releases ship it: holders run from this binary.
+	// The other smoke tests build caprock alone and so cover the fallback,
+	// `caprock pty-host`.
+	goBuild(t, filepath.Join(bin, "caprock-pty-host"+exe), "./cmd/caprock-pty-host")
 	goBuild(t, filepath.Join(bin, "claude"+exe), "./testdata/fakeclaude")
 	t.Cleanup(func() {
 		killHolders(t, data)
@@ -69,6 +75,9 @@ func TestOwnedSessionSurvivesDaemonRestart(t *testing.T) {
 	id := spawnOwned(t, base, proj)
 	if !getSession(t, base, id).Survives {
 		t.Fatalf("the session did not start in a pty-host\ndaemon log:\n%s", d1.log())
+	}
+	if argv := holderArgv(t, data, id); len(argv) < 2 || !strings.Contains(filepath.Base(argv[0]), "caprock-pty-host") || argv[1] != "pty-host" {
+		t.Fatalf("the session's holder runs %q; want caprock-pty-host pty-host, the binary beside caprock", argv)
 	}
 	term := attachTerm(t, base, id)
 	term.waitFor(t, "fake-claude ready")
@@ -167,6 +176,22 @@ func TestOwnedSessionSurvivesDaemonRestart(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	d4.stop(t, true)
+}
+
+// holderArgv is the command line of the pty-host holding session id.
+func holderArgv(t *testing.T, data, id string) []string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(data, "ptyhost", id+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rec struct {
+		HostPID int32 `json:"host_pid"`
+	}
+	if err := json.Unmarshal(b, &rec); err != nil || rec.HostPID == 0 {
+		t.Fatalf("registry entry %s: %v", b, err)
+	}
+	return procstat.Cmdline(context.Background(), rec.HostPID)
 }
 
 func goBuild(t *testing.T, out, pkg string) {

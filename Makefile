@@ -50,16 +50,18 @@ help: ## Show this help
 
 # --- build ----------------------------------------------------------------
 .PHONY: build
-build: ui ## Build ./bin/caprock and ./bin/caprock-hook (with the embedded UI)
+build: ui ## Build ./bin/caprock, ./bin/caprock-hook and ./bin/caprock-pty-host (with the embedded UI)
 	@mkdir -p $(BIN)
 	go build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o $(BIN)/caprock$(EXE) ./cmd/caprock
 	go build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o $(BIN)/caprock-hook$(EXE) ./cmd/caprock-hook
+	go build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o $(BIN)/caprock-pty-host$(EXE) ./cmd/caprock-pty-host
 
 .PHONY: build-go
 build-go: ## Build the Go binaries only (uses whatever UI is already embedded)
 	@mkdir -p $(BIN)
 	go build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o $(BIN)/caprock$(EXE) ./cmd/caprock
 	go build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o $(BIN)/caprock-hook$(EXE) ./cmd/caprock-hook
+	go build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o $(BIN)/caprock-pty-host$(EXE) ./cmd/caprock-pty-host
 
 .PHONY: ui
 ui: ## Build the dashboard into internal/api/dist (installs deps on a fresh clone)
@@ -117,7 +119,8 @@ smoke: build-go ## Phase 0 DoD scenario + the Phase 2 e2e (what CI's smoke step 
 # --- desktop app (app/, Tauri v2; ADR-038) ----------------------------------
 # The app bundles the daemon as a Tauri sidecar, which Tauri looks for as
 # app/src-tauri/binaries/caprock-<rust host triple>[.exe]; app-sidecar builds
-# it from this checkout so the app always carries the daemon it was built with.
+# it from this checkout so the app always carries the daemon it was built with,
+# and caprock-pty-host beside it, the binary the daemon holds terminals in.
 APP_SRC    := app/src-tauri
 APP_TRIPLE  = $(shell rustc -vV 2>/dev/null | sed -n 's/^host: //p')
 # Bundle formats for app-bundle; empty means every format tauri.conf.json lists
@@ -133,10 +136,11 @@ APP_VERSION ?=
 # it builds exactly as before.
 
 .PHONY: app-sidecar
-app-sidecar: ## Build the daemon the app bundles (app/src-tauri/binaries/caprock-<triple>)
+app-sidecar: ## Build the daemon the app bundles (app/src-tauri/binaries/caprock[-pty-host]-<triple>)
 	@[ -n "$(APP_TRIPLE)" ] || { echo "rustc not found: install Rust with rustup (see app/README.md)"; exit 1; }
 	@mkdir -p $(APP_SRC)/binaries
 	go build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o $(APP_SRC)/binaries/caprock-$(APP_TRIPLE)$(EXE) ./cmd/caprock
+	go build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o $(APP_SRC)/binaries/caprock-pty-host-$(APP_TRIPLE)$(EXE) ./cmd/caprock-pty-host
 
 .PHONY: app
 app: app-sidecar ## Run the desktop app in development (debug build; finds or starts a daemon)

@@ -27,7 +27,7 @@ import (
 // package spawns through it exactly as it spawns in-process.
 type Manager struct {
 	// Exe is the binary to run as the holder; Args the arguments that select
-	// the holder (default: "pty-host").
+	// the holder (default: Arg).
 	Exe  string
 	Args []string
 	// Env is the holder process's own environment (nil: this process's).
@@ -102,7 +102,7 @@ func (m *Manager) spawnHosted(ctx context.Context, spec ptyman.Spec) (ptyman.Ses
 	}
 	args := m.Args
 	if args == nil {
-		args = []string{"pty-host"}
+		args = []string{Arg}
 	}
 	// The holder's stderr goes to a log beside the registry, so a holder that
 	// dies on its own leaves a reason behind. Holders write nothing there in

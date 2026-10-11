@@ -73,6 +73,17 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-11 — 0.105.0: lighter daemon, session deck, drawn charts
+
+Resource use became the focus (owner, 2026-10-11). The whole-history Week
+reads only the fields it counts and normalises inputs in one pass: on a copy
+of a 1.9 GB database the daemon's footprint 90 s after a start fell from
+678 MB to 85 MB. Whole-history answers are renewed while no event was
+written, cutting the daemon's CPU with the dashboard open from 11.5 s to
+4.7 s over two minutes. The session deck (⌘B) sits under an agent's
+terminal; ⌘0 opens the Dashboard; Cost and Lifetime draw donuts and share
+bars; the keep-awake mark says whether it holds the computer now.
+
 ### 2026-10-11 — 0.104.0: queued messages, / and @ pickers
 
 A message sent mid-turn from the chat field (phone or desktop) waits in a

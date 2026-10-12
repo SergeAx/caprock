@@ -29,7 +29,7 @@
  * project can be closed or hidden from its own ×, and hidden rows come back
  * from "N hidden · show" (components/ProjectRow.tsx).
  */
-import { useCallback, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { groupProjects, type HiddenProjects, type HiddenSessions, type InboxItem, type ProjectNode, type SidebarModel } from '@/lib/sidebar'
 import type { Tab } from '@/lib/tabs'
 import type { TabLabel } from '@/lib/tablabels'
@@ -108,6 +108,21 @@ function saveHiddenSessions(m: ReadonlyMap<string, number>) {
   try { localStorage.setItem(HIDDEN_SESSIONS_KEY, JSON.stringify(Object.fromEntries(kept))) } catch { /* not kept */ }
 }
 
+/** Says a session row was hidden from outside the sidebar (a watched session's tab, ObservePane). */
+export const HIDE_SESSION_EVENT = 'caprock:hide-session'
+
+/**
+ * Hides a session's row from the sidebar from anywhere — the sidebar may be
+ * closed, so the list is written here and the sidebar, when it is mounted,
+ * reads it again. Unlists only: nothing is sent to the session (rule 7).
+ */
+export function hideSessionRow(sessionId: string) {
+  const next = loadHiddenSessions()
+  next.set(sessionId, Date.now())
+  saveHiddenSessions(next)
+  window.dispatchEvent(new CustomEvent(HIDE_SESSION_EVENT, { detail: sessionId }))
+}
+
 export interface SidebarProps {
   model: SidebarModel
   source: ProjectSource
@@ -180,6 +195,11 @@ export function Sidebar(props: SidebarProps) {
       saveHiddenSessions(next)
       return next
     })
+  }, [])
+  useEffect(() => {
+    const reload = () => setHiddenSessions(loadHiddenSessions())
+    window.addEventListener(HIDE_SESSION_EVENT, reload)
+    return () => window.removeEventListener(HIDE_SESSION_EVENT, reload)
   }, [])
   const allTabs = props.tabs
   const tabbed = useMemo(() => new Set((allTabs ?? []).map((t) => t.projectId)), [allTabs])

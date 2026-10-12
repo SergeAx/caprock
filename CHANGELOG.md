@@ -13,6 +13,10 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   v…* on one line, with *Restarts the app · sessions keep running* in small
   type under it, instead of one sentence wrapping across the button.
 
+- **app:** the cockpit's headline figure stays on the agent's row, at its
+  right, in a narrow inspector too: it shrinks there instead of dropping to
+  the subagent chips' row.
+
 ## [0.111.2] - 2026-10-12
 
 ### Fixed

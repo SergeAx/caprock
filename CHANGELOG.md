@@ -7,6 +7,12 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Fixed
+
+- **app:** the cockpit's subagent row keeps its place: with none running it
+  says *no subagents running*, so the agent's figures and the sections below
+  no longer jump as subagents start and finish.
+
 ## [0.112.1] - 2026-10-13
 
 ### Added

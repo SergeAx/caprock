@@ -33,6 +33,15 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   window or the app with the sidebar open), and the caption under it wraps
   instead of being cut off.
 
+### Changed
+
+- **ci:** a pull request that does not touch the desktop app (`app/`, the
+  `Makefile`, `ci.yml`) skips the three app builds, and the Go jobs no longer
+  wait for the dashboard job. Go and Rust caches are written once per OS from
+  `master` and read by every job. A release builds the app while `verify`
+  runs, as two halves of `make check` side by side, and attaches it only after
+  goreleaser has published, so a red `verify` still publishes nothing.
+
 ## [0.111.3] - 2026-10-12
 
 ### Changed

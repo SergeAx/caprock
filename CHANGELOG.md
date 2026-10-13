@@ -25,6 +25,14 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   input, $0.003 cache hit, $0.60 output per 1M, read 2026-10-13); turns in
   DeepSeek's weekday peak hours bill double and read low. Table
   `2026-10-13.1`.
+- **app:** each subagent row in the cockpit says what the subagent is doing
+  now in words — the description Claude wrote for its latest command
+  ("Rerun the store tests"), else its tool and target ("Editing
+  Cockpit.tsx"), else its task — after its type as a letter chip (G, E, P,
+  the full type on hover), with calls and cost beside it; the dimmer line
+  under it shows the raw command only when the phrase does not already say
+  it. `GET /v1/sessions/{id}/subagents` carries the phrase as `doing` and
+  `doing_from`.
 
 ## [0.113.0] - 2026-10-13
 

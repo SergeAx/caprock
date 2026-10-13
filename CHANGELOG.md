@@ -31,6 +31,19 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Changed
 
+- **dashboard:** the Now screen refreshes once, not once per section. Its
+  sections ask on one shared tick, at most every 2 s (all-time figures every
+  10 s); sections asking the same question share one request; a folded or
+  scrolled-away section asks nothing until it is seen again; and the live
+  pulse and activity feed no longer read every track's history again each
+  time two busy sessions swap places. Under a steady stream of hook events
+  (five sessions, ten events a second) the open screen went from about 650–770
+  requests a minute to about 100, and the daemon's CPU for it on a copy of a
+  2.2 GB database from 36 s to 17 s per minute (measured 2026-10-13). A screen
+  opened after events had arrived no longer asks every question twice.
+- **app:** the hot-process flame on a sidebar row or tab draws again only
+  when what it says changes: every row's mark redrew on each 5 s resources
+  sample, hot or not. It stays a static mark — no animation to pause.
 - **daemon:** the database gets smaller on its own. While Caprock is idle
   (nothing recorded for 30 minutes) it replaces the screenshots and files
   that events stored before 0.113.0 still hold as base64 with the marker new

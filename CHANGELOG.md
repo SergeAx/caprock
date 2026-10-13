@@ -9,6 +9,16 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Added
 
+- **mail:** Caprock Mail, a mail client inside Caprock. Every IMAP account —
+  Gmail, iCloud, Fastmail, a company server — in one inbox at *Mail* (last in
+  the dashboard's screen row, marked *new*): conversations, instant search
+  over mail kept on this computer, archive, delete, spam, star, folders,
+  compose, reply, forward and attachments, new mail at once over IMAP IDLE,
+  and a keyboard for all of it. HTML mail never runs scripts or loads
+  trackers until you allow images. Optional summaries and reply drafts from
+  a model on your own computer (Ollama, LM Studio). Off until you add an
+  account; it then talks only to the mail servers you entered, passwords in
+  the system keychain. A one-time strip offers it after two days of use.
 - **app:** move between projects and their sessions from the keyboard.
   ⌘1–⌘9 bring a project to the front by its place in the sidebar (⌘9 the
   last), its key drawn on its row and on the tab it brings; ⌥⌘↓ / ⌥⌘↑ go to

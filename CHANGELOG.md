@@ -74,8 +74,20 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   it is still the one listed — same pid, same start time. Caprock never stops
   a process it did not start on its own (ADR-059).
 
+- **phone:** *Keep on after Caprock restarts* in Settings → *Use on your
+  phone*: phone access comes back on by itself after an update or a reboot.
+  Off by default; Turn off clears it; only paired phones get in either way
+  (ADR-060).
+
 ### Changed
 
+- **phone:** the phone panel says first where it works — *Works on this
+  Wi-Fi only* or *Works anywhere (Tailscale)* — instead of folding it under
+  *Then: …*. Without Tailscale it names the one step (Tailscale on this
+  computer and the phone, same account) with the downloads; it notices
+  Tailscale by itself while open, listens on its address without turning
+  access off and on, and a new code opens the Tailscale address. A paired
+  computer is no longer counted as a phone: *No phone paired yet* says so.
 - **remote:** the phone's first screen says what to do in three large steps,
   keeps the pasted link for a home-screen app behind one tap (shown at once
   when opened from the home screen), and answers the questions a careful

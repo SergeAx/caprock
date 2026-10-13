@@ -35,6 +35,15 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   with tokens and cost under it — what a session is doing now first, what it
   has added up to under it. A choice someone made stays; one that was only
   ever the old cost-first default takes the new one.
+- **app:** a hidden window does no work, and an idle one almost none. Out of
+  sight (minimized, closed or covered), the page stops its polls and clocks,
+  holds live events and applies them together every 2 s (at once for a
+  notification, a permission prompt or a loop alert, and the moment the
+  window is shown), pauses animations, and the terminal in front neither
+  draws nor blinks; the menu bar and Dock badge stay current. Shown, screens
+  that follow agents at work redraw a batch at a time rather than per event,
+  and clocks tick every second only while something on screen is under a
+  minute old.
 - **store:** tool calls are stored the way the screens read them. A hook's
   tool input and output now go through the same cap as the transcript's:
   screenshots and other base64 become a marker naming their type and size,

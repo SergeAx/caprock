@@ -137,6 +137,11 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Fixed
 
+- **app:** the version panel in the status bar has a close button; Esc
+  and a click outside still close it.
+- **app:** a button's tooltip no longer covers the panel it opened: the
+  Caprock doctor, the version, the theme picker and the composer's menus
+  show their tooltip only while closed.
 - **app:** a session no longer jumps into Claude Code's background-agents list on its own. Holding ⌥⌘↓ (Alt+Shift+↓ off macOS) to step through sessions and letting go of the modifiers before the arrow left the arrow repeating into the session it had just opened, and Claude Code read that Down as "go to the agents below the prompt". An arrow pressed as an app chord now stays the app's until it is released, and the sidebar's ⌥⇧↑ ⌥⇧↓ (Ctrl+Shift+↑ ↓ off macOS), which typed a Down too when pressed in a terminal, do nothing there. Plain arrows and ⌥← ⌥→ word jumps are unchanged.
 - **app:** the desktop app no longer opens to a black window when the deck's
   CI panel was left on Release and the newest release run lists no jobs. The

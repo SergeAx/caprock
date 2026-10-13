@@ -11,6 +11,18 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Added
 
+- **app:** the cockpit's spend chart can show **burn rate** — each bar the
+  stretch's cost over the hours actually worked in it (hours with five or
+  more calls), so an idle afternoon does not water it down and a stretch
+  with none has no bar rather than $0/h — next to cost, tokens and turns.
+  A faint dashed **pace line** marks your usual (for burn rate, your
+  30-day cost per active hour) or the period's average stretch, labelled at its right end (*usual $3.00/h*); bars above it
+  stand stronger, amber only in your top fifth, and hovering a bar says
+  *38% above your usual*. The choice is remembered, and the folded strip
+  follows it. Each project's `spark` in `GET /v1/stats/summary` carries
+  `active_hours` and `active_cost` from the same scan, and each of
+  `usual`'s distributions its `mean`.
+
 - **app:** the session deck's pull requests and CI, large. **Expand** beside
   *Hide ⌘B* opens a *PRs & CI* tab: the repository's last 14 days on top —
   pull requests merged per day, the median time to merge, the median CI run

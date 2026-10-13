@@ -486,9 +486,9 @@ def main():
                 # boots. Clicking the header's theme button used to cycle light
                 # and dark; since 0.108.0 it opens a seven-palette menu, so the
                 # click opened the menu and the light pass never turned light.
-                # Dark Warm and Book are what each side shows on a fresh
-                # install (DEFAULT_DARK and DEFAULT_LIGHT in ui/src/lib/themes.ts).
-                mode = "book" if theme == "light" else "dark-warm"
+                # Dark Cold and Light Cold, the palettes caprock.dev shows
+                # (owner, 2026-10-12), so the docs and the site match.
+                mode = "light-cold" if theme == "light" else "dark-cold"
                 evaluate(ws, "try { localStorage.setItem('caprock-theme-mode', '%s');"
                              " localStorage.setItem('caprock-theme', '%s') } catch (e) {}" % (mode, theme))
                 # Navigating to the same document with a different hash does
@@ -532,6 +532,10 @@ def main():
                         // not a total still loading, so they are left out.
                         let t = document.body.innerText;
                         for (const el of document.querySelectorAll('[data-session-figures]')) t = t.replace(el.innerText, '');
+                        // The live pulse's rows carry no such mark: a row is
+                        // the session's short id and state, then its cost on
+                        // a line of its own, $0.00 for one just started.
+                        t = t.replace(/^[0-9a-f]{8} · .*\\n\\$0\\.00\\s*$/gm, '');
                         if (document.querySelector('.skeleton-pulse')) return false;
                         if (t.includes('reading your figures')) return false;
                         if (t.includes('nothing measured')) return false;
@@ -551,6 +555,7 @@ def main():
                       (() => {
                         let t = document.body.innerText;
                         for (const el of document.querySelectorAll('[data-session-figures]')) t = t.replace(el.innerText, '');
+                        t = t.replace(/^[0-9a-f]{8} · .*\n\$0\.00\s*$/gm, '');
                         const z = t.search(/^\$0\.00\s*$/m);
                         return JSON.stringify({
                           skeletons: document.querySelectorAll('.skeleton-pulse').length,

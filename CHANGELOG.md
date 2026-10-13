@@ -137,6 +137,7 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Fixed
 
+- **app:** switching tabs no longer redraws the terminal's font for a moment. A tab hidden for 30 s had let its WebGL renderer go, so it came back drawn by the DOM renderer, in other glyphs and another cell height, until WebGL was swapped in 1.5 s later; a tab hidden for less had its glyph atlas rebuilt on every switch. The three tabs hidden last now keep their renderer, a tab past that gets it back before it is first painted, and the atlas is rebuilt only after a wake, a pixel-ratio change or a hide of more than five minutes, so the squashed letters of #541 stay fixed.
 - **app:** the version panel in the status bar has a close button; Esc
   and a click outside still close it.
 - **app:** a button's tooltip no longer covers the panel it opened: the

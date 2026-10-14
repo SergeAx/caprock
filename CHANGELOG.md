@@ -80,6 +80,13 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Changed
 
+- **now:** an opened Live pulse row is calmer and says more. Terminal,
+  Open repo and Open session are quiet links at the end of the project's
+  line instead of a row of bright buttons, and the empty space beside each
+  live session now shows its cost, its last hour, how long it has run, its
+  context, its branch with lines added and removed, and its pull request
+  with CI. The legend can be hidden; the **?** in the panel's header brings
+  it back.
 - **app:** closing the tab of an agent Caprock started now asks: **Close
   tab** (in focus, so ⌘W then Enter works as before and the agent keeps
   running) or **Close and end the agent**, which stops it (asking once

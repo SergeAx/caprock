@@ -20,6 +20,15 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Changed
 
+- **brain:** Second Brain is free, all of it. There is no cap on the
+  memories you drop in by hand (it was twenty without a licence), and the
+  automatic build from finished sessions works for everyone who says yes —
+  it runs on your own `claude`. The Brain screen asks everyone once; the
+  sidebar's Brain block starts unfolded, with no lock, and *How it works*
+  explains it and opens the Brain screen. A Premium licence bought for
+  Second Brain stays exactly as it was, with every other Premium feature.
+  `GET /v1/brain/status` no longer carries `licensed`, `free_max` or
+  `free_left`, and no Second Brain route answers `402`.
 - **pipeline:** *PRs & CI* is now **Pipeline**, everywhere: the tab, the
   sidebar footer, the palette, the deck. Tabs you had open come back under
   the new name. The page is one list of pull requests instead of a board
@@ -63,7 +72,7 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   five days of history it says *not enough history*. It follows the agent
   filter. New endpoint `GET /v1/stats/trends`.
 
-- **brain:** Second Brain builds itself (Premium), once you say yes. When a
+- **brain:** Second Brain builds itself, once you say yes. When a
   session has been quiet for ten minutes, your own `claude` (Haiku, no
   tools, no transcript, none of your hooks) picks out what it decided and
   found, and each memory links back to the passage it came from. A daily
@@ -71,11 +80,6 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   later; *Build from my last 30 days* shows an estimate first. Settings →
   Second Brain shows what it used and read. A new session's handoff now
   carries up to five of the repository's memories.
-- **app:** Second Brain comes to Premium on 18 October 2026: a knowledge
-  graph of everything your agents do, kept on your computer. After two days
-  of use a short strip offers it, and *How it works* explains it and leads
-  to Premium; if it doesn't arrive on that date, write to us for a full
-  refund ([ADR-062](.ai/08-decisions.md)).
 - **app:** Caprock may also ask about a feature it is considering — running
   Hugging Face models on your computer, and one of watching short ads to
   earn money or YouTube while agents work. At most one strip a day; each

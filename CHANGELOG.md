@@ -9,6 +9,23 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Added
 
+- **deck:** the PRs & CI tab opens on a **Board**: the repository's pull
+  requests as cards in six columns — Draft, CI running, Needs a fix, Ready,
+  Merged, Released — each with its author's face and name, how long it has
+  sat in that column, its CI, the agents on it now and its agent cost (what
+  Caprock recorded agents spending on it, at API list price). Above it, the
+  flow: merges a day, opened → merged, merged → released (an estimate), the
+  CI median. Below it, each recent release with the pull requests it shipped
+  and what the agents spent on them. A card opens the pull request in the
+  List, the old view.
+- **now:** a **CI/CD** section under Repos: GitHub's own status, and per
+  repository the Actions minutes billed this month, CI time and its trend,
+  red runs, runs stuck past their usual time or waiting for a runner, the
+  newest release, the five pull requests the agents spent most on this week
+  and who opened them. Folded, it reads nothing. With GitHub connected it
+  also reads githubstatus.com and shows avatars from
+  avatars.githubusercontent.com, neither sent your token; Settings → GitHub
+  says so.
 - **now:** two live sessions in one checkout are pointed out. When two
   sessions work in the same folder of a repository (not in separate
   worktrees), each Live pulse row gets a small chip naming the other; when

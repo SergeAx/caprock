@@ -145,7 +145,14 @@ others. Installing it: [install-app.md](install-app.md).
   week's, lines added and removed, files not committed, from the
   repository's own git; with GitHub connected, its open pull requests, red
   runs, median CI time and newest release, as the session deck last read
-  them. Fold it and it reads nothing.
+  them. Fold it and it reads nothing. **CI/CD**, under Repos, needs GitHub
+  connected: GitHub's own status (from githubstatus.com), and for each
+  repository the Actions minutes GitHub billed this month (with the token's
+  Plan (read) permission, or Administration (read) for an organization), the median CI time and its trend, the share of
+  red runs, runs stuck far past their usual time or waiting for a runner,
+  the newest release, the five pull requests the agents spent most on this
+  week, and who opened them, face and name. Costs are at API list price.
+  Fold it and it reads nothing.
 - **Live pulse.** One row per running session, led by the session's name,
   with the project, branch and short id under it. Rows keep their places:
   the order sessions started in (tabs follow the tab strip among
@@ -466,7 +473,16 @@ others. Installing it: [install-app.md](install-app.md).
   block with the same summary, or one ring with *10/11 · 5m*, or the jobs by OS, switched in its
   label; it shows what the deck last read and a click opens *PRs & CI*.
   **Expand** (⇧⌘B), beside *Hide*, opens it large in a tab of its own,
-  *PRs & CI*: the repository's last two weeks on top (pull requests merged
+  *PRs & CI*. It opens on the **Board**: the repository's pull requests as
+  cards in six columns — Draft, CI running, Needs a fix, Ready, Merged,
+  Released — each card with its title, the author's face and name, how long
+  it has been in that column, its CI, the agents working on it now and its
+  *agent cost* (what Caprock recorded agents spending on it, at API list
+  price — not a bill); above, how fast work flows (merges a day, opened →
+  merged, merged → released as an estimate, the CI median); below, each
+  recent release with the pull requests it shipped and what the agents spent
+  on them. Click a card to open it in the **List**:
+  the repository's last two weeks on top (pull requests merged
   per day, the median time to merge, the median CI run, the share of red
   runs, the Actions minutes GitHub billed this month), its pull requests on
   the left (this session's, the repository's or the open ones), and the one
@@ -745,10 +761,14 @@ no switch for them. See [Premium](../README.md#premium).
 
 Settings → **GitHub** connects your account. Caprock then talks to
 `api.github.com` from the daemon; the token never reaches the page or your
-phone. Nothing is sent to GitHub until you connect. The one exception to
-`api.github.com`: when you click a failed CI step in the session deck, the
-job's log is downloaded from the signed address GitHub points to on its log
-storage, without your token.
+phone. Nothing is sent to GitHub until you connect. Besides
+`api.github.com`, and never with your token: when you click a failed CI step
+in the session deck, the job's log is downloaded from the signed address
+GitHub points to on its log storage; while Now's CI/CD section is open, the
+daemon reads `www.githubstatus.com`'s public status at most every five
+minutes; and the PRs & CI Board and the CI/CD section show pull request
+authors' pictures from `avatars.githubusercontent.com`, loaded by the page
+with no referrer.
 
 **Connecting**, easiest first:
 

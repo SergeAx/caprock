@@ -7,6 +7,16 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Changed
+
+- **brain:** it is called *Second Brain* everywhere it is named — the
+  sidebar block (*SECOND BRAIN*), the dashboard's screen row, the screen's
+  title, ⌘K (*Second Brain*, *Add to Second Brain…*) and *Drop into Second
+  Brain* — with a brain outline as its mark (it was a drop falling into a
+  bowl, which did not read as a brain) beside the name, and one faint line under it in
+  the sidebar and on the screen: *All your agents build your personal Jarvis
+  over time.*
+
 ## [0.117.3] - 2026-10-14
 
 ### Added

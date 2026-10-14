@@ -7,7 +7,30 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+### Added
+
+- **cockpit:** put the sections in your own order. *Arrange sections*
+  under the last one lists them with ↑ and ↓ for each, *Reset to default
+  order* and *Done*; nothing moves by dragging a heading, so it never
+  happens by accident, and the order is kept for you.
+- **cockpit:** every section folds to one line on its label, like Context
+  and Plan — Now, Subagents, Tasks, Recent tools, Changes, CI and
+  Processes — and stays folded or open as you left it. CI and Processes
+  can be arranged with the rest.
+
 ### Changed
+
+- **cockpit:** Recent tools says something. Each call shows what it acted
+  on — a file relative to the project, or a command's program and first
+  words instead of the variables set ahead of it — and how it ended: a
+  quiet ✓, *exit 1* or *error* in red, the time only when it was slow,
+  and how long ago. The same call repeated in a row is one row with ×N.
+  The bar beside each call is gone, and the count in the heading now says
+  what it counts (*31,713 this session*).
+- **cockpit:** CI's *OS* view is now *By OS* and shows the newest pull
+  request's checks per runner — *Linux ✓ passed 1m 48s*, *Windows ●
+  running* — without opening its row in the deck first; each of the three
+  tabs says what it shows on hover.
 
 - **phone:** one way to pair a phone: from anywhere. Settings → Use on your
   phone → **Show a code** now turns on access from anywhere (the encrypted
@@ -33,6 +56,9 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   for that, the name ends in an ellipsis and scrolls into view inside its
   own space while you point at the tab, so nothing in the strip moves
   (with reduced motion it stays cut; the tooltip names it in full).
+- **cockpit:** moving the mouse over CI's pull requests no longer opens a
+  card over the panel. The list of checks opens only once the pointer
+  rests on a row, beside the panel, and closes as soon as it leaves.
 - **phone:** every hint on the phone now says where to go: the Caprock app
   on your computer, Settings → Use on your phone, and the button by name.
   "This phone can read but not type. On the computer: Settings…" left out

@@ -93,6 +93,13 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Changed
 
+- **perf(store):** the cockpit's subagent rows and the Cost screen's
+  summary read far less of the database. A refresh of a busy session's
+  subagent rows took 25–37 ms instead of 224–303 ms on a copy of a 2.4 GB
+  database, and today's per-turn attribution 42–59 ms instead of 69–79 ms;
+  the burn tile no longer counts a whole summary of the last ten minutes on
+  every request. A new migration builds three small indexes once, a few
+  seconds on a large database.
 - **phone:** the phone panel says first where it works — *Works on this
   Wi-Fi only* or *Works anywhere (Tailscale)* — instead of folding it under
   *Then: …*. Without Tailscale it names the one step (Tailscale on this

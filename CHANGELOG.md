@@ -9,6 +9,14 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Added
 
+- **brain:** Second Brain builds itself (Premium), once you say yes. When a
+  session has been quiet for ten minutes, your own `claude` (Haiku, no
+  tools, no transcript, none of your hooks) picks out what it decided and
+  found, and each memory links back to the passage it came from. A daily
+  token limit (100k, 300k or 1M), short sessions skipped, failures retried
+  later; *Build from my last 30 days* shows an estimate first. Settings →
+  Second Brain shows what it used and read. A new session's handoff now
+  carries up to five of the repository's memories.
 - **app:** Second Brain comes to Premium on 18 October 2026: a knowledge
   graph of everything your agents do, kept on your computer. After two days
   of use a short strip offers it, and *How it works* explains it and leads

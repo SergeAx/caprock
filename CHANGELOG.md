@@ -9,6 +9,18 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Fixed
 
+- **phone:** a paired phone stays paired. A dropped connection, a computer
+  or relay restarting, a phone asleep or offline, a computer still on an
+  older Caprock, or a QR opened twice no longer send the phone back to
+  *Settings → Use on your phone*. Three causes: a phone hanging up in the
+  middle of an answer took the computer off the relay for every phone; the
+  relay could hand the next phone a stray message meant for the one before,
+  which the page read as "not your computer"; and the page believed a
+  single bad answer. Now the page asks to pair again only when the computer
+  has turned the phone away on two separate connections, or refused it
+  three times in a row, and it still checks once a minute and comes back by
+  itself if that was wrong. Needs the new page at m.caprock.dev and the
+  relay redeployed; the computer's half comes with the next release.
 - **status:** an agent you set going no longer reads *waiting for you*
   for seconds after. Answering a permission prompt — a key in the
   terminal, the card's buttons, the phone, Telegram — shows it working at

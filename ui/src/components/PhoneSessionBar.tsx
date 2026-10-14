@@ -63,7 +63,7 @@ export function PhoneSessionBar({
         className={`${overlay ? 'absolute -left-3 -right-3 top-0' : 'relative -mx-3'} z-30 h-11 overflow-hidden ${away ? 'pointer-events-none' : ''}`}
       >
         <div className={`flex h-11 items-center gap-1 border-b border-border bg-panel pl-0.5 pr-2 transition-transform duration-200 motion-reduce:transition-none ${away ? '-translate-y-full' : ''}`}>
-          <a href={backHref} aria-label="Back to Now" className="flex h-11 w-9 shrink-0 items-center justify-center text-[24px] leading-none text-fg-muted no-underline hover:no-underline">
+          <a href={backHref} aria-label="Back to Home" className="flex h-11 w-9 shrink-0 items-center justify-center text-[24px] leading-none text-fg-muted no-underline hover:no-underline">
             ‹
           </a>
           <button

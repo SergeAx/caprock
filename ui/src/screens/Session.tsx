@@ -129,7 +129,7 @@ export function SessionScreen({ id, tab, at }: { id: string; tab?: string; at?: 
       return (
         <div className="grid grid-cols-1 gap-2">
           <div className="flex items-center gap-3 flex-wrap">
-            <a href={href({ name: 'now' })} className="link text-fg-muted text-[12px]">← Now</a>
+            <a href={href({ name: 'now' })} className="link text-fg-muted text-[12px]">← Home</a>
             <span className="mono text-[11px] text-fg-faint">{id}</span>
           </div>
           {terminal}
@@ -205,7 +205,7 @@ export function SessionScreen({ id, tab, at }: { id: string; tab?: string; at?: 
   const details = (
     <>
       <div className="flex items-center gap-3 flex-wrap">
-        {!compact && <a href={href({ name: 'now' })} className="link text-fg-muted text-[12px]">← Now</a>}
+        {!compact && <a href={href({ name: 'now' })} className="link text-fg-muted text-[12px]">← Home</a>}
         {!compact && <h1 className="text-[15px] font-medium">{s.project || 'unknown project'}</h1>}
         <span className="mono text-[11px] text-fg-faint">{s.session_id}</span>
         {s.native_id && (

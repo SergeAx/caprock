@@ -25,6 +25,21 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Fixed
 
+- **phone:** a phone can type the moment it pairs. A newly paired phone
+  could only look until a second click on the computer — impossible once
+  you have left the house. Settings → Use on your phone now has **This
+  phone can type and start agents** beside **Show a code**, ticked by
+  default and remembered on the computer; the code carries it, so the phone
+  pairs ready to work. Untick it for a phone that should only look. The
+  panel lists the steps one line each and, while the code is up and after,
+  ticks off what is done and what is left: access from anywhere, the phone
+  paired (by name), whether it can type (with **Let it control sessions**
+  right there if not) and whether the app is installed on it. The phone
+  opens on a short **Ready** card — connected to which computer, whether it
+  can type and, if not, exactly where on the computer to fix it, the
+  install button, and **Open sessions**. m.caprock.dev needs a redeploy
+  for the phone's half.
+
 - **now:** the CI/CD section lists only repositories with a session in the
   last 14 days, most recent first. Older ones, and any you hide from a
   block's new ⋯ menu (*Hide from CI/CD*), fold into one quiet line —

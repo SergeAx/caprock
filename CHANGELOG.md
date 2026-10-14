@@ -55,6 +55,12 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   until you press **Send**, which sends those answers to caprock.dev and
   nothing else; *Not interested* and × send nothing, and an answered strip
   never returns.
+- **brain:** Second Brain drawn. The Brain screen opens on a graph of your
+  memories and their topics and projects — drag, zoom, click a dot to open
+  it, *List* for rows — smooth with thousands of memories. The app's
+  sidebar has a Brain block below the projects: the newest thirty as a small
+  graph where each new memory drops in, and the three newest titles. The
+  strip that offered Second Brain ahead of its arrival no longer shows.
 
 ### Fixed
 

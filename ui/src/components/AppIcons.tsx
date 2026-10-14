@@ -37,8 +37,21 @@ export const BranchIcon = (p: P) => <Icon {...p}><circle cx="6" cy="5" r="2" /><
 export const PullRequestIcon = (p: P) => <Icon {...p}><circle cx="6" cy="6" r="2.25" /><circle cx="6" cy="18" r="2.25" /><circle cx="18" cy="18" r="2.25" /><path d="M6 8.25v7.5M18 15.75V9.5a3 3 0 0 0-3-3h-3.5M13.5 4l-2.5 2.5 2.5 2.5" /></Icon>
 export const InspectorIcon = (p: P) => <Icon {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /></Icon>
 export const DeckIcon = (p: P) => <Icon {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 13h18M7.5 17v-1M10.5 17v-2M13.5 17v-1M16.5 17v-1.5" /></Icon>
+/** The PRs & CI view's mode, as the sidebar footer's button shows it: a
+ *  window with no band (a dotted edge where it would be), a band along its
+ *  bottom, or the window filled. */
+export const BarModeIcon = ({ mode, ...p }: P & { mode: 'hidden' | 'bar' | 'full' }) => (
+  <Icon {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    {mode === 'hidden' && <path d="M7 16.5h1M11.5 16.5h1M16 16.5h1" />}
+    {mode === 'bar' && <path d="M3 14h18M6.5 17h11" />}
+    {mode === 'full' && <><path d="M3 8h18" /><rect x="6" y="11" width="12" height="6" rx="1" fill="currentColor" stroke="none" /></>}
+  </Icon>
+)
 export const SidebarIcon =(p: P) => <Icon {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /></Icon>
 export const SearchIcon = (p: P) => <Icon {...p}><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" /></Icon>
+/** An envelope: Caprock Mail (the sidebar footer, its tab). */
+export const MailIcon = (p: P) => <Icon {...p}><rect x="3" y="5" width="18" height="14" rx="2.5" /><path d="m4 7 8 6 8-6" /></Icon>
 export const DashboardIcon = (p: P) => <Icon {...p}><rect x="3" y="3" width="7.5" height="9" rx="1.5" /><rect x="13.5" y="3" width="7.5" height="5" rx="1.5" /><rect x="13.5" y="11" width="7.5" height="10" rx="1.5" /><rect x="3" y="15" width="7.5" height="6" rx="1.5" /></Icon>
 export const InboxIcon = (p: P) => <Icon {...p}><path d="M3 13h5l1.5 2.5h5L16 13h5" /><path d="M5.5 5h13L21 13v5.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5V13z" /></Icon>
 export const SunIcon = (p: P) => <Icon {...p}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4" /></Icon>

@@ -37,6 +37,11 @@ vi.mock('@/screens/Status', async () => {
   }
 })
 
+// Mail's own test renders it (screens/mail); here only where it opens.
+vi.mock('@/screens/mail/MailScreen', () => ({
+  MailScreen: ({ fill }: { fill?: boolean }) => <div data-testid="mail-screen" data-fill={String(!!fill)} />,
+}))
+
 function sess(p: Partial<SessionSummary>): SessionSummary {
   return {
     session_id: 's', cwd: '/w/app', repo_root: '/w/app', project: 'app', model: 'claude-opus-5', started_at: 0, last_event_at: 1, status: 'active',
@@ -69,7 +74,7 @@ vi.mock('@/lib/api', async (orig) => {
     ...actual,
     api: {
       ...actual.api,
-      status: async () => ({ version: 'v0.0.0', claude_available: true }),
+      status: async () => ({ version: 'v0.0.0', claude_available: true, events: 0 }),
       sessions: async () => sessions,
       spawn: async (req: Record<string, unknown>) => {
         spawned.reqs.push(req)
@@ -340,6 +345,33 @@ describe('the app workspace', () => {
     const back = screen.getByRole('tab', { name: /Dashboard/ })
     fireEvent.click(within(back).getByRole('button', { name: 'Close tab Dashboard' }))
     expect(screen.queryByRole('tab', { name: /Dashboard/ })).not.toBeInTheDocument()
+  })
+
+  // Owner, 2026-10-14 (translated): "a button ... in the left bottom ... opens
+  // another system tab with its own key combo, and Mail is there. It's not
+  // there until you click it."
+  it('opens Mail in a tab of its own from the sidebar and ⇧⌘M, beside the Dashboard tab, and closes it', async () => {
+    await renderApp()
+    expect(screen.queryByRole('tab', { name: 'Mail' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^Mail/ }))
+    const mail = await screen.findByRole('tab', { name: 'Mail' })
+    expect(mail).toHaveAttribute('aria-selected', 'true')
+    expect(location.hash).toBe('#/mail')
+    expect(await screen.findByTestId('mail-screen')).toHaveAttribute('data-fill', 'true')
+    // Not the Dashboard tab's: that one is not opened by Mail.
+    expect(screen.queryByRole('tab', { name: /Dashboard/ })).not.toBeInTheDocument()
+    // ⌘0 to the dashboard: the Mail tab stays, behind.
+    await cmd('0')
+    expect(await screen.findByRole('tab', { name: /Dashboard/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Mail' })).toHaveAttribute('aria-selected', 'false')
+    // ⇧⌘M brings it back to the front, once.
+    await cmd('m', { shiftKey: true })
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Mail' })).toHaveAttribute('aria-selected', 'true'))
+    expect(screen.getAllByRole('tab', { name: 'Mail' })).toHaveLength(1)
+    fireEvent.click(within(screen.getByRole('tab', { name: 'Mail' })).getByRole('button', { name: 'Close tab Mail' }))
+    await waitFor(() => expect(location.hash).toBe('#/app'))
+    expect(screen.queryByRole('tab', { name: 'Mail' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Dashboard/ })).toBeInTheDocument()
   })
 
   // Owner, 2026-10-10: Settings had no way out on the page. Its × closes the
@@ -682,6 +714,17 @@ describe('the app workspace', () => {
     await renderApp()
     await screen.findByRole('tab', { name: /Fix the login bug/ })
     expect(screen.queryByRole('status', { name: 'Keys to move around' })).toBeNull()
+  })
+
+  // Owner, 2026-10-14, translated: "Send feedback should also open with a key combo".
+  it('opens Send feedback on ⇧⌘F from anywhere, and lists the key among all keys', async () => {
+    await renderApp()
+    act(() => { fireEvent.keyDown(window, { key: 'F', code: 'KeyF', metaKey: true, shiftKey: true }) })
+    const dialog = await screen.findByRole('dialog', { name: 'Feedback' })
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Feedback' })).toBeNull())
+    await openFromPalette('Keyboard shortcuts')
+    expect(await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })).toHaveTextContent('⇧⌘FSend feedback')
   })
 
   it('restores its tabs after a reload', async () => {

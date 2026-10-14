@@ -9,6 +9,14 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Added
 
+- **app:** a Mail button with its own key. *Mail ⇧⌘M* in the sidebar's
+  bottom block (Ctrl+Shift+M on Windows and Linux) opens Mail in a tab of its
+  own beside the Dashboard tab; pressed again it brings it to the front. With
+  no account yet it opens straight on a sample inbox, with a line on top and
+  *Add account* (Google, Microsoft, iCloud, Other, import); adding your
+  account leaves the sample. Also in the palette as *Open Mail*.
+- **app:** Send feedback opens with ⇧⌘F (Ctrl+Alt+Shift+F on Windows and
+  Linux) from anywhere in the app, and its row in the sidebar shows the key.
 - **cockpit:** put the sections in your own order. *Arrange sections*
   under the last one lists them with ↑ and ↓ for each, *Reset to default
   order* and *Done*; nothing moves by dragging a heading, so it never
@@ -47,6 +55,12 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Changed
 
+- **app:** the PRs & CI view has one button, at the foot of the sidebar
+  beside *Dashboard*: its picture shows the mode — Hidden, Bar (the session
+  deck under the agent's terminal) or Full page (the PRs & CI tab) — and a
+  click moves to the next. ⌘B and ⇧⌘B work as before and the button
+  follows them. The deck's own *Expand* and *Hide* buttons are gone. The
+  theme button moved beside it, out of the Settings row.
 - **cockpit:** Recent tools says something. Each call shows what it acted
   on — a file relative to the project, or a command's program and first
   words instead of the variables set ahead of it — and how it ended: a
@@ -71,6 +85,9 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Fixed
 
+- **app:** the PRs & CI bar's header no longer runs past its right edge
+  when the sidebar and the cockpit are both open on a laptop screen: the
+  least useful words drop first and the rest wraps to a second line.
 - **phone:** m.caprock.dev says where you are. The name Caprock and
   caprock.dev stand beside the mark, a line says the page is the other half
   of the Caprock app on your computer (with where to get it), and the first

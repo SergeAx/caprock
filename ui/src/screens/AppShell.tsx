@@ -46,7 +46,9 @@ import { TabStrip, TerminalStack } from '@/components/TerminalTabs'
 import { Inspector } from '@/components/Inspector'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { SessionDeck } from '@/components/SessionDeck'
-import { readDeck, saveDeck, type DeckPrefs } from '@/lib/deck'
+import { barModeOf, readDeck, saveDeck, type DeckPrefs } from '@/lib/deck'
+import { FeedbackDialog } from '@/components/Feedback'
+import { currentScreen } from '@/lib/feedback'
 import { StatusStrip } from '@/components/StatusStrip'
 import { openCaprockDoctor } from '@/components/FootprintPanel'
 import { StarStrip } from '@/components/StarStrip'
@@ -77,7 +79,7 @@ import type { ChatPane } from '@/components/QuickChatPane'
 import { useSpawnableAgents } from '@/components/AgentPicker'
 import { AddProjectSheet } from '@/components/AddProjectSheet'
 import { CommandPalette, type PaletteItem } from '@/components/CommandPalette'
-import { BranchIcon, ChatIcon, DashboardIcon, DeckIcon, ExternalIcon, FileIcon, FolderIcon, FolderPlusIcon, InspectorIcon, PlusIcon, SearchIcon, SettingsIcon, SparkIcon, TerminalIcon } from '@/components/AppIcons'
+import { BranchIcon, ChatIcon, DashboardIcon, DeckIcon, MailIcon, ExternalIcon, FileIcon, FolderIcon, FolderPlusIcon, InspectorIcon, PlusIcon, SearchIcon, SettingsIcon, SparkIcon, TerminalIcon } from '@/components/AppIcons'
 import type { PaneStatus } from '@/components/TerminalPane'
 import { EditorMenu, type EditorMenuAt } from '@/components/EditorMenu'
 import { joinPath, preferredName, useEditors } from '@/lib/editors'
@@ -105,6 +107,7 @@ import { SAVED_SECTION_ID } from '@/components/SavedPromptsSetting'
 export { worktreeSlug }
 
 const Dashboard = lazy(() => import('@/App').then((m) => ({ default: m.Dashboard })))
+const MailScreen = lazy(() => import('@/screens/mail/MailScreen').then((m) => ({ default: m.MailScreen })))
 const PairScreen = lazy(() => import('@/screens/Pair').then((m) => ({ default: m.PairScreen })))
 
 const UI_KEY = 'caprock.app.ui'
@@ -252,6 +255,10 @@ export function AppShell() {
   const isMac = isMacPlatform()
   const [hash, goHash] = useHash()
   const workspaceShown = isWorkspaceHash(hash)
+  // Mail is a tab of its own, not the Dashboard tab's (owner, 2026-10-14):
+  // #/mail brings the Mail tab to the front.
+  const mailShown = !workspaceShown && parseHash(hash).name === 'mail'
+  const dashboardShown = !workspaceShown && !mailShown
   const data = useWorkspaceData()
   const [ws, dispatch] = useReducer(workspaceReducer, undefined, loadWorkspace)
   const [prefs, setPrefs] = useState<UiPrefs>(loadPrefs)
@@ -262,6 +269,8 @@ export function AppShell() {
   // Offer answers live on the daemon so the app and a browser tab agree.
   usePromptSync()
   const [toast, setToast] = useState('')
+  // Send feedback opened by its key (⇧⌘F): the screen it was asked from, or null.
+  const [feedbackAt, setFeedbackAt] = useState<string | null>(null)
   /** A close that waits on the question about a busy shell. */
   const [closing, setClosing] = useState<
     | { kind: 'tab'; tabId: string; paneId?: string; plan: ClosePlan; chats: readonly string[] }
@@ -361,16 +370,26 @@ export function AppShell() {
   // The Dashboard tab: in the strip from the moment a dashboard screen is
   // shown until it is closed, and it brings back the screen last shown in it.
   const lastDashboard = useRef('#/')
-  if (!workspaceShown) lastDashboard.current = hash
+  if (dashboardShown) lastDashboard.current = hash
   useEffect(() => {
-    if (!workspaceShown && !ws.dashboard) dispatch({ type: 'dashboard', open: true })
-  }, [workspaceShown, ws.dashboard])
-  const dashboardRoute = parseHash(workspaceShown ? lastDashboard.current : hash)
+    if (dashboardShown && !ws.dashboard) dispatch({ type: 'dashboard', open: true })
+  }, [dashboardShown, ws.dashboard])
+  const dashboardRoute = parseHash(dashboardShown ? hash : lastDashboard.current)
   const closeDashboard = useCallback(() => {
     dispatch({ type: 'dashboard', open: false })
     lastDashboard.current = '#/'
     // In the same render as the dispatch: on the old hash the tab reopened.
-    if (!isWorkspaceHash(location.hash)) goHash(APP_ROUTE)
+    if (!isWorkspaceHash(location.hash) && parseHash(location.hash).name !== 'mail') goHash(APP_ROUTE)
+  }, [goHash])
+  // The Mail tab: in the strip from the first time Mail is opened (the
+  // sidebar's Mail row, ⇧⌘M, the dashboard's Mail, the palette) until its ×.
+  useEffect(() => {
+    if (mailShown && !ws.mail) dispatch({ type: 'mail', open: true })
+  }, [mailShown, ws.mail])
+  const onMail = useCallback(() => { if (parseHash(location.hash).name !== 'mail') goHash('#/mail') }, [goHash])
+  const closeMail = useCallback(() => {
+    dispatch({ type: 'mail', open: false })
+    if (parseHash(location.hash).name === 'mail') goHash(APP_ROUTE)
   }, [goHash])
   const projectName = useCallback((id: string) => projectsById.get(id)?.name, [projectsById])
   /** A tab picked in the strip or in the sidebar's list. */
@@ -953,7 +972,8 @@ export function AppShell() {
         if (openChangesRef.current) openChangesRef.current()
         else setToast('Changes shows a git project’s diff: bring a session in one to the front.')
         break
-      case 'dashboard': if (workspaceShown) onDashboard(); else location.hash = APP_ROUTE; break
+      // From a terminal or the Mail tab to the dashboard; from the dashboard back.
+      case 'dashboard': if (!dashboardShown) onDashboard(); else location.hash = APP_ROUTE; break
       case 'next-tab': dispatch({ type: 'cycle', delta: 1 }); showWorkspace(); break
       case 'prev-tab': dispatch({ type: 'cycle', delta: -1 }); showWorkspace(); break
       case 'tab': focusTab(c.index); break
@@ -965,9 +985,11 @@ export function AppShell() {
       case 'next-waiting': jumpToWaiting(); break
       case 'find': if (workspaceShown) window.dispatchEvent(new Event(FIND_EVENT)); break
       case 'settings': onSettings(); break
+      case 'feedback': setFeedbackAt(currentScreen(location.hash, true)); break
+      case 'mail': onMail(); break
       case 'zoom': stepUiScale(c.step); break
     }
-  }, [onNewShell, onNewAgent, onQuickChatChooser, onAddProject, workspaceShown, detach, onPalette, showWorkspace, onDashboard, splitShell, jumpToWaiting, current, focusedSession?.cwd, onSettings, frontIsAgent, deck.open, focusTab, stepProject, stepSession])
+  }, [onNewShell, onNewAgent, onQuickChatChooser, onAddProject, workspaceShown, detach, onPalette, showWorkspace, onDashboard, splitShell, jumpToWaiting, current, focusedSession?.cwd, onSettings, frontIsAgent, deck.open, focusTab, stepProject, stepSession, onMail, dashboardShown])
 
   // The app's keys, before anything else on the page sees them. The terminal
   // already lets them through (xtermInput), and they are never its keys.
@@ -1111,6 +1133,7 @@ export function AppShell() {
         ? [{ id: 'a-copies', group: 'Actions' as const, label: 'Clean up copies…', detail: `${activeProject.name}: worktrees, sizes, merged`, icon: <BranchIcon size={14} />, run: () => onCleanCopies(activeProject.id) }]
         : []),
       { id: 'a-dashboard', group: 'Actions', label: 'Open the dashboard', hint: keys('⌘0'), icon: <DashboardIcon size={14} />, run: onDashboard },
+      { id: 'a-mail', group: 'Actions', label: 'Open Mail', detail: 'every inbox in one place, in its own tab', hint: keys('⇧⌘M'), icon: <MailIcon size={14} />, run: onMail },
       { id: 'a-settings', group: 'Actions', label: 'Settings', detail: 'permission mode, theme, terminal, notifications, phone', hint: keys('⌘,'), icon: <SettingsIcon size={14} />, run: onSettings },
       { id: 'a-phone', group: 'Actions', label: 'Open Caprock on your phone', detail: 'pair with a QR code, then add it to the home screen', icon: <SettingsIcon size={14} />, run: openPhoneSettings },
       { id: 'a-telegram', group: 'Actions', label: 'Connect Telegram', detail: 'messages when a session needs you; reply from the chat', icon: <SettingsIcon size={14} />, run: () => openSettingsSection('telegram') },
@@ -1192,7 +1215,7 @@ export function AppShell() {
       }
     }
     return items
-  }, [data.sessions, onCompare, savedItems, manageSaved, ws.tabs, model.projects, model.inbox, sessionsById, projectsById, openSessions, prefs.inspector, deck.open, current, onNewAgent, onNewShell, onQuickChatChooser, onAddProject, onDashboard, toggleTheme, onSettings, run, showWorkspace, openSession, openSplit, onSelectProject, onOpenInbox, jumpToWaiting, splitShell, detach, editors, focusedSession?.cwd, openInEditor, source, onOpenChanges, fileScope, focused?.kind, activeProject, activeProjectId, onCleanCopies])
+  }, [data.sessions, onCompare, savedItems, manageSaved, ws.tabs, model.projects, model.inbox, sessionsById, projectsById, openSessions, prefs.inspector, deck.open, current, onNewAgent, onNewShell, onQuickChatChooser, onAddProject, onDashboard, onMail, toggleTheme, onSettings, run, showWorkspace, openSession, openSplit, onSelectProject, onOpenInbox, jumpToWaiting, splitShell, detach, editors, focusedSession?.cwd, openInEditor, source, onOpenChanges, fileScope, focused?.kind, activeProject, activeProjectId, onCleanCopies])
 
   // Every session the daemon knows, by what it was about; one that is open or
   // live is already in the list above under its own id.
@@ -1278,7 +1301,6 @@ export function AppShell() {
   // through their badge, the Inbox, the menu bar and the notification.
   const promptCard = focusedIsAgent && !!focused
   const toggleDeck = useCallback(() => setDeck((d) => ({ ...d, open: !d.open })), [])
-  const closeDeck = useCallback(() => setDeck((d) => ({ ...d, open: false })), [])
   const onResizeDeck = useCallback((height: number) => setDeck((d) => ({ ...d, height })), [])
   const toggleChat = useCallback(() => {
     if (!focused) return
@@ -1375,6 +1397,22 @@ export function AppShell() {
       ? () => backToDeck(frontTabId, focused.of ?? '')
       : workspaceShown && focusedIsAgent && focusedSession ? onExpandDeck : undefined
   }, [workspaceShown, frontTabId, focused, backToDeck, focusedIsAgent, focusedSession, onExpandDeck])
+  // The sidebar footer's one button for the PRs & CI view (owner,
+  // 2026-10-14): its mode is read from the deck's switch and the tab in
+  // front, and a click moves Hidden → Bar → Full page → Hidden through the
+  // same actions as ⌘B and ⇧⌘B. Expand and Hide left the deck's header.
+  const prsInFront = workspaceShown && focused?.kind === 'prs'
+  const barMode = barModeOf(deck.open, prsInFront)
+  const onCycleBar = useCallback(() => {
+    if (prsInFront && frontTabId) {
+      // Full page → Hidden: the tab closes, the agent comes back without its deck.
+      backToDeck(frontTabId, focused?.of ?? '')
+      setDeck((d) => ({ ...d, open: false }))
+    } else if (deck.open && expandRef.current) expandRef.current()
+    // Open with no agent in front there is no full page to go to: hide it.
+    else if (deck.open) setDeck((d) => ({ ...d, open: false }))
+    else run({ kind: 'deck' })
+  }, [prsInFront, frontTabId, backToDeck, focused?.of, deck.open, run])
   const renderPRs = useCallback((tab: Tab, leaf: PaneLeaf, visible: boolean) => {
     const of = leaf.target.of ?? ''
     const n = projectOfSession(of)
@@ -1406,6 +1444,8 @@ export function AppShell() {
               source={data.source}
               activeProjectId={activeProjectId}
               dashboardActive={!workspaceShown}
+              mailActive={mailShown}
+              onMail={onMail}
               tabs={ws.tabs}
               tabLabels={labels}
               activeTabId={current?.id}
@@ -1437,6 +1477,8 @@ export function AppShell() {
               onGroupedChange={onGroupedChange}
               tabDigits={stripDigits}
               onOrderTabs={onOrderTabs}
+              barMode={barMode}
+              onCycleBar={onCycleBar}
             />
           </div>
         )}
@@ -1446,12 +1488,13 @@ export function AppShell() {
               activeTabId={workspaceShown ? current?.id : undefined}
               labels={labels}
               projectName={projectName}
-              dashboard={ws.dashboard || !workspaceShown ? {
-                active: !workspaceShown,
+              dashboard={ws.dashboard || dashboardShown ? {
+                active: dashboardShown,
                 label: dashboardRoute.name === 'settings' ? 'Settings' : 'Dashboard',
                 onActivate: onDashboard,
                 onClose: closeDashboard,
               } : undefined}
+              mail={ws.mail || mailShown ? { active: mailShown, onActivate: onMail, onClose: closeMail } : undefined}
               paneTools={workspaceShown}
               sessions={sessionsById}
               permissions={data.permissions}
@@ -1585,12 +1628,10 @@ export function AppShell() {
                     onReviewChanges={focusedWorktree?.repo ? () => onOpenChanges(focusedWorktree.projectId, focusedWorktree.w) : undefined}
                     height={deck.height}
                     onResize={onResizeDeck}
-                    onClose={closeDeck}
                     onToast={setToast}
                     worktrees={deckWorktrees}
                     onOpenSession={onDeckOpenSession}
                     onStartAgent={onDeckStartAgent}
-                    onExpand={onExpandDeck}
                     cleanup={focusedWorktree?.repo && projectsById.get(focusedWorktree.projectId) ? (
                       <CleanupLine
                         projectId={focusedWorktree.projectId}
@@ -1609,7 +1650,17 @@ export function AppShell() {
                   </div>
                 )}
               </div>
-              {!workspaceShown && (
+              {mailShown && (
+                /* Mail fills its tab: no dashboard header, its own three columns. */
+                <div data-mail-view className="absolute inset-0 bg-bg">
+                  <ErrorBoundary label="Mail">
+                    <Suspense fallback={null}>
+                      <MailScreen fill />
+                    </Suspense>
+                  </ErrorBoundary>
+                </div>
+              )}
+              {dashboardShown && (
                 <div className="app-scroll absolute inset-0 overflow-y-auto bg-bg">
                   {/* Settings' own × and Escape close it as its tab's × does (lib/settingsClose.ts). */}
                   <CloseSettingsContext.Provider value={closeDashboard}>
@@ -1660,6 +1711,7 @@ export function AppShell() {
       <AppUpdateToast />
       {isTauri() && <AppUpdateAsk />}
 
+      {feedbackAt !== null && <FeedbackDialog screen={feedbackAt} onClose={() => setFeedbackAt(null)} />}
       {toast && (
         <div role="status" className="app-fade-in pointer-events-none fixed inset-x-0 bottom-10 z-50 flex justify-center px-4">
           <p className="pointer-events-auto max-w-[560px] rounded-[10px] border border-[var(--app-hairline-strong)] bg-panel px-4 py-2.5 text-[12.5px] text-fg shadow-[0_16px_40px_-16px_rgba(0,0,0,0.5)]">{toast}</p>

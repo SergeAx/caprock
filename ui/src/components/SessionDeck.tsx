@@ -63,7 +63,6 @@ export interface SessionDeckProps {
   height: number
   /** A new height, once a drag or the arrow keys settle. */
   onResize: (height: number) => void
-  onClose: () => void
   /** Says something briefly at the foot of the window: Investigate's result. */
   onToast?: (text: string) => void
   /** The checkouts of the session's project and the live agents in each: who is on a PR's branch. */
@@ -74,8 +73,6 @@ export interface SessionDeckProps {
   onStartAgent?: (req: SpawnRequest, title: string) => Promise<void>
   /** The project's finished copies, over the Branches view (components/CleanupLine). */
   cleanup?: ReactNode
-  /** Opens the large view, the PRs & CI tab; absent where there is none. */
-  onExpand?: () => void
 }
 
 export function SessionDeck(props: SessionDeckProps) {
@@ -171,7 +168,7 @@ export function SessionDeck(props: SessionDeckProps) {
 }
 
 
-function DeckBody({ s, sessionId, changed, branch, ahead, onReviewChanges, onClose, onToast, worktrees, onOpenSession, onStartAgent, cleanup, onExpand }: SessionDeckProps) {
+function DeckBody({ s, sessionId, changed, branch, ahead, onReviewChanges, onToast, worktrees, onOpenSession, onStartAgent, cleanup }: SessionDeckProps) {
   return (
     // A container, so the row's quieter columns give way as the terminal
     // narrows (the sidebar and the inspector both open). No clock and no
@@ -179,34 +176,17 @@ function DeckBody({ s, sessionId, changed, branch, ahead, onReviewChanges, onClo
     // sidebar's and the inspector's (owner, 2026-10-11: "Spent doesn't
     // help", "Working now is debatable").
     <div className="@container flex min-h-0 flex-1 items-stretch overflow-hidden">
-      {/* Expand and Hide end the cell's header line, so the rows below run
-        * the deck's whole width: a column of their own left an empty strip
-        * beside every row (owner, 2026-10-14). */}
-      <PullsCI sessionId={sessionId} s={s} onToast={onToast} branch={branch || s.git_branch} changed={changed} ahead={ahead} onReview={onReviewChanges} worktrees={worktrees} onOpenSession={onOpenSession} onStartAgent={onStartAgent} cleanup={cleanup} controls={
-      <span className="flex shrink-0 items-center gap-1">
-        {/* The large view. The PRs & CI tab draws the same control in the
-          * same corner as Collapse, and ⇧⌘B flips between them (owner,
-          * 2026-10-14, translated: "you can't see Expand at all … it should
-          * simply be a toggle"). */}
-        {onExpand && <ExpandToggle onClick={onExpand} />}
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={`Close the session deck (${keys('⌘B')})`}
-          title="Hide the deck; the same key brings it back"
-          className="flex h-[24px] items-center gap-1.5 rounded-[6px] px-1.5 text-[11.5px] text-fg-muted hover:bg-[var(--app-row-hover)] hover:text-fg"
-        >
-          Hide <kbd aria-hidden className="app-kbd-key">{keys('⌘B')}</kbd>
-        </button>
-      </span>
-      } />
+      {/* No Expand or Hide here: the sidebar footer's PRs & CI button cycles
+        * Hidden, Bar and Full page, beside ⌘B and ⇧⌘B (owner, 2026-10-14,
+        * translated: "Expand/Hide inside the bar is not noticeable"). */}
+      <PullsCI sessionId={sessionId} s={s} onToast={onToast} branch={branch || s.git_branch} changed={changed} ahead={ahead} onReview={onReviewChanges} worktrees={worktrees} onOpenSession={onOpenSession} onStartAgent={onStartAgent} cleanup={cleanup} />
     </div>
   )
 }
 
-/** The large view and back: Expand in the deck, Collapse in the PRs & CI
- *  tab, the same outlined control in the same top-right corner, one key for
- *  both (⇧⌘B; Ctrl+Alt+Shift+B off macOS, where ⌘B is Ctrl+Shift+B). */
+/** Back from the large view: Collapse in the PRs & CI tab's top-right
+ *  corner (⇧⌘B; Ctrl+Alt+Shift+B off macOS, where ⌘B is Ctrl+Shift+B).
+ *  The deck itself has no Expand: the sidebar footer's button and ⇧⌘B. */
 export function ExpandToggle({ collapse, onClick }: { collapse?: boolean; onClick: () => void }) {
   const k = keys('⇧⌘B')
   return (
@@ -454,7 +434,7 @@ const CHECKS_TITLE: Record<ChecksView, string> = {
 export function ChecksViewSwitch({ view, onChange }: { view: ChecksView; onChange: (v: ChecksView) => void }) {
   return (
     <div role="radiogroup" aria-label="Checks" data-deck-checks-view={view} className="flex shrink-0 items-center gap-1 text-[10.5px] text-fg-faint">
-      <span aria-hidden>Checks</span>
+      <span aria-hidden className="hidden @min-[560px]:inline">Checks</span>
       <span className="flex items-center gap-px rounded-[5px] border border-[var(--app-hairline)] p-px">
         {CHECKS_VIEWS.map((v) => (
           <button key={v} type="button" role="radio" aria-checked={view === v} data-deck-checks={v} onClick={() => onChange(v)} title={CHECKS_TITLE[v]}
@@ -1075,7 +1055,13 @@ function PullsCI({ sessionId, s, onToast, branch, changed, ahead, onReview, work
     <Investigate.Provider value={{ run: (j, st) => void investigate(j, st), why, busy }}>
     <LogView.Provider value={{ view: logView, pr: view === 'pr' ? pr?.number : undefined, onShown }}>
     <div ref={cell} data-deck-cell onKeyDown={onEsc} className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden px-3 pb-2 pt-2">
-      <div className="flex min-w-0 items-center gap-2">
+      {/* The header never runs past the deck's right edge (owner, 2026-10-14:
+        * on a 14-inch MacBook with the sidebar and the cockpit open, the
+        * end of it was cut off at the cockpit). The least useful words go
+        * first as the deck narrows — "updated …" under 640px, the word
+        * "Checks" under 560px, the branch chip under 480px — and what is
+        * still too wide wraps to a second line rather than overflowing. */}
+      <div data-deck-head className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         <h4 className="shrink-0 whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.08em] text-fg-faint">Pull requests &amp; CI</h4>
         {branch && <BranchChip branch={branch} base={base} changed={changed} ahead={ahead} onReview={onReview} />}
         {/* A release under way, said from the other views, in the header. */}
@@ -1085,8 +1071,8 @@ function PullsCI({ sessionId, s, onToast, branch, changed, ahead, onReview, work
             <span aria-hidden className="ci-spin inline-block h-[7px] w-[7px] shrink-0 rounded-full" /><span className="truncate">{chip}</span>
           </button>
         )}
-        <span className="ml-auto flex min-w-0 shrink-0 items-baseline justify-end gap-2 text-[11px] text-fg-faint">
-          <Freshness at={viewAt} loading={viewMeta.loading} failed={viewMeta.failed} />
+        <span className="ml-auto flex min-w-0 items-baseline justify-end gap-2 text-[11px] text-fg-faint">
+          <span data-deck-fresh-slot className="hidden @min-[640px]:contents"><Freshness at={viewAt} loading={viewMeta.loading} failed={viewMeta.failed} /></span>
           {view === 'pr' && prsData && !prsData.connected && rows.length > 0 && (
             <button type="button" disabled={connecting} onClick={() => void connect()} title="Reads CI and reviews through your GitHub CLI login; turn it off in Settings → GitHub" className="text-accent hover:underline disabled:opacity-60">{connecting ? 'connecting…' : 'connect GitHub for CI'}</button>
           )}

@@ -9,6 +9,16 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Added
 
+- **now:** two live sessions in one checkout are pointed out. When two
+  sessions work in the same folder of a repository (not in separate
+  worktrees), each Live pulse row gets a small chip naming the other; when
+  both edited the same files in the last 30 minutes it turns amber, *2 files
+  touched by both*, with the files on hover, since one can write over the
+  other's change. *Move to a worktree…* beside it opens the New session
+  dialog on a new copy of the folder, named after the newer session; nothing
+  is moved for you. The agent cockpit shows the same chip, one line under the
+  loop warning. New read-only `GET /v1/overlap`.
+
 - **mail:** Mail no longer opens on a bare form. The first screen offers three
   ways in: *Try it with sample mail* (two made-up inboxes on servers inside
   Caprock, with a slim *Sample mail — nothing here is real* line to leave or
@@ -191,6 +201,15 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   the macOS login keychain or in a file, with the file's path.
 
 ### Fixed
+
+- **now:** Live pulse rows stay where they are. They were sorted by the
+  newest event, so two busy sessions swapped places every few seconds; now a
+  row keeps the order its session started in (sessions open as tabs follow
+  the tab strip among themselves), a new one lands last, and you can drag a
+  row, or press ⌥⇧↑ ⌥⇧↓ (Ctrl+Shift on Windows and Linux) on it, to set the
+  order, remembered in this browser. Each row now leads with the session's
+  name in bold, with the project, branch and short id under it, so two
+  sessions on the same branch can be told apart.
 
 - **app:** switching tabs no longer redraws the terminal's font for a moment. A tab hidden for 30 s had let its WebGL renderer go, so it came back drawn by the DOM renderer, in other glyphs and another cell height, until WebGL was swapped in 1.5 s later; a tab hidden for less had its glyph atlas rebuilt on every switch. The three tabs hidden last now keep their renderer, a tab past that gets it back before it is first painted, and the atlas is rebuilt only after a wake, a pixel-ratio change or a hide of more than five minutes, so the squashed letters of #541 stay fixed.
 - **app:** the version panel in the status bar has a close button; Esc

@@ -146,6 +146,17 @@ others. Installing it: [install-app.md](install-app.md).
   repository's own git; with GitHub connected, its open pull requests, red
   runs, median CI time and newest release, as the session deck last read
   them. Fold it and it reads nothing.
+- **Live pulse.** One row per running session, led by the session's name,
+  with the project, branch and short id under it. Rows keep their places:
+  the order sessions started in (tabs follow the tab strip among
+  themselves), a new one last; drag a row, or press ⌥⇧↑ ⌥⇧↓ (Ctrl+Shift on
+  Windows and Linux) on it, to move it. Two sessions working in the same
+  folder of a repository (not separate worktrees) each get a chip naming
+  the other; when both edited the same files in the last 30 minutes it
+  turns amber, *N files touched by both*, the files on hover. *Move to a
+  worktree…* opens New session on a new copy of the folder, named after the
+  newer session; the running one keeps going until you stop it. The
+  cockpit beside that session shows the same chip.
 - **Quick chat.** Ask something without picking a folder: a session in
   Caprock's data directory opens in a tab, under *Outside projects* in the
   sidebar, and its tab is called *Quick chat* with its model. ⌥⌘N, *Quick
@@ -560,31 +571,31 @@ others. Installing it: [install-app.md](install-app.md).
 
 On macOS:
 
-| Keys        | Does                                                   |
-| ----------- | ------------------------------------------------------ |
-| ⌘T          | New shell in the folder of the tab                     |
-| ⇧⌘N         | New agent session                                      |
-| ⌥⌘N         | Quick chat: pick, or Enter for the last                |
-| ⌘O          | Add a project (folder, new, clone)                     |
-| ⌘1–8, ⌘9    | The Nth tab, in the order opened; the last             |
-| ⌥⌘↓, ⌥⌘↑    | Next and previous session of the project in front      |
-| ⌥⌘→, ⌥⌘←    | Next and previous project                              |
-| ⌥⇧↑, ⌥⇧↓    | Move the focused session row up or down in the sidebar |
-| ⌃Tab, ⇧⌘[ ] | Next and previous tab                                  |
-| ⌘W          | Close the tab (the session keeps going)                |
-| ⌘E, ⇧⌘E     | Split: a new shell beside, below                       |
-| ⌘[ ]        | Previous and next pane                                 |
-| ⌘J          | Next session waiting on you                            |
-| ⌘F          | Find in the terminal or the file                       |
-| ⌘K          | Command palette                                        |
-| ⌘,          | Settings                                               |
-| ⌘+ ⌘− ⇧⌘0   | Interface size: bigger, smaller, default               |
-| ⌘I          | Agent cockpit (the inspector)                          |
-| ⌘B          | Session deck under the agent's terminal                |
-| ⇧⌘B         | Expand the deck into PRs & CI; Collapse back           |
-| ⌘\          | Hide or show the sidebar                               |
-| ⌘0, ⇧⌘D     | Dashboard tab, and back                                |
-| ⌘R          | Reload the window (View → Reload)                      |
+| Keys        | Does                                                                     |
+| ----------- | ------------------------------------------------------------------------ |
+| ⌘T          | New shell in the folder of the tab                                       |
+| ⇧⌘N         | New agent session                                                        |
+| ⌥⌘N         | Quick chat: pick, or Enter for the last                                  |
+| ⌘O          | Add a project (folder, new, clone)                                       |
+| ⌘1–8, ⌘9    | The Nth tab, in the order opened; the last                               |
+| ⌥⌘↓, ⌥⌘↑    | Next and previous session of the project in front                        |
+| ⌥⌘→, ⌥⌘←    | Next and previous project                                                |
+| ⌥⇧↑, ⌥⇧↓    | Move the focused session row up or down in the sidebar or the Live pulse |
+| ⌃Tab, ⇧⌘[ ] | Next and previous tab                                                    |
+| ⌘W          | Close the tab (the session keeps going)                                  |
+| ⌘E, ⇧⌘E     | Split: a new shell beside, below                                         |
+| ⌘[ ]        | Previous and next pane                                                   |
+| ⌘J          | Next session waiting on you                                              |
+| ⌘F          | Find in the terminal or the file                                         |
+| ⌘K          | Command palette                                                          |
+| ⌘,          | Settings                                                                 |
+| ⌘+ ⌘− ⇧⌘0   | Interface size: bigger, smaller, default                                 |
+| ⌘I          | Agent cockpit (the inspector)                                            |
+| ⌘B          | Session deck under the agent's terminal                                  |
+| ⇧⌘B         | Expand the deck into PRs & CI; Collapse back                             |
+| ⌘\          | Hide or show the sidebar                                                 |
+| ⌘0, ⇧⌘D     | Dashboard tab, and back                                                  |
+| ⌘R          | Reload the window (View → Reload)                                        |
 
 On Windows and Linux each is Ctrl+Shift with the same letter or arrow
 (Quick chat is Ctrl+Alt+Shift+N, Expand Ctrl+Alt+Shift+B; tabs are

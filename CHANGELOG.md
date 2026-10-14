@@ -25,6 +25,15 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   link to a topic or delete. Twenty memories are free; Premium keeps every
   one. Kept in Caprock's database on this machine.
 
+### Fixed
+
+- **app (macOS):** macOS no longer asks for the microphone (and for
+  Desktop, Documents or Downloads) again after every Caprock update. The app
+  and its daemon are now signed with one Caprock certificate that stays the
+  same across releases, instead of an ad-hoc signature macOS saw as a new
+  program each time. The first update to this release asks one last time;
+  later updates keep your answers. Opening the app the first time is
+  unchanged: it is still not signed with an Apple Developer ID.
 ### Changed
 
 - **now:** *Live activity* is now **What happened**: the moments of your

@@ -7,15 +7,6 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
-### Fixed
-
-- **windows:** Caprock no longer flashes console windows that steal the
-  keyboard focus. The daemon ran without a console, so every git, gh or
-  `claude -p` it started opened a window of its own for a fraction of a
-  second, every few seconds, and typing in other windows came out ragged
-  (user report on Windows 10). Every child now starts with a hidden
-  console, and a test keeps it that way.
-
 ### Added
 
 - **brain:** Second Brain's status says when the reader wakes next
@@ -57,6 +48,20 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   turn it off.
 
 ### Fixed
+
+- **app:** typing a name in New project's folder field now searches the
+  folder it is in. `~/dev/cap` used to empty the list; now it lists the
+  folders of `~/dev` holding *cap* — the ones starting with it first, the
+  letters marked — and every key narrows it at once. The first match is
+  highlighted: ↑↓ move, Enter picks it, Tab completes to it and goes
+  inside. No match says *No folder starting with 'cap' in ~/dev*. Works
+  with `~`, backslashes and drive letters on Windows.
+- **windows:** Caprock no longer flashes console windows that steal the
+  keyboard focus. The daemon ran without a console, so every git, gh or
+  `claude -p` it started opened a window of its own for a fraction of a
+  second, every few seconds, and typing in other windows came out ragged
+  (user report on Windows 10). Every child now starts with a hidden
+  console, and a test keeps it that way.
 
 - **mail:** adding an account can no longer sit on *Checking…* forever. A
   server that goes quiet while Mail connects or signs in — IMAP had no limit

@@ -100,6 +100,10 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Fixed
 
+- **mail:** the Caprock Mail preview app reloads onto Caprock's new page
+  after Caprock updates (it used to keep showing the page from before the
+  update when the port stayed the same), and a click on its Dock icon
+  brings the window back.
 - **windows:** Caprock no longer flashes console windows that steal the
   keyboard focus. The daemon ran without a console, so every git, gh or
   `claude -p` it started opened a window of its own for a fraction of a

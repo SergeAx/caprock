@@ -7,6 +7,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ## [Unreleased]
 
+## [0.117.5] - 2026-10-15
+
 ### Added
 
 - **brain:** Second Brain's status says when the reader wakes next
@@ -62,7 +64,6 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   second, every few seconds, and typing in other windows came out ragged
   (user report on Windows 10). Every child now starts with a hidden
   console, and a test keeps it that way.
-
 - **mail:** adding an account can no longer sit on *Checking…* forever. A
   server that goes quiet while Mail connects or signs in — IMAP had no limit
   and SMTP waited five minutes per command — now ends the check within 30

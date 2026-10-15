@@ -113,6 +113,13 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Fixed
 
+- **app:** the sidebar footer's shortcuts are readable. Folded, the keys
+  above the icons were small faint 10px chips; now every key in the footer
+  is the New agent chip's size, folded or not. Where one has no room —
+  beside a row's words, or over a folded icon — it is left out whole
+  rather than drawn smaller, and the key stays in the tooltip: a row
+  measures itself and brings the chip back when it widens. Off macOS the
+  folded keys still show on hover, now at full size.
 - **app:** the theme picker opens whole, above everything. From the
   sidebar's footer its palettes were cut off at the sidebar's edge and the
   terminal drew over them; it now opens over the whole window, kept inside

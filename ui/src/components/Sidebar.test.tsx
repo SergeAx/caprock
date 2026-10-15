@@ -453,7 +453,9 @@ describe('the sidebar', () => {
       const onPipeline = vi.fn()
       renderSidebar({ onSettings: vi.fn(), onPipeline })
       const dash = screen.getByRole('button', { name: /^Dashboard/ })
-      expect(dash.textContent).toBe('Dashboard⌘0')
+      // Keys named after what they open (owner, 2026-10-15): ⌘D, ⌘0 in the tooltip.
+      expect(dash.textContent).toBe('Dashboard⌘D')
+      expect(dash.title).toMatch(/\(⌘D, or ⌘0\)/)
       expect(dash.parentElement!.hasAttribute('data-sidebar-footer')).toBe(true)
       const row = document.querySelector('[data-mode-row]') as HTMLElement
       expect(row).toHaveClass('grid-cols-2')
@@ -468,13 +470,17 @@ describe('the sidebar', () => {
       const undo = stubLayout({
         '[data-pipeline-button]': { clientWidth: 118 },
         '[data-pipeline-button] [data-key-label]': { clientWidth: 22, scrollWidth: 50 },
-        '[data-pipeline-button] [data-key-chip]': { width: 40 },
+        '[data-pipeline-button] [data-key-chip]': { width: 32 },
       })
       try { act(() => ro.fire()) } finally { undo() }
       expect(chip).toHaveAttribute('data-dropped')
       expect(chip).toHaveClass('invisible', 'absolute')
-      expect(bar.title).toContain('⇧⌘B')
-      expect(theme.textContent).toMatch(/^(Dark|Light|Book)/)
+      expect(bar.title).toContain('⌘P')
+      expect(chip.textContent).toBe('⌘P')
+      // The theme's half carries ⇧⌘T the same way, its key in its name too.
+      expect(theme.textContent).toMatch(/^(Dark|Light|Book).*⇧⌘T$/)
+      expect(theme.querySelector('[data-key-chip]')).toHaveClass('app-kbd-key')
+      expect(theme).toHaveAccessibleName(/\(⇧⌘T\)$/)
       for (const b of [dash, bar, theme]) expect(b).toHaveClass('h-[32px]')
       // The theme on the right, so its picker stays inside the sidebar.
       expect(row.lastElementChild!.contains(theme)).toBe(true)
@@ -483,14 +489,15 @@ describe('the sidebar', () => {
     } finally { platform.mockRestore(); ro.restore() }
   })
 
-  it('stacks Pipeline and the theme off macOS, where Ctrl+Alt+Shift+B fills a half', () => {
+  it('stacks Pipeline and the theme off macOS, each with its key', () => {
     const platform = vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32')
     try {
       localStorage.removeItem(FOLDS_KEY)
       renderSidebar({ onPipeline: vi.fn() })
       const row = document.querySelector('[data-mode-row]') as HTMLElement
       expect(row).not.toHaveClass('grid-cols-2')
-      expect(within(row).getByRole('button', { name: /^Pipeline: every pull request/ }).textContent).toBe('PipelineCtrl+Alt+Shift+B')
+      expect(within(row).getByRole('button', { name: /^Pipeline: every pull request/ }).textContent).toBe('PipelineCtrl+Shift+P')
+      expect(within(row).getByRole('button', { name: /^Theme:/ }).textContent).toMatch(/Ctrl\+Alt\+Shift\+T$/)
     } finally { platform.mockRestore() }
     expect(splitModeRow(true)).toBe(true)
     expect(splitModeRow(false)).toBe(false)
@@ -498,7 +505,7 @@ describe('the sidebar', () => {
 
   // Owner, 2026-10-14, translated: "I'd put the key combos above them, and
   // the icons can be one size bigger".
-  it('draws each folded icon’s key above it on a Mac, the theme’s slot empty', () => {
+  it('draws each folded icon’s key above it on a Mac, the theme’s too', () => {
     const platform = vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel')
     try {
       localStorage.setItem(FOLDS_KEY, JSON.stringify(['footer']))
@@ -506,8 +513,8 @@ describe('the sidebar', () => {
       const footer = document.querySelector('[data-sidebar-footer]')!
       expect(footer.getAttribute('data-folded-keys')).toBe('shown')
       const chips = [...footer.querySelectorAll('[data-key-slot] > kbd')]
-      expect(chips.map((k) => k.textContent)).toEqual(['⇧⌘F', '⇧⌘M', '⌘0', '⌘,', '⇧⌘B', '·'])
-      expect(chips[5]).toHaveClass('invisible')
+      expect(chips.map((k) => k.textContent)).toEqual(['⇧⌘F', '⇧⌘M', '⌘D', '⌘,', '⌘P', '⇧⌘T'])
+      for (const k of chips) expect(k).not.toHaveClass('invisible')
       // The New agent chip's size, never the small faint one (owner,
       // 2026-10-15, translated: "the shortcuts there are tiny").
       for (const k of chips) expect(k).toHaveClass('app-kbd-key')
@@ -525,7 +532,7 @@ describe('the sidebar', () => {
       const footer = document.querySelector('[data-sidebar-footer]')!
       expect(footer.getAttribute('data-folded-keys')).toBe('hover')
       const chips = [...footer.querySelectorAll('[data-key-slot] > kbd')]
-      expect(chips.map((k) => k.textContent)).toEqual(['Ctrl+Alt+Shift+F', 'Ctrl+Shift+M', 'Ctrl+Shift+0', 'Ctrl+Shift+,', 'Ctrl+Alt+Shift+B'])
+      expect(chips.map((k) => k.textContent)).toEqual(['Ctrl+Alt+Shift+F', 'Ctrl+Shift+M', 'Ctrl+Shift+D', 'Ctrl+Shift+,', 'Ctrl+Shift+P', 'Ctrl+Alt+Shift+T'])
       for (const k of chips) expect(k).toHaveClass('app-kbd-key', 'invisible', 'group-hover:visible', 'group-focus-within:visible')
     } finally { platform.mockRestore() }
     expect(foldedKeys(true)).toBe('shown')
@@ -543,8 +550,8 @@ describe('the sidebar', () => {
   })
 
   it('names the Pipeline button’s key as each OS spells it', () => {
-    expect(pipelineLabel(false, true)).toBe('Pipeline: every pull request on its way — open, CI, merged, released — in a tab (⇧⌘B)')
-    expect(pipelineLabel(true, false)).toBe('Pipeline is in front — click to go back to the tab before it (Ctrl+Alt+Shift+B)')
+    expect(pipelineLabel(false, true)).toBe('Pipeline: every pull request on its way — open, CI, merged, released — on the dashboard (⌘P)')
+    expect(pipelineLabel(true, false)).toBe('Pipeline is in front — click to go back to where you were (Ctrl+Shift+P)')
   })
 
   // Owner, 2026-10-14 (translated): "put it on the main screen as a button —
@@ -595,22 +602,22 @@ describe('the sidebar', () => {
         'kbd[data-key-chip]': { width: 40 },
       })
       const dropped = () => [...footer.querySelectorAll('[data-key-chip]')].filter((k) => k.hasAttribute('data-dropped')).map((k) => k.textContent)
-      // 5 keys of 40px, the theme's 32px column and the 22px arrow: 254px
-      // (jsdom draws no padding or gaps), so all fit a 260px row.
-      let undo = layout(260)
+      // 6 keys of 40px, the theme's ⇧⌘T among them, and the 22px arrow:
+      // 262px (jsdom draws no padding or gaps), so all fit a 270px row.
+      let undo = layout(270)
       try { act(() => ro.fire()) } finally { undo() }
       expect(dropped()).toEqual([])
-      // At 240px, 14px are missing: two keys go, the rightmost of a tie first.
+      // At 240px, 22px are missing: three keys go, the rightmost of a tie first.
       undo = layout(240)
       try { act(() => ro.fire()) } finally { undo() }
-      expect(dropped()).toEqual(['⌘,', '⇧⌘B'])
+      expect(dropped()).toEqual(['⌘,', '⌘P', '⇧⌘T'])
       for (const k of footer.querySelectorAll('[data-key-chip]')) expect(k).toHaveClass('app-kbd-key')
       // Each dropped key is still in its icon's tooltip.
       expect(screen.getByRole('button', { name: /^Settings: phone, Telegram \(⌘,\)$/ })).toBeTruthy()
       // So narrow that no key is left: no empty line of slots.
       undo = layout(150)
       try { act(() => ro.fire()) } finally { undo() }
-      expect(dropped()).toHaveLength(5)
+      expect(dropped()).toHaveLength(6)
       expect([...footer.querySelectorAll('[data-key-slot] > kbd')].filter((k) => !k.hasAttribute('data-key-chip'))).toHaveLength(0)
     } finally { platform.mockRestore(); ro.restore() }
   })

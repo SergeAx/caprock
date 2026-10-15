@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { THEME_MENU_W, ThemeMenu, ThemePicker, placeThemeMenu } from './ThemePicker'
 
@@ -118,5 +118,19 @@ describe('where the theme popover opens', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     fireEvent.mouseDown(document.body)
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('opens from its key (⇧⌘T) as the same portalled popover, and closes on it again', () => {
+    localStorage.setItem('caprock-theme', 'dark')
+    localStorage.setItem('caprock-theme-mode', 'dark-cold')
+    render(<ThemeMenu label="Theme" openOn="caprock:theme-menu-test">T</ThemeMenu>)
+    const button = screen.getByRole('button', { name: 'Theme' })
+    act(() => { window.dispatchEvent(new Event('caprock:theme-menu-test')) })
+    const menu = screen.getByRole('dialog', { name: 'Theme' })
+    expect(menu.parentElement).toBe(document.body)
+    expect(document.activeElement).toBe(screen.getByRole('radio', { name: /Dark Cold/ }))
+    act(() => { window.dispatchEvent(new Event('caprock:theme-menu-test')) })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.activeElement).toBe(button)
   })
 })

@@ -9,6 +9,31 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Added
 
+- **app:** a live session's row on Home takes you into the running session.
+  Click anywhere on the row (or Enter on it) and the session's tab comes to
+  the front, as its ⌘N does, or opens if it has none; *Go to session ↗* with
+  the tab's key shows on hover, and *details* still opens the session page.
+  A session started in your own terminal says *in your terminal* and offers
+  *Continue in Caprock*: a new process on a copy of the conversation, in a
+  new tab, leaving the one in your terminal untouched. An idle session
+  Caprock started gets a small **× End**, which asks first only when
+  messages wait in its queue; a working session and one your terminal
+  started never do. In a browser the row keeps its *open* link.
+- **work:** the Work page — every piece of work on the machine on its way to
+  a release, one row per branch at its furthest stage, grouped Next release,
+  In review, In work, Planned and Released, or as Kanban columns. Each row
+  has a bar along agent → PR → CI → merged → released filled to its stage
+  (red when CI failed or it conflicts), who works on it (the agent and
+  model, started by Caprock or your terminal), elapsed time and agent cost
+  at list price. Estimates appear only with a measured basis: a turn's
+  rough range, CI against its median, merge to release against the median
+  lag, and the gap since the last tag against the usual gap. Rows that
+  need you come first; agents idle for over 30 minutes fold into one line.
+  It is second in the Dashboard's menu (⇧⌘W; Ctrl+Alt+Shift+W on Windows
+  and Linux, and again back to where you were), and Home shows its headline
+  and first rows above the Live pulse with *Open Work →*. A session row
+  brings that session's tab to the front; a pull request's title opens it
+  in the Pipeline with its detail open.
 - **work:** The Work board's daemon answer, `GET /v1/work` (ADR-064): every
   live session on the machine — started by Caprock or by hand — with its
   state, its running turn's rough range (Claude Code only, never while it
@@ -34,6 +59,28 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Changed
 
+- **app:** keys named after what they open. ⌘D opens the Dashboard (⌘0
+  still does), ⌘P the Pipeline (⇧⌘B still works), ⇧⌘T the theme picker,
+  and ⇧⌘W Work; ⌘F stays Find and ⌘T New shell. On Windows and Linux they
+  are Ctrl+Shift+D, Ctrl+Shift+P, Ctrl+Alt+Shift+T and Ctrl+Alt+Shift+W —
+  never Ctrl+D, which stays the shell's end of input. The sidebar's footer
+  shows *Dashboard ⌘D*, *Pipeline ⌘P* and the theme's ⇧⌘T, folded or not,
+  and the palette, the shortcuts list and the tooltips say the new keys.
+- **dashboard:** The Pipeline is a page of the Dashboard now, beside *Week*
+  in its menu, instead of a tab of its own: ⌘P and *Pipeline* in the
+  sidebar open the Dashboard tab there (Ctrl+Shift+P on Windows and
+  Linux), and again go back to where you were. It shows one repository —
+  the agent in front's, else the one you looked at last — with buttons
+  beside its title to switch. It is drawn as the Dashboard is: its figures
+  are the Dashboard's tiles, larger and readable, each explained in a card
+  under it on hover rather than a tooltip over the number; every pull
+  request's whole title; and its four steps tell done (ticked), current
+  (filled, ✗ when red, a turning ring while CI runs) and still ahead
+  (outlined) apart by shape as well as colour. A pull request's detail
+  opens beside the list. Home's CI/CD section shows the Pipeline's first
+  five figures at its top — in flight, needing a fix, ready, throughput,
+  CI median — with *Open Pipeline →*. A Pipeline tab saved by an earlier
+  version opens as the page.
 - **ui:** Get premium in the header is a quiet tinted button, not a bright
   block: the same height, radius and type as Feedback and Settings beside
   it, a faint premium tint with a hairline border and premium-coloured text,

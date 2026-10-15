@@ -4,10 +4,10 @@
  * Pipeline view's mode and the theme — then Settings.
  *
  * The Pipeline button (owner, 2026-10-14, translated: "it feels like quick
- * access to the CI/CD page is missing"): a click opens the Pipeline page as a
- * tab, or brings it to the front — and from it, back — as ⇧⌘B does. Until
+ * access to the CI/CD page is missing"): a click opens the Pipeline page — on
+ * the dashboard since 2026-10-15 — and from it, back — as ⌘P does. Until
  * then the button cycled the bar's modes (Hidden, Bar, Full page); the bar
- * now has its own × and ⌘B, and the page is just a tab.
+ * now has its own × and ⌘B.
  *
  * The theme button moved here from the Settings row, as its own square: the
  * Dashboard row gave up the width (same request).
@@ -19,6 +19,10 @@
  *
  * Collapsed, the block is one row of icons, the same actions and the way back.
  *
+ * Its keys are named after what they open (owner, 2026-10-15, translated:
+ * "bind shortcuts to the names"): Dashboard ⌘D (⌘0 still works), Pipeline
+ * ⌘P (⇧⌘B before), the theme ⇧⌘T, which opens the picker from this button.
+ *
  * Every key is drawn at the New agent chip's size (owner, 2026-10-15,
  * translated: "these buttons fold down; the shortcuts there are tiny, you
  * can't see a damn thing"). Where one does not fit — beside a row's words,
@@ -29,7 +33,7 @@ import type { ReactNode, RefObject } from 'react'
 import type { SettingsSection } from '@/lib/router'
 import { THEME_MODE_NAME, useThemeMode } from '@/lib/theme'
 import { THEMES } from '@/lib/themes'
-import { keys } from '@/lib/appkeys'
+import { DASHBOARD_KEY, PIPELINE_KEY, THEME_KEY, THEME_MENU_EVENT, keys } from '@/lib/appkeys'
 import { isMacPlatform } from '@/lib/appmode'
 import { useChipFit, useFoldedChipFit } from '@/lib/keyChipFit'
 import { ThemeMenu } from './ThemePicker'
@@ -49,7 +53,7 @@ export interface SidebarFooterProps {
   onSettings?: () => void
   /** Settings on the phone or Telegram section; absent: plain Settings. */
   onSettingsSection?: (section: SettingsSection) => void
-  /** Opens the Pipeline page (⇧⌘B); absent, no Pipeline button. */
+  /** Opens the Pipeline page (⌘P); absent, no Pipeline button. */
   onPipeline?: () => void
   /** The Pipeline tab is in front. */
   pipelineActive?: boolean
@@ -58,8 +62,7 @@ export interface SidebarFooterProps {
 /** Mail's key, in macOS spelling; `keys()` writes it for this OS. */
 export const MAIL_KEY = '⇧⌘M'
 
-/** The Pipeline button's key, in macOS spelling. */
-export const PIPELINE_KEY = '⇧⌘B'
+export { DASHBOARD_KEY, PIPELINE_KEY, THEME_KEY }
 
 /** Every button in the footer's icon rows: one size, one hover. */
 const SQUARE = 'flex shrink-0 items-center justify-center text-fg-muted transition-colors hover:bg-[var(--app-row-hover)] hover:text-fg motion-reduce:transition-none'
@@ -73,10 +76,10 @@ const GLYPH = 18
 
 /**
  * How the folded row draws its keys: above every icon, or above the one
- * under the pointer. A macOS chip at the New agent size is 32px (⌘0, ⌘,)
- * or 40px (⇧⌘F, ⇧⌘M, ⇧⌘B), so on a Mac a column widens to its chip and
- * all five fit the 260px sidebar; a narrower one leaves out the widest
- * first (useFoldedChipFit). Off macOS the same keys are Ctrl+Shift+M and
+ * under the pointer. A macOS chip at the New agent size is 32px (⌘D, ⌘P,
+ * ⌘,) or 40px (⇧⌘F, ⇧⌘M, ⇧⌘T), so on a Mac a column widens to its chip;
+ * where the six do not fit, the widest is left out first
+ * (useFoldedChipFit). Off macOS the same keys are Ctrl+Shift+M and
  * Ctrl+Alt+Shift+F, 63–141px, three columns wide: there a key shows on hover
  * and keyboard focus only.
  */
@@ -86,11 +89,11 @@ export function foldedKeys(isMac = isMacPlatform()): 'shown' | 'hover' {
 
 /**
  * Whether Pipeline and the theme share a row as two halves. A half is
- * 110–150px (sidebar 240–320): "Pipeline" (~50px) and the ⇧⌘B chip (40px)
- * do not both fit at 260, so there the half leaves the chip out, measured,
- * and keeps the words; the key stays in its tooltip. Off macOS the chip is
- * Ctrl+Alt+Shift+B, which has room on a full row, so there each of the two
- * takes a row of its own and keeps its chip.
+ * 110–150px (sidebar 240–320): "Pipeline" and its ⌘P chip, or the palette's
+ * name and its ⇧⌘T, do not always both fit, so there a half leaves the chip
+ * out, measured, and keeps the words; the key stays in its tooltip. Off
+ * macOS the chips are Ctrl+Shift+P and Ctrl+Alt+Shift+T, so there each of the
+ * two takes a row of its own, where its chip has room.
  */
 export function splitModeRow(isMac = isMacPlatform()): boolean {
   return isMac
@@ -126,10 +129,10 @@ export function SidebarFooter(props: SidebarFooterProps) {
       <KeyRow
         aria-current={props.dashboardActive ? 'true' : undefined}
         onClick={props.onDashboard}
-        title={`The dashboard, where you left it (${keys('⌘0')}); again: Home, at its top`}
+        title={`The dashboard, where you left it (${keys(DASHBOARD_KEY)}, or ${keys('⌘0')}); again: Home, at its top`}
         icon={<DashboardIcon size={15} className="shrink-0 text-fg-muted" />}
         label="Dashboard"
-        keyLabel={keys('⌘0')}
+        keyLabel={keys(DASHBOARD_KEY)}
       />
       {/* Pipeline and the theme: two halves of one row, each with its name
         * (owner, 2026-10-14, translated: "move them onto a separate row and
@@ -139,7 +142,7 @@ export function SidebarFooter(props: SidebarFooterProps) {
         * Off macOS each takes a row (splitModeRow). */}
       <div data-mode-row className={`grid gap-1 ${split ? 'grid-cols-2' : 'grid-cols-[minmax(0,1fr)]'}`}>
         {hasBar && <PipelineButton active={props.pipelineActive} onClick={props.onPipeline!} labelled />}
-        <ThemeButton className={`${ROW} w-full hover:bg-[var(--app-row-hover)]`} boxClassName="min-w-0" labelled />
+        <ThemeButton className={`${ROW} relative w-full hover:bg-[var(--app-row-hover)]`} boxClassName="min-w-0" labelled />
       </div>
       {/* Settings as a row with its name, not a bare icon (owner, 2026-10-11,
         * translated: "I don't see Settings from here"). Phone, Telegram and
@@ -223,14 +226,14 @@ function FoldedFooter(props: SidebarFooterProps) {
       key: keys(MAIL_KEY), edge: 'left' as const,
       node: <IconButton label={`Mail (${keys(MAIL_KEY)})`} onClick={props.onMail}><MailIcon size={GLYPH} className="text-accent" /></IconButton>,
     }] : []),
-    { key: keys('⌘0'), edge: 'left', node: <IconButton label={`Dashboard (${keys('⌘0')})`} onClick={props.onDashboard}><DashboardIcon size={GLYPH} /></IconButton> },
+    { key: keys(DASHBOARD_KEY), edge: 'left', node: <IconButton label={`Dashboard (${keys(DASHBOARD_KEY)})`} onClick={props.onDashboard}><DashboardIcon size={GLYPH} /></IconButton> },
     ...(props.onSettings ? [{
       key: keys('⌘,'), edge: 'right' as const,
       node: <IconButton label={`Settings: phone, Telegram (${keys('⌘,')})`} onClick={toPhone}><SettingsIcon size={GLYPH} /></IconButton>,
     }] : []),
     ...(hasBar ? [{ key: keys(PIPELINE_KEY), edge: 'right' as const, node: <PipelineButton active={props.pipelineActive} onClick={props.onPipeline!} className={ICON} /> }] : []),
-    // No key of its own. Opening rightwards: from here a leftward picker left the window.
-    { edge: 'right', node: <ThemeButton className={ICON} boxClassName="w-full" align="left" /> },
+    // ⇧⌘T opens its picker. Opening rightwards: from here a leftward picker left the window.
+    { key: keys(THEME_KEY), edge: 'right', node: <ThemeButton className={ICON} boxClassName="w-full" align="left" /> },
   ]
   const [ref, fit] = useFoldedChipFit<HTMLDivElement>(slots.length, chips === 'shown')
   const anyShown = chips === 'shown' && slots.some((s, i) => s.key && fit[i] !== false)
@@ -270,14 +273,14 @@ function KeySlot({ keyLabel, chips, edge, fits, line, children }: { keyLabel?: s
 /** What the Pipeline button's tooltip and name say. */
 export function pipelineLabel(active?: boolean, isMac?: boolean): string {
   return active
-    ? `Pipeline is in front — click to go back to the tab before it (${keys(PIPELINE_KEY, isMac)})`
-    : `Pipeline: every pull request on its way — open, CI, merged, released — in a tab (${keys(PIPELINE_KEY, isMac)})`
+    ? `Pipeline is in front — click to go back to where you were (${keys(PIPELINE_KEY, isMac)})`
+    : `Pipeline: every pull request on its way — open, CI, merged, released — on the dashboard (${keys(PIPELINE_KEY, isMac)})`
 }
 
 /**
  * The Pipeline button. In a half of the split row (240–320px sidebar, a
- * half 110–150px) "Pipeline" and the ⇧⌘B chip need ~140px with the glyph:
- * at 260 the chip is left out and the key is in the tooltip; on a row of its
+ * half 110–150px) "Pipeline" and the ⌘P chip may not both fit with the
+ * glyph: there the chip is left out and the key is in the tooltip; on a row of its
  * own (off macOS) the chip shows. Measured, not assumed.
  */
 function PipelineButton({ active, onClick, className, labelled }: { active?: boolean; onClick: () => void; className?: string; labelled?: boolean }) {
@@ -336,17 +339,23 @@ function FooterToggle({ open, onToggle }: { open: boolean; onToggle: () => void 
   )
 }
 
-/** Opens the theme picker: hover a palette to try it, click to keep it.
- *  `labelled`: the palette's name beside the sun or moon. */
+/** Opens the theme picker: hover a palette to try it, click to keep it;
+ *  ⇧⌘T opens it from anywhere (THEME_MENU_EVENT). `labelled`: the palette's
+ *  name beside the sun or moon, and its key where it fits whole. */
 function ThemeButton({ className, boxClassName, align, labelled }: { className: string; boxClassName?: string; align?: 'left' | 'right'; labelled?: boolean }) {
   const { mode } = useThemeMode()
+  const [ref, fits] = useChipFit<HTMLDivElement>([mode])
   const light = THEMES.find((t) => t.id === mode)?.theme === 'light'
   const size = labelled ? 15 : GLYPH
   const tone = labelled ? 'shrink-0 text-fg-muted' : undefined
-  return (
-    <ThemeMenu label={`Theme: ${THEME_MODE_NAME[mode]}`} placement="up" align={align} className={className} boxClassName={boxClassName}>
+  const menu = (
+    <ThemeMenu label={`Theme: ${THEME_MODE_NAME[mode]} (${keys(THEME_KEY)})`} placement="up" align={align} className={className} boxClassName={boxClassName} openOn={THEME_MENU_EVENT}>
       {light ? <SunIcon size={size} className={tone} /> : <MoonIcon size={size} className={tone} />}
-      {labelled && <span className="min-w-0 flex-1 truncate">{THEME_MODE_NAME[mode]}</span>}
+      {labelled && <span data-key-label className="min-w-0 flex-1 truncate">{THEME_MODE_NAME[mode]}</span>}
+      {labelled && <kbd aria-hidden data-key-chip data-dropped={fits ? undefined : ''} className={chipClass(fits)}>{keys(THEME_KEY)}</kbd>}
     </ThemeMenu>
   )
+  // The row is measured around the menu's button, so a palette's long name
+  // drops the chip, never the other way round.
+  return labelled ? <div ref={ref} className="grid min-w-0">{menu}</div> : menu
 }

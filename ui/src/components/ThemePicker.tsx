@@ -110,9 +110,10 @@ export function placeThemeMenu(btn: MenuRect, height: number, view: { w: number;
  *
  * Keyboard: opening it puts the focus on the palette in use; Tab and ⇧Tab
  * walk the palettes, and past either end, or Esc, close it and give the
- * focus back to the button.
+ * focus back to the button. `openOn` (⇧⌘T) opens it the same way from the
+ * keyboard, or closes it when open.
  */
-export function ThemeMenu({ children, label, placement = 'up', align = 'right', className = '', boxClassName = '' }: { children: React.ReactNode; label: string; placement?: 'up' | 'down'; align?: 'left' | 'right'; className?: string; /** The wrapper's classes, e.g. to let the button fill a grid cell. */ boxClassName?: string }) {
+export function ThemeMenu({ children, label, placement = 'up', align = 'right', className = '', boxClassName = '', openOn }: { children: React.ReactNode; label: string; placement?: 'up' | 'down'; align?: 'left' | 'right'; className?: string; /** The wrapper's classes, e.g. to let the button fill a grid cell. */ boxClassName?: string; /** A window event that opens the picker, or closes it when open (⇧⌘T, the sidebar footer's button only). */ openOn?: string }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<ReturnType<typeof placeThemeMenu> | null>(null)
   const box = useRef<HTMLSpanElement>(null)
@@ -130,6 +131,16 @@ export function ThemeMenu({ children, label, placement = 'up', align = 'right', 
   }
   // Measured before paint, so it never shows in the wrong place.
   useLayoutEffect(() => { if (open) place() })
+  // Its key (⇧⌘T) opens it as a click does — the palette in use takes the
+  // focus once placed — or closes it, the focus going back to the button.
+  const openRef = useRef(open)
+  useEffect(() => { openRef.current = open }, [open])
+  useEffect(() => {
+    if (!openOn) return
+    const on = () => (openRef.current ? close(true) : setOpen(true))
+    window.addEventListener(openOn, on)
+    return () => window.removeEventListener(openOn, on)
+  }, [openOn])
   useEffect(() => {
     if (!open) return
     const onDown = (e: MouseEvent) => {

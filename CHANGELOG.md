@@ -60,6 +60,13 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Fixed
 
+- **app:** the theme picker opens whole, above everything. From the
+  sidebar's footer its palettes were cut off at the sidebar's edge and the
+  terminal drew over them; it now opens over the whole window, kept inside
+  it on every edge at any sidebar width and with the footer folded, and
+  scrolls in a window shorter than itself. Opening it puts the focus on the
+  palette in use; Esc, or tabbing past the last palette, closes it and gives
+  the focus back to the button.
 - **picker:** an arrow key pressed in the folder picker the moment a
   folder's entries appear is no longer lost; the selection used to be
   cleared just after it was made.

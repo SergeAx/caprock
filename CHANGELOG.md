@@ -25,6 +25,15 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Changed
 
+- **app:** where you type is easier to find, quietly. The Chat view's field
+  carries a hint of the accent at rest — a faint tint and a hairline edge,
+  a little stronger with the focus — on every theme and terminal palette.
+  In a Claude Code terminal, the rows of its input box (between the two
+  rules, at the `❯` prompt) sit on a faint band of the terminal's own
+  background, lifted a step: it follows the box as it grows or moves, leaves
+  any cell Claude Code coloured alone, reads only the bottom rows of the
+  screen, and draws nothing for other agents, shells, dialogs and menus.
+
 - **brain:** the sidebar's Second Brain block is a small banner while it is
   empty, instead of a bare 0 and two faint lines: a faint graph breathing
   (still with reduced motion), *Remembers what your agents learn — so the

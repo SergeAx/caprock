@@ -17,6 +17,19 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Changed
 
+- **brain:** the sidebar's Second Brain block is a small banner while it is
+  empty, instead of a bare 0 and two faint lines: a faint graph breathing
+  (still with reduced motion), *Remembers what your agents learn — so the
+  next one starts smarter.*, **Start building** and *How it works*, and
+  *Local · your own Claude · free*. **Start building** asks in place —
+  your own `claude` and its model, on this computer, the daily token
+  limit, where the prose goes, and that Settings turns it off — and only
+  **Turn on** switches it on and starts on your last 30 days of sessions,
+  within that limit; without Claude Code it says so and offers no
+  button. Once on and still empty it says what it is doing: *Reading your
+  recent sessions…*, or how many sessions are waiting, and the last
+  problem if there was one. The same line replaces *your personal Jarvis*
+  under the Second Brain screen's title.
 - **brain:** Second Brain's *How it works* now explains it in ten
   seconds. *Remembers what your agents learn — so the next one starts
   smarter*: it keeps the decisions, findings, ideas and open questions

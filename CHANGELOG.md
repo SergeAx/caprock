@@ -34,6 +34,12 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Changed
 
+- **ui:** Get premium in the header is a quiet tinted button, not a bright
+  block: the same height, radius and type as Feedback and Settings beside
+  it, a faint premium tint with a hairline border and premium-coloured text,
+  the price a step fainter, a little stronger on hover. Its text reads at
+  4.5:1 or more in every palette.
+
 - **brain:** Second Brain looks like what it is: a brain made of a graph.
   Nodes and links in the side view of a brain, in the memory kinds'
   colours, softly pulsing, with a new node dropping in now and then and

@@ -9,8 +9,28 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Added
 
-- **projects:** start a project from a template — the daemon side; the
-  screen comes next. Add your own template (a GitHub template repository,
+- **mail:** the AI assistant works with the subscriptions you already have.
+  *Summarise* and *Draft reply* can go through your own logged-in Claude
+  Code, Codex or Gemini CLI (run headless, with no tools, hooks or session
+  file), through an API key for Anthropic, OpenAI, OpenRouter or DeepSeek
+  (kept in your keychain, never shown again), or through a local model
+  server as before. *Automatic*, the default, uses the first of claude,
+  codex, gemini and a local server this computer has, so with Claude Code
+  installed turning AI on is the only step. Settings show which provider
+  answers and where the mail text goes; it is sent only when you click an
+  AI action, and the thread reaches the model fenced as data it must not
+  follow.
+- **app:** New project from a template — the dialog. *From a template…* in
+  New project's footer or ⌘K: pick a saved template or look one up
+  (`owner/name`, its link, or a folder), name the project, paste or drop
+  the brief, and the box under it says what *Create* will run and send
+  (the name and visibility, to GitHub, through your own `gh`; nothing
+  without it). Progress shows in the footer; Esc hides it and the agent
+  still starts in its own tab when the project is ready. A failed clone
+  offers *Try the clone again* and *Open on GitHub*. Settings → Project
+  templates edits and removes them. In the app a dropped `.md` or `.txt`
+  becomes the brief (`read_dropped_text`, only from the latest drop).
+- **projects:** start a project from a template — the daemon side. Add your own template (a GitHub template repository,
   a folder, or both) with where its brief goes and the agent's first
   prompt; Caprock reads its `TEMPLATE.md` to fill those in. Making a
   project from it runs your own `gh` on your click (`gh repo create
@@ -31,21 +51,21 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   Hover a day for its value, or the word for what it is compared with.
   Counted from what the Pipeline already reads: no new GitHub request.
 
+### Changed
+
+- **app:** the Pipeline has its own tab again, pinned with the system tabs
+  right after the Dashboard tab and before Mail, drawn like them: its glyph
+  and ⌘P (Ctrl⇧P on Windows and Linux), its × while it is in front. ⌘P,
+  *Pipeline* at the foot of the sidebar and *Open Pipeline* in the palette
+  bring it to the front, and again go back to where you were; ⇧⌘B still
+  works and ⌘B stays the Pipeline bar. It stays in the Dashboard too:
+  *Pipeline* in its menu and *Open Pipeline →* on Home take you to that
+  tab, so the page is drawn once and, behind other tabs, reads nothing. The
+  tab is kept across restarts.
+
 ## [0.118.0] - 2026-10-15
 
 ### Added
-
-- **mail:** the AI assistant works with the subscriptions you already have.
-  *Summarise* and *Draft reply* can go through your own logged-in Claude
-  Code, Codex or Gemini CLI (run headless, with no tools, hooks or session
-  file), through an API key for Anthropic, OpenAI, OpenRouter or DeepSeek
-  (kept in your keychain, never shown again), or through a local model
-  server as before. *Automatic*, the default, uses the first of claude,
-  codex, gemini and a local server this computer has, so with Claude Code
-  installed turning AI on is the only step. Settings show which provider
-  answers and where the mail text goes; it is sent only when you click an
-  AI action, and the thread reaches the model fenced as data it must not
-  follow.
 
 - **app:** a live session's row on Home takes you into the running session.
   Click anywhere on the row (or Enter on it) and the session's tab comes to
@@ -108,15 +128,6 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
 
 ### Changed
 
-- **app:** the Pipeline has its own tab again, pinned with the system tabs
-  right after the Dashboard tab and before Mail, drawn like them: its glyph
-  and ⌘P (Ctrl⇧P on Windows and Linux), its × while it is in front. ⌘P,
-  *Pipeline* at the foot of the sidebar and *Open Pipeline* in the palette
-  bring it to the front, and again go back to where you were; ⇧⌘B still
-  works and ⌘B stays the Pipeline bar. It stays in the Dashboard too:
-  *Pipeline* in its menu and *Open Pipeline →* on Home take you to that
-  tab, so the page is drawn once and, behind other tabs, reads nothing. The
-  tab is kept across restarts.
 - **app:** where you type is easier to find, quietly. The Chat view's field
   carries a hint of the accent at rest — a faint tint and a hairline edge,
   a little stronger with the focus — on every theme and terminal palette.
@@ -132,8 +143,10 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   never Ctrl+D, which stays the shell's end of input. The sidebar's footer
   shows *Dashboard ⌘D*, *Pipeline ⌘P* and the theme's ⇧⌘T, folded or not,
   and the palette, the shortcuts list and the tooltips say the new keys.
-- **dashboard:** The Pipeline is in the Dashboard's menu, beside *Week*
-  (in the app it opens in its own tab, above). It shows one repository —
+- **dashboard:** The Pipeline is a page of the Dashboard now, beside *Week*
+  in its menu, instead of a tab of its own: ⌘P and *Pipeline* in the
+  sidebar open the Dashboard tab there (Ctrl+Shift+P on Windows and
+  Linux), and again go back to where you were. It shows one repository —
   the agent in front's, else the one you looked at last — with buttons
   beside its title to switch. It is drawn as the Dashboard is: its figures
   are the Dashboard's tiles, larger and readable, each explained in a card
@@ -143,7 +156,8 @@ polish (plan-limit windows, orchestrator-lifecycle fixes, Homebrew formula, firs
   (outlined) apart by shape as well as colour. A pull request's detail
   opens beside the list. Home's CI/CD section shows the Pipeline's first
   five figures at its top — in flight, needing a fix, ready, throughput,
-  CI median — with *Open Pipeline →*.
+  CI median — with *Open Pipeline →*. A Pipeline tab saved by an earlier
+  version opens as the page.
 - **ui:** Get premium in the header is a quiet tinted button, not a bright
   block: the same height, radius and type as Feedback and Settings beside
   it, a faint premium tint with a hairline border and premium-coloured text,

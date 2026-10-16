@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import { DUCKS, DUCK_HINT_EVERY, FACES, FACES_KEY, FACE_DEFAULT_KEY, FACE_NAME, MAX_PICKS, duckHintDue, faceFor, hashedFace, hasOwnFace, isDuck, saveFaceDefault, setSessionFace } from './faces'
+import { DUCKS, DUCK_HINT_EVERY, PUMPKIN_HINT_KEY, pumpkinSeason, FACES, PUMPKINS, FACES_KEY, FACE_DEFAULT_KEY, FACE_NAME, MAX_PICKS, duckHintDone, duckHintDue, faceFor, hashedFace, hasOwnFace, isDuck, isPumpkin, saveFaceDefault, setSessionFace } from './faces'
 import { DUCK_HINT_LINGER, DUCK_HINT_QUIET, FaceDefaultSetting, PickableFace, SessionCharacter } from '@/components/SessionFace'
 
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks() })
@@ -151,8 +151,54 @@ describe('rubber ducks', () => {
   })
 })
 
+describe('pumpkins', () => {
+  it('move nobody: the faces pool and the faces-and-ducks pool keep their hashes', () => {
+    for (let i = 0; i < 100; i++) expect(FACES).toContain(hashedFace(`p-${i}`))
+    saveFaceDefault('random-all')
+    for (let i = 0; i < 300; i++) expect(isPumpkin(faceFor(`p-${i}`))).toBe(false)
+  })
+  it('a pumpkin per session draws from all eight, and a picked one is kept', () => {
+    saveFaceDefault('random-pumpkins')
+    const seen = new Set(Array.from({ length: 300 }, (_, i) => faceFor(`p-${i}`)))
+    expect([...seen].sort()).toEqual([...PUMPKINS].sort())
+    expect(faceFor(undefined)).toBe('pumpkin')
+    setSessionFace('p1', 'pumpkin-witch')
+    expect(faceFor('p1')).toBe('pumpkin-witch')
+  })
+  it('the picker has a Pumpkins tab, reached by key, and opens on it for a pumpkin', () => {
+    render(<PickableFace agent="claude" sessionId="p2"><SessionCharacter agent="claude" sessionId="p2" /></PickableFace>)
+    fireEvent.click(screen.getByRole('button', { name: "Change this session's face" }))
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Faces' }), { code: 'ArrowLeft' })
+    expect(screen.getByRole('tab', { name: 'Pumpkins' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getAllByRole('menuitemradio').map((b) => b.getAttribute('aria-label'))).toEqual(PUMPKINS.map((p) => FACE_NAME[p]))
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Pumpkins' }), { code: 'ArrowRight' })
+    expect(screen.getByRole('tab', { name: 'Faces' })).toHaveAttribute('aria-selected', 'true')
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Faces' }), { code: 'ArrowLeft' })
+    act(() => { fireEvent.click(screen.getByRole('menuitemradio', { name: 'Vampire pumpkin' })) })
+    expect(faceFor('p2')).toBe('pumpkin-vampire')
+    fireEvent.click(screen.getByRole('button', { name: "Change this session's face" }))
+    expect(screen.getByRole('tab', { name: 'Pumpkins' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('menuitemradio', { name: 'Vampire pumpkin' })).toHaveFocus()
+  })
+  it('Settings offers the pumpkins and a pumpkin per session', () => {
+    render(<FaceDefaultSetting />)
+    fireEvent.click(screen.getByRole('radio', { name: 'A pumpkin per session' }))
+    expect(isPumpkin(faceFor('x'))).toBe(true)
+    fireEvent.click(screen.getByRole('radio', { name: 'Lantern pumpkin' }))
+    expect(faceFor('x')).toBe('pumpkin-lantern')
+  })
+  it('every pumpkin draws', () => {
+    const { container } = render(<>{PUMPKINS.map((p) => { setSessionFace(`d-${p}`, p); return <SessionCharacter key={p} agent="claude" sessionId={`d-${p}`} /> })}</>)
+    const svgs = Array.from(container.querySelectorAll('svg'))
+    expect(svgs.map((s) => s.getAttribute('data-face'))).toEqual([...PUMPKINS])
+    for (const s of svgs) expect(s.querySelectorAll('path, ellipse, circle').length).toBeGreaterThan(5)
+  })
+})
+
 describe('the "try a duck?" line', () => {
-  let clock = Date.UTC(2026, 9, 14, 9)
+  // June, and after any real keypress an earlier test made: outside October
+  // the line offers the ducks.
+  let clock = Date.UTC(2027, 5, 14, 9)
   beforeEach(() => { vi.useFakeTimers(); clock += 10 * DUCK_HINT_EVERY; vi.setSystemTime(clock) })
   afterEach(() => { vi.useRealTimers() })
   const portrait = (hint = true, id = 'h1') => (
@@ -221,5 +267,42 @@ describe('the "try a duck?" line', () => {
     render(portrait())
     wait(DUCK_HINT_QUIET + 1000)
     expect(line()).toBeNull()
+  })
+})
+
+describe('the "try a pumpkin?" line in October', () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date(2027, 9, 16, 11)) })
+  afterEach(() => { vi.useRealTimers() })
+  const portrait = (id = 'k1') => (
+    <PickableFace agent="claude" sessionId={id} hint><SessionCharacter agent="claude" sessionId={id} /></PickableFace>
+  )
+  const wait = (ms: number) => act(() => { vi.advanceTimersByTime(ms) })
+
+  it('is October only', () => {
+    expect(pumpkinSeason(new Date(2026, 9, 1, 0, 5).getTime())).toBe(true)
+    expect(pumpkinSeason(new Date(2026, 9, 31, 23, 55).getTime())).toBe(true)
+    expect(pumpkinSeason(new Date(2026, 10, 1, 0, 5).getTime())).toBe(false)
+    expect(pumpkinSeason(new Date(2026, 8, 30, 23, 55).getTime())).toBe(false)
+  })
+  it('offers the pumpkins even to someone done with the ducks, and opens their tab', () => {
+    duckHintDone()
+    render(portrait())
+    wait(DUCK_HINT_QUIET + 1000)
+    expect(screen.queryByText(/try a duck\?/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /try a pumpkin/ }))
+    expect(screen.getByRole('tab', { name: 'Pumpkins' })).toHaveAttribute('aria-selected', 'true')
+    expect(JSON.parse(localStorage.getItem(PUMPKIN_HINT_KEY)!).done).toBe(true)
+    expect(duckHintDue(Date.now() + 100 * DUCK_HINT_EVERY, 'pumpkins')).toBe(false)
+  })
+  it('not on a session already in a pumpkin, but on one in a duck', () => {
+    setSessionFace('k2', 'pumpkin-cat')
+    const { unmount } = render(portrait('k2'))
+    wait(DUCK_HINT_QUIET + 1000)
+    expect(screen.queryByText(/try a pumpkin\?/)).toBeNull()
+    unmount()
+    setSessionFace('k3', 'duck-party')
+    render(portrait('k3'))
+    wait(DUCK_HINT_QUIET + 1000)
+    expect(screen.queryByText(/try a pumpkin\?/)).not.toBeNull()
   })
 })

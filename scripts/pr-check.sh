@@ -13,13 +13,17 @@
 #   - the dashboard, when ui/ changed: typecheck, and the whole vitest suite
 #     (#705 changed the sidebar and broke SidebarClose.test.tsx, a test it
 #     never touched, and only CI saw it);
+#   - the golden paths in a headless browser (make e2e), when ui/ or
+#     internal/api changed; skipped with the install command when Playwright's
+#     headless shell is missing, and by PR_CHECK_E2E=0;
 #   - the language gate (no Cyrillic), which costs a second.
 #
 # It is not `make check`: no smoke, no golangci-lint, no full Go suite. `make
 # check` stays the full gate; CI runs both halves on three OSes.
 #
 # Environment: PR_CHECK_BASE overrides the base (default: the merge base with
-# origin/master); PR_CHECK_COUNT overrides -count (default 3).
+# origin/master); PR_CHECK_COUNT overrides -count (default 3); PR_CHECK_E2E=0
+# skips the e2e step.
 set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
@@ -128,6 +132,24 @@ if echo "$changed" | grep -q '^ui/'; then
 	# read from disk, a module mocked away); the whole suite costs minutes.
 	step "ui: vitest, the whole suite"
 	(cd "$root/ui" && npx vitest run) || fail "vitest"
+fi
+
+# --- e2e ------------------------------------------------------------------
+# The golden paths in a headless browser (make e2e, ui/e2e), when the
+# dashboard or the API it talks to changed. Skipped, not failed, on a machine
+# without Playwright's headless shell: has-browser.mjs prints the command.
+if echo "$changed" | grep -E '^(ui/|internal/api/)' | grep -qv '^internal/api/dist/'; then
+	if [ "${PR_CHECK_E2E:-1}" = 0 ]; then
+		step "e2e: skipped (PR_CHECK_E2E=0)"
+	else
+		[ -d "$root/ui/node_modules" ] || npm --prefix "$root/ui" ci --no-audit --no-fund >/dev/null || fail "npm ci"
+		if (cd "$root/ui" && node e2e/has-browser.mjs); then
+			step "e2e: make e2e"
+			make -C "$root" e2e || fail "make e2e"
+		else
+			step "e2e: SKIPPED, no headless shell (install it with the command above)"
+		fi
+	fi
 fi
 
 # --- language -------------------------------------------------------------

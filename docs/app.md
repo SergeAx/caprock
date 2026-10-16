@@ -263,14 +263,18 @@ others. Installing it: [install-app.md](install-app.md).
   last hour, how long it has run, its context, its branch with lines added
   and removed, and its pull request with CI. The legend under the rows
   hides with *Hide*; the **?** in the panel's header brings it back.
-- **Quick chat.** Ask something without picking a folder: a session in
-  Caprock's data directory opens in a tab, under *Outside projects* in the
-  sidebar, and its tab is called *Quick chat* with its model. ⌥⌘N, *Quick
-  chat* in the sidebar, the + menu or the palette shows the agents installed
-  here, with the agent and model you used last already picked — press Enter
-  to start on them, or Esc to cancel. The agents are Claude Code, Codex,
-  OpenCode, Gemini CLI, Grok and your custom agents, each with its models:
-  click a model to start on it. A line above the chat says how to leave it
+- **Quick chat.** Ask something without picking a folder: ⌥⌘N, or *Quick
+  chat* in the sidebar, the + menu or the palette, starts a chat at once on
+  the agent and model you used last, in a tab called *Quick chat* with its
+  model. The tab shows the conversation, not the terminal (the Terminal
+  toggle still has it). *Quick chat with…* in the + menu and the palette
+  shows the agents installed here first — Claude Code, Codex, OpenCode,
+  Gemini CLI, Grok and your custom agents, each with its models: click a
+  model to start on it, Enter for the one picked, Esc to cancel. Every chat
+  is listed on the **Chats** screen (the palette's *Chats*, the nav's
+  *Chats*), apart from your projects: newest first, searchable, renamable,
+  with archive and delete, and the files each chat wrote open in a viewer
+  there. A line above the chat says how to leave it
   (⌘W closes the tab, /exit ends the chat; × hides the line for good), and
   when the chat ends its tab offers *Close tab* and *Start again*. OpenCode
   lists the models of the providers you connected; with none connected it
@@ -823,14 +827,14 @@ On macOS:
 | ----------- | ----------------------------------------------------------------------------------- |
 | ⌘T          | New shell in the folder of the tab                                                  |
 | ⇧⌘N         | New agent session                                                                   |
-| ⌥⌘N         | Quick chat: pick, or Enter for the last                                             |
+| ⌥⌘N         | Quick chat, at once on the model used last                                          |
 | ⌘O          | Add a project: one repository or several (clone, new: in its footer)                |
 | ⌘1–8, ⌘9    | The Nth tab, in the order opened; the last                                          |
 | ⌥⌘↓, ⌥⌘↑    | Next and previous session of the project in front                                   |
 | ⌥⌘→, ⌥⌘←    | Next and previous project                                                           |
 | ⌥⇧↑, ⌥⇧↓    | Move the focused sidebar or Live pulse row, or right panel section grip, up or down |
 | ⌃Tab, ⇧⌘[ ] | Next and previous tab                                                               |
-| ⌘W          | Close the tab (the session keeps going)                                             |
+| ⌘W          | Close the tab or pane (the session keeps going); on the Dashboard, nothing          |
 | ⌘E, ⇧⌘E     | Split: a new shell beside, below                                                    |
 | ⌘[ ]        | Previous and next pane                                                              |
 | ⌘J          | Next session waiting on you                                                         |
@@ -864,6 +868,13 @@ and Ctrl+Shift+V stay the terminal's copy and paste. Reload is F5 there:
 Ctrl+R stays the shell's history search, and F5 in a focused terminal goes
 to the program running in it. The terminal's own keys (Ctrl+C, Ctrl+W,
 Option as Meta) always reach the terminal.
+
+⌘W closes the tab in front, never the window: the macOS menu's File →
+Close Tab holds it, and asks first about a running agent or shell just as
+the tab's × does. With the Dashboard in front it does nothing. Window →
+Close Window (no key), the window's red button, ⌘H and ⌘M still put the
+window away. Off macOS Close is Ctrl+Shift+W, since Ctrl+W is the shell's
+delete-word.
 
 **Composer (optional).** Settings → Terminal → *Composer: type in a box
 under the agent* puts a message box under the terminal of every agent
@@ -1449,15 +1460,23 @@ What the phone opens to:
 - **Waiting on you** at the top, when a session Caprock started waits on a
   permission prompt: answer it there, or **Open** the session.
 - **Continue**: the sessions of the last two days, waiting and working ones
-  first. Tap one to open its chat.
+  first. Tap one to open its chat. Plain chats are not here; they have their
+  own list.
+- **Chats**: your three newest chats, and **All chats** for the rest — the
+  Chats screen, where you search, rename, archive and delete them. A chat
+  opens as a conversation; **Files** lists what it wrote, and each file opens
+  in a viewer (Markdown, a web page with its scripts off, PDF, images) with
+  **Download**.
 - **Saved**: what you saved, newest first.
-- **The field at the bottom.** Choose the project and the agent on the two
-  chips, type, then **Start chat**: a session starts in that project with
-  your words as its first message, and its chat opens. **Start chat** on an
-  empty field opens *New chat* instead, where you also choose what it runs
-  on — a second subscription, or DeepSeek on your own key.
+- **The field at the bottom.** **New chat** starts a chat at once, on the
+  model on the chip beside it (tap the chip to change it; it is
+  remembered). Type first and your words are its first message. Pick a
+  project on the project chip to start in that project instead: your words
+  start the session there, and an empty field opens *Start in a project*,
+  where you also choose the agent and what it runs on — a second
+  subscription, or DeepSeek on your own key.
 - **Save** keeps a note, a link or photos (the camera button) on this
-  computer. It shows in Quick chat on the computer under *Saved*, where
+  computer. It shows in *Quick chat with…* on the computer under *Saved*, where
   **Start a chat** turns it into a first message, its photos included, and
   **Delete** removes it.
 - **Full dashboard** at the bottom, or **⋯** at the top right, opens

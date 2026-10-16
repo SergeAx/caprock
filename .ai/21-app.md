@@ -258,15 +258,23 @@ One window, three regions:
   and sent as `subscription` (ADR-048). Rejected: a header on the started tab
   that restarts the chat on another model — it starts a process only to kill
   it, and cannot change vendor once a conversation has begun.
+  **Reversed again 2026-10-16** ([ADR-071](08-decisions.md); owner: Quick
+  chat is one button, with at most a model choice, translated): ⌥⌘N, the
+  sidebar's *Quick chat*, the + menu's and the palette's *Quick chat* start
+  at once on the choice kept in `caprock.quickchat`, and the chat opens on
+  its conversation (ChatView), so there is no terminal to get lost in — the
+  2026-10-12 complaint. The chooser stays as *Quick chat with…* in the +
+  menu and the palette.
 - **A quick chat's tab** (owner, 2026-10-12, same report). It is named
   *Quick chat · Opus 5.5* — the pricing table's model name once it has
   answered, before that the model it was started on, which the window that
   started it keeps (`caprock.quickchat.started`), else the agent's name — in
   the strip, the sidebar row and the inspector's header (`lib/quickchat.ts`;
   a chat is known by its folder, `<data_dir>/chats/<stamp>`, as the daemon's
-  `chatLabel` knows it). The sidebar still groups it under *Outside
-  projects*; the tab no longer wears that group as its chip. A line above
-  its terminal says *Quick chat with Claude · Opus 5.5 — ⌘W or /exit
+  `chatLabel` knows it; since ADR-071 the session row also says `chat`). The
+  sidebar groups it under *Outside projects* only while it has a tab or waits
+  on you (every chat is on the Chats screen); the tab no longer wears that
+  group as its chip, and opens on the conversation. A line above it says *Quick chat with Claude · Opus 5.5 — ⌘W or /exit
   ends it* (keys through `keys()`; Gemini's is /quit), with a × that hides it
   for good (`caprock.quickchat.hint`). **When the agent exits** the tab stays,
   dimmed, with *The chat ended*, **Close tab** (focused, so Enter takes it)
@@ -307,7 +315,7 @@ One window, three regions:
   (`.app-tab-dash`): an amber grid icon, an amber-tinted fill and frame
   while it is behind, and a hairline divider after it. The + is an amber outline (`.app-primary`, like the sidebar's New
   agent) that opens a menu (`components/NewMenu.tsx`, portalled): *New
-  agent* ⇧⌘N, *Quick chat…* ⌥⌘N (the chooser, as the key opens it),
+  agent* ⇧⌘N, *Quick chat* ⌥⌘N (at once), *Quick chat with…* (the chooser),
   *New shell* ⌘T, *Open file…*, *Add project* ⌘O, each with its key; ↑ ↓,
   Enter, Esc. The separate >_ new-shell button is gone: it is the menu's
   third row and ⌘T, and two lone icons side by side read as one ambiguous
@@ -1069,7 +1077,22 @@ are stable and referenced by [22-app-plan.md](22-app-plan.md).
   Ctrl+Shift+P, Ctrl+Alt+Shift+W, Ctrl+Alt+Shift+T, Ctrl+Alt+Shift+F — the
   three ⇧⌘ chords take Alt because their ⌘ twin (⌘W Close, ⌘T New shell,
   ⌘F Find) is Ctrl+Shift there (`OFF_MAC_ALT`). None is an item of Tauri's
-  default macOS menu (Close Window is ⌘W; there is no Print). The full list
+  default macOS menu (there is no Print). **⌘W closes the tab, not the
+  window** (owner, 2026-10-16, translated: "Cmd+W must close tabs"). Tauri's
+  default menu put Close Window on ⌘W in File and in Window, and a menu's
+  key equivalent is taken before the page sees the key, so ⌘W hid the
+  window and the page's own ⌘W (the `detach-tab` command, the tab's ×
+  with its confirm) never ran. `menu::install` swaps both: File → **Close
+  Tab** holds ⌘W and, with the main window in front, dispatches
+  `caprock:close-tab` (`CLOSE_TAB_EVENT`, `ui/src/lib/shell.ts`) to the
+  page, which runs the same command the key would; with another window in
+  front (Mail, the popover) it closes that window, as ⌘W always did
+  (`menu::close_target`). Window → **Close Window** stays, with no key.
+  With the Dashboard in front ⌘W does nothing: the window is put away by
+  Close Window, its red button, ⌘H or ⌘M, never by a key that closes tabs
+  everywhere else. Windows and Linux have no app menu, so Ctrl+Shift+W
+  reaches the page directly; bare Ctrl+W stays the shell's delete-word.
+  The full list
   is `SHORTCUTS` in `ui/src/lib/appkeys.ts` and docs/app.md § Keyboard.
 - **F10 — Badge.** The dock (macOS) or taskbar (Windows) badge is the number
   of sessions waiting on you — the sidebar's marked rows: a permission prompt or
@@ -1761,7 +1784,9 @@ replies to a running session: Continue, Shorter and the like"). Built in
   reorder (↑ ↓), rename; at most 10, a label of 24 characters, a text of 300
   bytes. Kept by the daemon (`settings.quick_replies`, 03-contracts § Settings),
   so the app, a browser tab and a paired phone draw the same row; an empty
-  list draws no row.
+  list draws no row. A chat (ADR-071) leaves out *Run tests* and *Commit*,
+  known by their default text (`forChat`), since a chat has no repository; a
+  reply the user wrote or reworded is kept there too.
 - **Keys.** None: no new global shortcut (rule 12); the chips take Tab
   focus like any button.
 - **Look.** `.app-quick` in `tokens.css`: 22px pills in the slab's own ink
@@ -2478,6 +2503,8 @@ user turns it on; the app asks once on its first launch (§ Updates).
   Linux measured in CI on every release.
 - **Shortcuts swallowed by the WebView** (Cmd+W, Cmd+Q, Ctrl+Tab).
   *Mitigation:* the keyboard map is defined in the shell's menu, tested per OS.
+  The reverse happened too: the default menu's Close Window took ⌘W before
+  the page could close a tab with it, fixed by File → Close Tab (F09).
 - **IME and dead keys** in xterm.js inside WKWebView and WebView2.
   *Mitigation:* a test matrix for Japanese, Chinese and accented input.
 - **GPU context loss on sleep and wake** (the reference app logged 89 atlas

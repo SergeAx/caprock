@@ -259,8 +259,9 @@ export function matchAppShortcut(e: KeyLike, isMac: boolean): AppCommand | null 
         // browser it is Reopen closed tab, which the browser keeps.
         case 't': return { kind: 'theme' }
         // W for Work, the dashboard's page of work on its way to a release.
-        // ⌘W stays Close the tab or pane; ⇧⌘W is no item of Tauri's default
-        // menu (Close Window is ⌘W) and reaches no shell. Off macOS
+        // ⌘W stays Close the tab or pane (the app menu's Close Tab, which
+        // hands it to the page as CLOSE_TAB_EVENT); ⇧⌘W is no item of the
+        // app's menu and reaches no shell. Off macOS
         // Ctrl+Shift+W is ⌘W's, so it takes Alt too (OFF_MAC_ALT). In a
         // browser it closes the window, which the browser keeps.
         case 'w': return { kind: 'work' }
@@ -427,7 +428,7 @@ export function shortcutLabel(keys: string, opts: { shift?: boolean } = {}, isMa
  *  sheet writes each through `keys` (docs/app.md § Keyboard). */
 export const SHORTCUTS: [keys: string, does: string][] = [
   ['⇧⌘N', 'New agent'],
-  ['⌥⌘N', 'Quick chat: no folder; asks which agent and model, Enter takes the last one'],
+  ['⌥⌘N', 'Quick chat: no folder; starts at once on the model used last'],
   ['⌘T', 'New shell in the folder of the tab'],
   ['⌘O', 'Add a project'],
   ['⌘K', 'Command palette'],

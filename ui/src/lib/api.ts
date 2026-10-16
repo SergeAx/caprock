@@ -1433,6 +1433,25 @@ export interface BrainGraph {
 /** A node's neighbour and the edge between them; `out` when the edge leaves the node asked about. */
 export interface BrainLink { node: BrainNode; kind: BrainEdgeKind; out: boolean; weight: number }
 
+/** What GET /v1/brain/handoff says a new session in a project is handed (03-contracts.md § Second Brain). */
+export interface BrainHandoffView {
+  project: string
+  /** The memories, with summaries, in the order the handoff carries them. */
+  memories: BrainNode[]
+  /** How many it may carry, and the runes they share. */
+  max: number
+  budget: number
+  /** Whether a session opening there now would be served a handoff at all. */
+  served?: {
+    /** Settings → Memory between sessions. */
+    on: boolean
+    /** When the passage it would be handed was written, unix ms; absent when none is recent enough. */
+    left_off_at?: number
+    /** The share of new sessions held back at random to measure the handoff. */
+    holdout_pct: number
+  }
+}
+
 export interface BrainStatus {
   memories: number
   manual: number
@@ -2070,6 +2089,8 @@ export const api = {
   settings: () => get<Settings>('/v1/settings'),
   update: () => get<UpdateStatus>('/v1/update'),
   checkUpdate: () => post<UpdateStatus>('/v1/update/check', {}),
+  /** The check a focused or shown window asks for: the daemon reaches GitHub only when its last check is 10+ minutes old. */
+  checkUpdateSoon: () => post<UpdateStatus>('/v1/update/check?soon=1', {}),
   updateBusy: () => get<UpdateBusy>('/v1/update/busy'),
   saveSettings: (s: Settings) => post<Settings>('/v1/settings', s, 'PUT'),
   summary: (range: 'today' | '7d' | '30d' | 'all' = 'today', agent?: string) =>
@@ -2182,6 +2203,7 @@ export const api = {
     return get<BrainGraph>(`/v1/brain${tail ? `?${tail}` : ''}`)
   },
   brainStatus: () => get<BrainStatus>('/v1/brain/status'),
+  brainHandoff: (project: string) => get<BrainHandoffView>(`/v1/brain/handoff?project=${encodeURIComponent(project)}`),
   brainNode: (id: number) => get<{ node: BrainNode; links: BrainLink[] }>(`/v1/brain/nodes/${id}`),
   dropBrain: (d: BrainDrop) => post<{ node: BrainNode; created: boolean }>('/v1/brain/nodes', d),
   patchBrain: (id: number, p: Partial<Pick<BrainNode, 'kind' | 'title' | 'summary' | 'pinned'>>) =>

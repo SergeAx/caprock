@@ -154,8 +154,12 @@ others. Installing it: [install-app.md](install-app.md).
   Dashboard tab; from it, a click goes back to where you were. The button
   is in the accent while the Pipeline is in front.
   **Mail** sits above *Dashboard*, with its key, ⇧⌘M. It opens Mail in a
-  tab of its own after the Dashboard and Pipeline tabs (the envelope and ⇧⌘M); pressed
-  again it brings that tab to the front, and its × closes it. With no mail
+  window of its own, with nothing of Caprock around it: on a Mac with the
+  Caprock Mail preview app (`app/mail-mac`) in Applications, that app; otherwise a second
+  Caprock window titled *Caprock Mail*, brought to the front when it is
+  already open. In a browser it opens a Mail tab after the Dashboard and
+  Pipeline tabs, under a banner, *Mail works best in its own window*, whose
+  button (or ⇧⌘M again) opens Mail alone in a browser window. With no mail
   account yet it opens straight on a sample inbox — two made-up accounts on a
   server inside Caprock, nothing real read or sent — with a line on top and
   *Add account*: Google, Microsoft, iCloud, Other, or import from Apple Mail
@@ -174,6 +178,32 @@ others. Installing it: [install-app.md](install-app.md).
   failed with the reason and *Retry*; *Skip for now* moves on and *Come
   back* returns to it. Outlook for Mac's accounts are not read — add them with
   *Sign in with Microsoft*.
+  **Junk stays out of the Inbox**, as in other mail apps, even when your
+  provider leaves it there. Caprock's own filter runs on your computer — no
+  AI, nothing sent anywhere, on from the start: it reads what your mail
+  server wrote into each message (whether the sender's domain vouches for
+  it, the server's own spam verdict), checks for a brand name on an
+  unrelated address, replies going to a free mail address and links hidden
+  behind shorteners, and learns from your Spam folder and from every
+  *Spam* (`!`) and *Not spam* (`n`) you press. Mail from anyone you have
+  written to, or said *Not spam* for, is never junk. What it hides waits
+  under *Caprock thinks these are junk* in Spam (`g !`), with the reason in
+  the message; nothing moves on the server until you press Spam yourself.
+  **AI sorting.** With AI turned on in Mail's settings (or *Turn on* on the
+  line above the inbox), Mail sorts your newest 200 inbox conversations, and
+  then new mail as it arrives, into Important, Updates, Newsletters and Spam,
+  each with a one-line summary in place of the snippet; *Reply* marks one that
+  waits on your answer. Keys `1`–`5` pick All (everything but spam),
+  Important, Updates, Newsletters and Spam. Spam is one list and one count
+  whoever found it: the junk filter's catch first, then the AI's, each with a
+  single *Spam* label, and the message says why. Mail the junk filter caught
+  is never sent to the AI. Nothing is moved on the server: `!` sends a
+  conversation to your Junk folder, `n` says it is not spam — for the filter
+  and the AI at once, and for that sender from then on. Sorting sends the sender, subject and the
+  start of each conversation to the AI provider you chose in Settings › AI —
+  the line under the inbox and every summary name it, with *change* to pick
+  another — and nowhere else. Settings › AI also sets the language summaries
+  are written in.
   The arrow beside *Send feedback* folds that bottom block to one row of
   icons and back; the app remembers which way you left it. Folded, on a
   Mac each icon has its key drawn small above it; on Windows and Linux,
@@ -809,7 +839,7 @@ On macOS:
 | ⌘K          | Command palette                                                                     |
 | ⌘,          | Settings                                                                            |
 | ⇧⌘F         | Send feedback                                                                       |
-| ⇧⌘M         | Mail, in a tab of its own                                                           |
+| ⇧⌘M         | Mail, in a window of its own                                                        |
 | ⌘+ ⌘− ⇧⌘0   | Interface size: bigger, smaller, default                                            |
 | ⌘I          | Agent cockpit (the inspector)                                                       |
 | ⌘B          | Pipeline bar under the agent's terminal, shown or hidden                            |
@@ -1141,8 +1171,9 @@ and says under each field where it is; the (i) beside it explains the rest.
 - **What each is sent to.** The DeepSeek key goes only to `api.deepseek.com`,
   from the environment of a session you start on DeepSeek. The bot token goes
   only to `api.telegram.org`. The GitHub token goes only to `api.github.com`.
-  A mail password goes only to the mail servers you entered. Nothing goes to
-  Caprock.
+  A mail password goes only to the mail servers you entered. With Mail's AI
+  on, mail text goes only to the AI provider chosen in Mail's settings.
+  Nothing goes to Caprock.
 - **Backups.** Time Machine backs up the login keychain encrypted; it reaches
   iCloud Keychain only if you move an item there yourself. A key in a file is
   backed up like any other file in your home folder.
@@ -1170,14 +1201,17 @@ shows what is new, or **Not now** to hide that version.
 
 - **Checking.** On its first launch the app asks once: *Check for updates
   automatically?* With **Yes**, Caprock asks GitHub for the newest version
-  number once an hour, and soon after the computer wakes; Settings →
+  number every 15 minutes, soon after the computer wakes, and when you
+  come back to the window if it last asked ten minutes ago or more — so a
+  new release shows within minutes; Settings →
   *Updates* turns it off again and has **Check now**. With **No**, nothing
   is checked until you ask: **Caprock → Check for Updates…** on macOS,
   **Check for Updates…** in the tray menu, *Check for updates* in the
   command palette (⌘K), or **Check now** in Settings → *Updates*. A check
-  you ask for always answers: *You're up to date — Caprock X is the latest*,
-  with **Close** (it goes by itself after a few seconds), or, when GitHub
-  could not be reached, the error with **Retry**. The hourly check in the
+  you ask for always answers at the bottom right, beside the version:
+  *Checking for updates…*, then *Caprock is up to date* (gone after a few
+  seconds), **Update to vX — Restart** in amber, or, when GitHub could not
+  be reached, *Couldn't check for updates* with **Retry**. The check in the
   background says nothing unless there is a new version.
 - **Ask me, or Update automatically.** Settings → *Updates* → *New version*
   chooses what happens when one is out. **Ask me** (the default) is the card

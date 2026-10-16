@@ -718,6 +718,7 @@ func (d *Daemon) run(ctx context.Context) error {
 		Pairing: d.pairing, LANURL: d.lanURL, Started: d.start, LAN: d, Remote: d, Machines: d.machines,
 		Projects: d.projs, Templates: tpls, Shells: &shellAdapter{m: d.mgr}, GitHub: d.gh,
 		Mail: d.mail.Handler(), BrainAuto: &brainAdapter{d: d, eng: d.brain},
+		BrainHandoffState: d.brainHandoffState,
 	})
 	srv := &http.Server{Handler: d.markWrites(d.api), ReadHeaderTimeout: 10 * time.Second}
 	// Held so LAN access can be switched on later without a restart. The
@@ -1589,7 +1590,7 @@ func (d *Daemon) config() config.Config {
 }
 
 // updateTick is how often a long-running daemon asks whether a release check
-// is due. The checker's own MinInterval (update.Interval, an hour, measured on
+// is due. The checker's own MinInterval (update.Interval, 15 minutes, measured on
 // the wall clock) decides whether one is; the short tick is what makes a
 // check that fell due while the machine slept run within minutes of waking.
 // A tick that finds nothing due costs a mutex, no request.

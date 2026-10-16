@@ -1090,8 +1090,9 @@ are stable and referenced by [22-app-plan.md](22-app-plan.md).
   The notice was built on 2026-10-06: the status
   strip names the release and the command for each part Homebrew installed
   (the `caprock-app` cask, the `caprock` formula), dismissed per version; the
-  check runs at most hourly (every 6 hours until 2026-10-15), conditionally
-  ([04-ui.md § Update notice](04-ui.md#update-notice)).
+  check runs every 15 minutes and on focus (hourly from 2026-10-15, every
+  6 hours before), conditionally
+  ([04-ui.md § Update notice](04-ui.md#update-notice); § Updates).
   The `.dmg` opens on a branded window (`bundle.macOS.dmg` in
   `tauri.conf.json`, 2026-10-10): 660×400, caprock.dev's paper ground, the
   mark and wordmark, the app icon at (170, 196) and the Applications folder
@@ -1464,11 +1465,26 @@ one lean terminal; they stay below Orca (420–541 MB idle) and a Chrome tab.
   `open_external` (https and the editors' schemes, and `tg:` only when an app handles it), `daemon_status`, and
   the updater's `app_update_status`, `app_update_check`,
   `app_update_download` (Update automatically, ADR-042 as amended
-  2026-10-15), `app_update_install` and `app_update_asked` (F20). No
+  2026-10-15), `app_update_install` and `app_update_asked` (F20), and `open_mail_app` and
+  `open_mail_window`, which open Mail in a window of its own (below). No
   shell, filesystem or HTTP plugin is exposed to the page. The bundled
   fallback page, on the app's own origin, alone gets `start_daemon`,
   `update_daemon` and `set_background` (built in WP-02; the others arrive
   with their work packages).
+- **Mail opens in a window of its own, never as a workspace tab** (owner,
+  2026-10-15, translated: "it should be native — either call the installed
+  app, or show a big banner to go there"). The sidebar's *Mail*, ⇧⌘M and the
+  palette ask `open_mail_app` first: on macOS the installed Caprock Mail
+  preview (`app/mail-mac`, bundle id `dev.caprock.mail.preview`, in
+  /Applications or ~/Applications) is launched or brought forward with
+  `open`. Without it, `open_mail_window` opens a second window of the app,
+  *Caprock Mail* (label `mail`, `src-tauri/src/mail.rs`), on the daemon's
+  `/?mail=1` — Mail alone, no sidebar or tabs — with the main window's link
+  rule and download handling, and a capability of its own that grants
+  `open_external` alone (`capabilities/mail.json`). It follows the daemon to
+  a new port and reloads after a swap, as the popover does. The Mail tab is
+  left for a browser (under a banner that opens `/?mail=1` in a browser
+  window) and for a shell older than these commands. .ai/04-ui.md § Mail.
 - **The daemon supervisor** reads `runtime.json`, starts the bundled binary
   when no daemon answers, and never stops a daemon it did not start — save
   one case on macOS: a Homebrew formula's daemon, moved onto the app's own
@@ -1514,8 +1530,8 @@ app had no reload command.
 - **A late swap reloads.** A daemon that came up after launch is replaced
   when the window may already show its page: the monitor follows the swap's
   state rather than the old daemon, and once the new one answers on the same
-  port it reloads the main window and the popover (the URL, hash route
-  included, is kept). On another port the page moves there on the same
+  port it reloads the main window, the popover and the Mail window (the
+  URL, hash route included, is kept). On another port the page moves there on the same
   route.
 - **Every page checks for itself.** The daemon writes its version into the
   page it serves (`<meta name="caprock-version">`, `internal/api/ui.go`), and
@@ -2374,11 +2390,32 @@ the user guide [docs/app.md § Updates](../docs/app.md#updates).
   panel with the reason, **Try again** and the release page. The ▾ beside the
   button shows what is new and **Not now**, which hides that version (the
   same key as the dashboard banner).
+- **When a release is found** (owner 2026-10-16, translated: "why isn't
+  the update highlighted when there is an update?" — 0.124.0 was out for
+  twelve minutes and 0.123.1 showed nothing; then 0.124.1, published at
+  16:21:29 local time, was still not shown by 0.124.0 at 16:59 — its
+  daemon had last checked at 16:16:48, five minutes before the release, and
+  the hourly throttle held the next check to 17:16; the page then polled
+  `/v1/update` only every ten minutes). The daemon's check is due
+  every 15 minutes (`update.Interval`, a five-minute tick on the wall
+  clock), and when the main window gains focus or is shown the page asks
+  for one more (`POST /v1/update/check?soon=1`, `ui/src/lib/updatesoon.ts`)
+  — run only if the last check is ten minutes old (`update.SoonInterval`,
+  held by the page and again by the daemon). The two share one last-checked
+  time, so unforced checks never run more than once per ten minutes; a
+  failed one still waits 15 (`update.FailRetry`). The page reads
+  `/v1/update` every five minutes while visible and takes the focus
+  check's answer at once, so a release shows within minutes of the user
+  looking. Each is one conditional request to the same endpoint, only
+  while the release check is on.
 - **Checking by hand.** **Check for Updates…** in the macOS app menu and the
   tray menu, and *Check for updates* in the palette, fetch `latest.json`
   once, with or without the release check on: *Checking for updates…*, then
-  the offer, *Caprock is up to date* for 6 seconds, or the failure. A check by
-  hand answers even for a version the user dismissed.
+  the offer, *Caprock is up to date* for 6 seconds, or *Couldn't check for
+  updates* with **Retry** — all in the status strip beside the version,
+  never in a banner at the top (owner 2026-10-16: he looks for the answer
+  bottom right; [04-ui.md § Update notice](04-ui.md#update-notice)). A
+  check by hand answers even for a version the user dismissed.
 - **The first launch** asks once, in the app (never an OS dialog): *Check for
   updates automatically?*, **Yes** focused and highlighted. Yes turns on
   `update_checks`, which makes the daemon check at once; No changes nothing.

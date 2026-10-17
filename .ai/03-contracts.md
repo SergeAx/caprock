@@ -851,7 +851,7 @@ GET  /v1/glance                         → Glance — all-time split by agent a
 GET  /v1/glance?range=today|7d|30d|all  → the same, over one range (the share card's agent mix)
 ```
 
-`{agents[], bill?, display}` for the Now screen's At a glance block, all time
+`{agents[], bill?, display, trend?}` for the Now screen's At a glance block, all time
 and never filtered by agent. `range` takes the summary's ranges (local
 midnight today, the last 7 or 30 days, all) and is how the share card draws
 the agents of the period it is about; absent or `all`, all time:
@@ -871,6 +871,17 @@ the agents of the period it is about; absent or `all`, all time:
   Tokens of a model with no row are counted in `unpriced_tokens` and priced
   nowhere. Absent with no pricing table.
 - **`display`** maps each model id seen to the table's display name.
+- **`trend`** (all-time answer only; absent with `range`) is two equal
+  windows ending now, for the block's change-in-share markers:
+  `{days, prior_from_ms, cut_ms, to_ms, prior, recent}` with `days` = 7,
+  prior = `[prior_from_ms, cut_ms)` and recent = `[cut_ms, to_ms)`. Each
+  window is `{models, bill?, tools, agents}`: `models` maps model id to
+  stored `cost_usd`, `bill` is the shape above priced the same way, `tools`
+  maps tool name to `tool.pre` calls (the calls Most-used tools counts), and
+  `agents` is `store.AgentSplit` over the window. The turns and the tool
+  calls are one grouped query each, the window a `GROUP BY` column
+  (`store.TrendWindows`, on `idx_events_turn_agent` and
+  `idx_events_tool_dist`, both covering; the plan guard checks it).
 
 Cached for 60 s per range and range start; on the owner's 1 GB database
 (2026-10-04) a cold all-time build takes 0.44 s.
@@ -1618,7 +1629,9 @@ existed; it keeps working.
   `/mute all` or bare), `/unmute`, and the Mute button.
 - **Premium** — an active licence **and** `telegram_chat` on: a reply to one
   of the bot's messages types its text into that session and presses Enter
-  (line breaks as ESC CR, then CR after 200 ms), only for a session Caprock
+  as the message queue does (§ Queued messages: a paste where the session
+  takes one, the Enter on its own after a pause, once more if the prompt
+  still holds the text), only for a session Caprock
   started and is running; a session it did not start gets "I can only watch
   this one", one waiting on a permission prompt gets "answer that first".
   `/sessions` lists up to 20 live sessions with their header and state,
@@ -3694,12 +3707,27 @@ POST   /v1/agents/{id}/queue/{qid}/send     → QueueView; 409 while a prompt or
   agent is working), `"permission"` (a permission prompt is on the screen),
   `"question"` (AskUserQuestion), or `""` (nothing; the session is at its
   prompt).
-- **Send or queue.** `POST …/queue` types the text in at once — control
-  characters dropped, a tab as two spaces, each line break as ESC CR, a
-  space after a trailing `@file`, then `\r` 200 ms later — when `waiting` is
-  `""` and nothing is queued; otherwise it appends the text (`sent: false`,
-  `queued` set). A message typed in counts as a running turn for 15 s or
-  until the session's next hook.
+- **Send or queue.** `POST …/queue` types the text in at once when
+  `waiting` is `""` and nothing is queued; otherwise it appends the text
+  (`sent: false`, `queued` set). A message typed in counts as a running turn
+  for 15 s or until the session's next hook.
+- **How a message is typed** (every path: the chat field, the phone, *Tell
+  the agent*, a delivery at a turn's end, Send now, a Telegram reply) — two
+  writes, `internal/daemon/queue.go` `typeMessage`:
+  - **The text.** Control characters dropped, a tab as two spaces, a space
+    after a trailing `@file`. When the session's output has turned
+    bracketed paste on (`ESC[?2004h`, read from its terminal ring; Claude
+    Code and Codex both do), the text goes as a paste, `ESC[200~` … `ESC[201~`,
+    each line break as `\r`. Otherwise it is typed, each line break as ESC
+    CR.
+  - **The Enter.** `\r` on its own, 200 ms later plus 25 ms per 256 bytes of
+    the text (at most 1 s).
+  - **The check.** 1.5 s after the Enter, when no hook has come from the
+    session since, no permission prompt is pending, no menu is on its
+    screen, and the prompt still shows the text (the end of its last line,
+    or a `[Pasted text #…]` / `[Pasted Content …]` placeholder, inside
+    Claude Code's input box or in the last 8 rows), `\r` is pressed once
+    more. Once only.
 - **Delivery.** On the session's own `Stop` hook — main thread, recorded,
   and not answered with "keep going" by the task runner's Stop-loop — the
   daemon waits 700 ms, reads `waiting` again, and when it is `""` types the

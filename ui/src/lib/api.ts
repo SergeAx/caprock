@@ -33,8 +33,9 @@ export interface Session {
    *  row (`PUT /v1/sessions/{id}/name`); outranks `title`. Empty: not renamed. */
   name?: string
   /** Which coding agent produced this session. Absent means Claude Code,
-   *  which is what every session was before OpenCode support. */
-  agent?: 'claude' | 'opencode' | 'gemini' | 'codex' | 'deepseek' | 'hermes'
+   *  which is what every session was before OpenCode support. `claude.ai`
+   *  and `chatgpt` are conversations imported from an export (ADR-074). */
+  agent?: 'claude' | 'opencode' | 'gemini' | 'codex' | 'deepseek' | 'hermes' | 'claude.ai' | 'chatgpt'
   /** The agent's own id for a Codex or OpenCode session Caprock started under
    *  an id of its own — the thread or session its importer files under this
    *  one. Absent until the first message is sent, and for every other session. */
@@ -70,6 +71,21 @@ export interface ChatList {
   total: number
   chats: number
   archived: number
+}
+
+/** What `POST /v1/chats/import` did with an export (ADR-074), counted per conversation. */
+export interface ChatImport {
+  conversations: number
+  added: number
+  updated: number
+  unchanged: number
+  /** Deleted in Caprock after an earlier import: they stay deleted. */
+  deleted: number
+  empty: number
+  messages: number
+  sources: Record<string, number>
+  /** Where the read stopped, when a conversation could not be read; what came before it is kept. */
+  error?: string
 }
 
 /** One file a chat wrote in its folder (`GET /v1/chats/{id}/files`). */
@@ -244,6 +260,14 @@ export interface EditorList {
   editors: Editor[]
   /** The one used when none is named: the Settings choice, else the first found. */
   preferred: string
+}
+
+/** A web browser installed on the machine the daemon runs on. */
+export interface InstalledBrowser {
+  id: string
+  name: string
+  /** The system's default browser. */
+  default: boolean
 }
 
 /** Whether a session can be carried on from here, and if not, why. */
@@ -611,11 +635,15 @@ export interface RepoActivity {
   project_id: number
   root: string
   name: string
+  /** The branch checked out at the root; absent when detached or not read. */
+  branch?: string
   /** Local calendar days, oldest first; the arrays below are per day. */
   days: string[]
   commits: number[]
   added: number[]
   deleted: number[]
+  /** Some commits' lines are not counted yet; the next read goes on. */
+  lines_partial?: boolean
   last_commit_at?: number
   /** Files the working tree has changed or new. */
   dirty: number
@@ -626,7 +654,11 @@ export interface RepoActivity {
   github?: {
     repo: string
     pulls?: { open: number; merged_7d: number; ttm_median_ms?: number; listed: number }
-    ci?: { runs: number; red: number; workflow?: string; median_ms?: number }
+    ci?: {
+      runs: number; red: number; workflow?: string; median_ms?: number
+      /** The newest run of the kept list. */
+      last?: { name: string; branch?: string; status: string; conclusion?: string; at?: number; url?: string }
+    }
     release?: { tag?: string; state: string; at?: number }
   }
 }
@@ -2009,6 +2041,16 @@ export const api = {
     const s = qs.toString()
     return get<ChatList>(`/v1/chats${s ? `?${s}` : ''}`)
   },
+  /** Imports a Claude.ai or ChatGPT export the user downloaded (ADR-074): read on this machine, nothing is sent. */
+  importChats: async (file: Blob): Promise<ChatImport> => {
+    const res = await fetch('/v1/chats/import', { method: 'POST', headers: withDevice({ 'Content-Type': file.type || 'application/octet-stream' }), body: file })
+    if (!res.ok) {
+      let b: unknown
+      try { b = await res.json() } catch { /* not JSON */ }
+      throw new ApiError(res.status, `${res.status} ${res.statusText}`, b)
+    }
+    return (await res.json()) as ChatImport
+  },
   archiveChat: (id: string, archived: boolean) => post<{ session_id: string; archived_at: number }>(`/v1/chats/${encodeURIComponent(id)}/archived`, { archived }, 'PUT'),
   /** Deletes a chat for good: its session (with a tombstone) and the files in its folder. */
   deleteChat: (id: string) => post<{ session_id: string; folder_removed: boolean }>(`/v1/chats/${encodeURIComponent(id)}`, {}, 'DELETE'),
@@ -2207,6 +2249,10 @@ export const api = {
   editors: () => get<EditorList>('/v1/editors'),
   /** Open a folder, or a file at a line, in an editor. Refused off this machine. */
   openInEditor: (req: { path: string; line?: number; editor?: string }) => post<{ editor: Editor }>('/v1/editors/open', req),
+  /** Web browsers installed here, the default first (the terminal link chooser). Refused off this machine. */
+  browsers: () => get<{ browsers: InstalledBrowser[] }>('/v1/browsers'),
+  /** Open an http(s) link in one of them. Refused off this machine. */
+  openInBrowser: (req: { browser: string; url: string }) => post<{ browser: InstalledBrowser }>('/v1/browsers/open', req),
   /** Remove sessions from Caprock for good — the machine only (ADR-037). */
   removeSessions: (req: { ids?: string[]; cwd_prefix?: string; dry_run?: boolean }) => post<RemoveResult>('/v1/sessions/remove', req),
   spawn: (req: SpawnRequest) => post<SpawnResult>('/v1/agents', req),

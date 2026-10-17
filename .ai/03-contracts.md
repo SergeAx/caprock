@@ -1508,8 +1508,8 @@ GitHub token is (§ GitHub, "Where the token lives"):
 
 `GET /v1/repos/activity` (2026-10-13) → `ReposActivity` `{repos[], github_connected}`: the Now screen's Repos section ([04-ui.md § Repos on Now](04-ui.md#repos-on-now)), asked only while that section is unfolded and the window visible. A row per listed project of kind `repo` (at most 12, in the sidebar's order) with a session that has not ended in it — the session's `repo_root`, else its `cwd`, at or below the project's root, so an agent's worktree under it counts:
 
-- **Local** — `projects.RepoActivity` `{root, name, days[], commits[], added[], deleted[], last_commit_at?, dirty, checked_ms, error?}` and `project_id`, `sessions`. Over the 14 local calendar days ending today, per day: `git log --all --no-merges -n 5000 --since=<first midnight> --format=%x1e%ct --shortstat` (`projects.ParseShortstat`, CRLF read like LF), and `dirty` the lines of `git status --porcelain=v1`. Read under the projects' git timeout — finished even when the request that started it is cancelled — and kept 10 minutes per root (64 roots at most), a failure too (`error`, the arrays zero).
-- **GitHub** — `github?` `{repo, pulls?, ci?, release?}` only while GitHub is connected and the remote (read through the repository cache, else the project's `remote_url`) is on GitHub; each part only from an answer Caprock already keeps, however old — this route sends GitHub nothing. `pulls` `{open, merged_7d, ttm_median_ms?, listed}` from the last pull request list the Branches view or the Pipeline read (`github.CachedRepoPulls`); `ci` `{runs, red, workflow?, median_ms?}` is `github.RunStats` over the last runs list the Pipeline read (`github.CachedRepoRuns`, 14 days, the workflow taking the most time first); `release` `{tag?, state, at?}` from the deck's last Release answer (`github.CachedRelease`; absent with no release run). A part nobody read yet is absent.
+- **Local** — `projects.RepoActivity` `{root, name, branch?, days[], commits[], added[], deleted[], lines_partial?, last_commit_at?, dirty, checked_ms, error?}` and `project_id`, `sessions`. Over the 14 local calendar days ending today, per day: the commits from `git log --all --no-merges -n 5000 --since=<first midnight> --format=%x1e%H %ct` (no diffs), and their lines from `git log --no-walk=unsorted --format=%x1e%H --shortstat <hash…>` in batches of 100 (`projects.parseRecords`, CRLF read like LF). A commit's lines are kept with the root's answer and never diffed again; the diffing runs under its own budget of 10 s a read (`activityLineBudget`), and when it runs out the batches done are kept, `lines_partial` is set and the answer is kept one minute instead of ten, so the next read goes on. One pass with `--shortstat` took 12 s on a checkout with 961 refs and 1,048 commits in 14 days (2026-10-17), past the git timeout, and the row read *git could not be read*. `branch` is `git branch --show-current` (absent when detached), `dirty` the lines of `git status --porcelain=v1`. Listing, branch and status run under the projects' git timeout — finished even when the request that started it is cancelled — and the answer is kept 10 minutes per root (64 roots at most), a failure to list the commits too (`error`, the arrays zero).
+- **GitHub** — `github?` `{repo, pulls?, ci?, release?}` only while GitHub is connected and the remote (read through the repository cache, else the project's `remote_url`) is on GitHub; each part only from an answer Caprock already keeps, however old — this route sends GitHub nothing. `pulls` `{open, merged_7d, ttm_median_ms?, listed}` from the last pull request list the Branches view or the Pipeline read (`github.CachedRepoPulls`); `ci` `{runs, red, workflow?, median_ms?, last?}` is `github.RunStats` over the last runs list the Pipeline read (`github.CachedRepoRuns`, 14 days, the workflow taking the most time first), `last` `{name, branch?, status, conclusion?, at?, url?}` the run of that list created last (`at` its `updated_at`); `release` `{tag?, state, at?}` from the deck's last Release answer (`github.CachedRelease`; absent with no release run). A part nobody read yet is absent.
 
 On a paired device's read list (counts only). `501` without the projects service.
 
@@ -1825,6 +1825,8 @@ POST   /v1/brain/backfill            {days?, dry_run?} → BrainEstimate; 409 wh
 GET    /v1/terminals                 → {terminals: [{id, name}], preferred}; terminal apps installed here, most preferred first
 GET    /v1/editors                   → {editors: [{id, name}], preferred}; editors installed here (F18), this machine only
 POST   /v1/editors/open              {path, line?, editor?} → {editor: {id, name}}; this machine only
+GET    /v1/browsers                  → {browsers: [{id, name, default}]}; web browsers installed here, the default first; this machine only
+POST   /v1/browsers/open             {browser, url} → {browser: {id, name, default}}; an http(s) url in that browser; this machine only
 POST   /v1/sessions/{id}/open-terminal {terminal?, mode?: resume|move|fork} → {terminal: {id, name}, mode, command}
 PUT    /v1/sessions/{id}/name        {name} → {session_id, name}; "" clears it; 400 without name, 404 for an unknown session (§ Session name DDL)
 POST   /v1/sessions/remove           {ids?: [id], cwd_prefix?, dry_run?} → {dry_run, sessions: [RemovalCandidate], skipped: [RemovalCandidate + reason], cost_usd, unmatched_usd}
@@ -2616,6 +2618,7 @@ such a folder (`agents.IsChatDir`: a direct child of `chats/`, not a dot name).
 
 ```
 GET    /v1/chats?q=&archived=1&limit=     → ChatList {items: [SessionSummary], total, chats, archived}
+POST   /v1/chats/import                   body: an export → ChatImport (below; ADR-074)
 PUT    /v1/chats/{id}/archived            {archived: bool} → {session_id, archived_at}
 DELETE /v1/chats/{id}                     → {session_id, cost_usd, folder_removed}
 GET    /v1/chats/{id}/files               → {files: [ChatFile], truncated?}
@@ -2650,7 +2653,58 @@ GET    /v1/chats/{id}/file?path=&download=1 → the file's bytes
   PDF is left to the browser's own viewer. The dashboard draws HTML in an
   iframe with `sandbox=""` and the same policy as a `<meta>` in its `srcdoc`.
 - **Who.** A paired viewer may list chats and read their files; a controller
-  may also archive and delete them (§ Who may connect).
+  may also archive and delete them (§ Who may connect). Import is the
+  machine's only.
+
+**Imported chats** ([ADR-074](08-decisions.md)). A conversation from a
+Claude.ai or ChatGPT export the user downloaded is stored as a chat that
+nothing runs:
+
+```
+POST /v1/chats/import   body: the export's .zip, or its conversations.json → ChatImport
+ChatImport {conversations, added, updated, unchanged, deleted, empty, messages, sources: {source: n}, error?}
+```
+
+- **The body** is the file's bytes, any `Content-Type`, at most 4 GB (`413`
+  over). A zip is opened for its shallowest `conversations.json`; nothing
+  else in it is read. The file is spooled to the OS temp directory and
+  removed when the request ends. Nothing is sent anywhere (rule 4). Not an
+  export, or empty: `400` with the reason. A conversation that cannot be
+  read stops the import there; what came before it is kept, and the answer
+  is `200` with `error` saying where it stopped.
+- **The shapes.** Neither service documents its export; these are the
+  fields open-source readers agree on (OQ-22, read 2026-10-17), every one
+  optional. Claude.ai: an array of `{uuid, name, created_at, updated_at,
+  current_leaf_message_uuid, chat_messages: [{uuid, parent_message_uuid,
+  sender: human|assistant, text, content: [{type, text}], created_at,
+  attachments: [{file_name}], files: [{file_name}]}]}`; only `text` blocks
+  are prose, and the branch shown is the path from the root to
+  `current_leaf_message_uuid` (export order without one). ChatGPT: an array
+  of `{conversation_id|id, title, create_time, update_time (unix seconds),
+  current_node, mapping: {node: {parent, children, message: {id, author:
+  {role}, create_time, content: {content_type, parts}, metadata:
+  {model_slug, is_visually_hidden_from_conversation}}}}}`; the branch is
+  `current_node` back to the root, `user` and `assistant` messages only,
+  hidden ones left out, an image part written `[Image]`, private-use
+  citation markers removed. A message is clipped at 64,000 runes.
+- **Storage.** No new table or column. The session is
+  `claudeai-<uuid>` or `chatgpt-<id>`, with `agent` = `claude.ai` or
+  `chatgpt`, `native_id` = the service's id, `chat = 1`, `status =
+  'ended'`, `owned = 0`, no `cwd`, `title` = the conversation's name,
+  `prompt` = its first message, `started_at` / `last_event_at` /
+  `worked_at` from the export. Each message is a `turn.user` (`{prompt,
+  imported_from}`) or `turn.assistant` (`{text, model?, imported_from}`)
+  event with `source = 'import'`, key `imp:<message id>`, no tokens, no
+  cost and `internal = 1`, so every aggregate leaves it out; no
+  `session_stats` or `daily_stats` row is written.
+- **Re-import** of the same or a newer export adds only messages whose key
+  is new (`updated`), and leaves a conversation as it is otherwise
+  (`unchanged`). A chat the user deleted keeps its tombstone and is not
+  imported again (`deleted`). `empty` counts conversations with no message
+  to show.
+- **Read-only.** `resume` is `{ok: false, reason: "Imported from …"}`;
+  `files` is `404` (no folder); archive, rename and delete work as for any
+  chat (delete removes no folder).
 
 **`resume`** — `{ok, reason?, command?, permission_mode?}`. `permission_mode`
 is present only with `ok`: the mode `POST /v1/agents` will fill in for a
@@ -2763,6 +2817,33 @@ relayed), in the handler, whatever a device's role — an editor opens on this
 screen, not the phone's — and neither is on a device allowlist.
 `GET`/`PUT /v1/settings` carry **`editor`**: an id from `editor.IDs()` or
 `""` (the first installed), else 400; stored as `editor` in `config.json`.
+
+**Open a link in a browser** (the terminal link chooser, `internal/browser`,
+`internal/api/browser.go`). `GET /v1/browsers` lists the web browsers
+installed here, found once per daemon run from what the OS says handles web
+links, the default first and the rest by name: on macOS every app
+LaunchServices names for an https URL (`LSCopyApplicationURLsForURL`, the
+default from `LSCopyDefaultApplicationURLForURL`, through purego), kept only
+inside an Applications folder and not inside another bundle, `id` the
+bundle's path; on Windows the registry's `Clients\StartMenuInternet` keys
+(HKCU, then HKLM, each also under `WOW6432Node`) with a `shell\open\command`
+whose executable exists, `id` the key's name, the default the one whose
+`Capabilities\URLAssociations\https` ProgId is the https `UserChoice`; on
+Linux the desktop entries in the XDG data dirs (plus Flatpak's and Snap's
+exports) whose `MimeType` names `x-scheme-handler/http` or `https`, shown and
+with their `TryExec` installed, `id` the desktop file id, the default from
+`mimeapps.list` (the desktop-specific one first, then the config and data
+dirs, then `defaults.list`). Every app registered for https is listed, as
+the OS's own default-browser setting lists it. `POST /v1/browsers/open`
+`{browser, url}` opens an `http` or `https` `url` (a host, no spaces or
+control characters, at most 8 KiB) in that browser and answers `{browser}`;
+a bad URL or an unknown browser is `400`, a launch that fails `502`. Each
+launch is an argv, never a shell string, and the URL is its own last word:
+macOS `open -a <bundle> <url>`, Windows the client's executable with the URL,
+Linux the entry's `Exec` with `%u` (`%U`, `%f`, `%F`) replaced by the URL
+and the other field codes dropped. Both endpoints answer `403` to anything
+but a request from this machine (`isLocal`), in the handler, and neither is
+on a device allowlist.
 
 `GET`/`PUT /v1/settings` carry **`spawn_permission_mode`**: the permission mode
 new sessions start in, one of `agents.PermissionModes` (`acceptEdits`, `auto`,

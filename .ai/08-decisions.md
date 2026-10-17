@@ -2853,6 +2853,62 @@ taught; and a model entry in the launcher's Model list: the provider
 changes the credential and the endpoint, not only the model, and a model
 list cannot say where the work goes.
 
+**Amended 2026-10-18: a folder isolates a sign-in only when nothing in the
+environment outranks it.** The owner confirmed the request again
+(2026-10-18): several sign-ins, free up to three, the user picks, never an
+automatic rotation. Re-checked read-only that day against the installed
+agents, without signing in or opening the Keychain:
+
+- **Claude Code 2.1.302.** Its bundle names the Keychain item
+  `Claude Code-credentials` with no `CLAUDE_CONFIG_DIR`, and with one
+  `Claude Code-credentials-` plus the first eight hex digits of SHA-256 of
+  the directory (NFC), account `$USER`; `.credentials.json` sits in the
+  same directory. So a profile's sign-in is its own, as the docs say — but
+  `CLAUDE_SECURESTORAGE_CONFIG_DIR`, which Claude Code sets for the
+  teammates it starts, replaces that directory for both. And the docs'
+  *Authentication precedence* ranks `ANTHROPIC_AUTH_TOKEN`,
+  `ANTHROPIC_API_KEY`, `apiKeyHelper`, `CLAUDE_CODE_OAUTH_TOKEN`, a named
+  `ANTHROPIC_PROFILE` or the federation variables, and a cloud provider
+  switch above the directory's `/login` (code.claude.com/docs/en/
+  authentication, read 2026-10-18). The same page says a Console sign-in
+  without an API key is stored outside the configuration directory.
+  `claude --help` documents none of this.
+- **Codex 0.161.0.** `compute_store_key` still keys the keyring entry
+  (service `Codex Auth`) to `cli|` and sixteen hex digits of SHA-256 of the
+  canonical `CODEX_HOME`, and `auth.json` lives under it; `CODEX_API_KEY` and
+  `CODEX_ACCESS_TOKEN` take precedence over both; `OPENAI_API_KEY` is not
+  read by its auth loading (github.com/openai/codex,
+  `codex-rs/login/src/auth/storage.rs` and `manager.rs`, read 2026-10-18).
+
+**Decided.**
+
+- **A session on an added subscription runs without those variables**
+  (`subs.CredentialEnv`), so it runs on the sign-in the user picked rather
+  than on a key the shell exports. A session on the own sign-in keeps them,
+  as the user's terminal does. `CLAUDE_SECURESTORAGE_CONFIG_DIR` is a
+  nesting marker and no session or shell tab Caprock starts inherits it.
+  `OPENAI_API_KEY` stays: tools a session runs may want it.
+- **Settings names, never shows, what is set aside** (`ignored_env`), and
+  says the Console-without-a-key case is not kept apart by folders.
+- **Removing names what stays behind.** `DELETE` removes the folder; a
+  Keychain item or keyring entry is not in it, and Caprock still never
+  touches either. The confirm names the macOS Keychain item and offers
+  **Sign out first**, which types the agent's own `claude auth logout` or
+  `codex logout`, pointed at the folder, into a shell tab for the user to
+  run.
+
+`apiKeyHelper` and managed settings are not the environment and are not
+changed: a profile's `settings.json` is Caprock's and carries none, and a
+machine's managed settings are its administrator's. A fake binary in the
+tests proves the environment handed over, not what the agent does with it;
+that rests on the sources above.
+
+**Rejected:** clearing the variables for the own sign-in too (it would
+change how a user's existing sessions authenticate); deleting the Keychain
+item on Remove (the Keychain is never Caprock's to touch); a check that
+runs `claude auth status` per profile (a process reading the Keychain, from
+the daemon, as rejected above).
+
 ## ADR-049 — Caprock keeps the computer awake while agents work; on by default
 
 **Date:** 2026-10-11 · **Status:** accepted
@@ -3418,7 +3474,15 @@ dashboard and a desktop app on three OSes.
   email` for the address. Revoking: remove the account in Mail (deletes the
   token here), and at the provider — Google at myaccount.google.com/permissions,
   a personal Microsoft account at account.live.com/consent/Manage, a work
-  account at myapps.microsoft.com or by its Entra admin. The client IDs are
+  account at myapps.microsoft.com or by its Entra admin. Since 2026-10-18
+  removing a Google account also sends its refresh token to Google's
+  revocation endpoint (oauth2.googleapis.com/revoke, RFC 7009) — the one more
+  call, to the provider the user chose, and on the user's own click — so the
+  grant ends there too; at Google that is the whole grant, so another install
+  of the same build signed in to that account must sign in again. Microsoft
+  offers apps no revocation endpoint (only Graph's revokeSignInSessions,
+  which would sign the user out of every app), so nothing is sent and the
+  confirmation names the page above. The client IDs are
   the Caprock owner's app registrations, compiled in or given by environment
   ([docs/mail-oauth.md](../docs/mail-oauth.md)); without one the button is not
   offered and nothing else changes. The callback is the one `/v1` route the
@@ -3806,6 +3870,46 @@ a fresh scan. Considered and not done: stopping test copies on their own
 after N minutes without a client (a Settings toggle, off by default) — that
 is an automatic stop of a process Caprock did not start and needs its own
 ADR.
+
+**Amended 2026-10-18 (owner, 2026-10-13, confirmed 2026-10-18, translated:
+"I'd like to monitor orphans, including Claude's orphans; maybe also an
+advanced mode to clean them").** On his Mac a `/opt/homebrew/bin/caprock
+pty-host` from 2026-10-06 was still running twelve days later, from a
+Homebrew install he had left for the app; the doctor said it only as a count
+of "terminal holders from another install, all still in use", with no row,
+no age and no way to stop it there. The decision above already covers
+processes Caprock did not start; this amendment widens what is listed and
+narrows how a stop signals:
+
+- **More is listed, by the same rule.** Kind `codex` — a Codex CLI judged
+  exactly as a `claude` is (parent gone, or its pid the latest ended session
+  in Caprock's history, no terminal); `codex app-server`, the Codex desktop
+  app's managed daemon, is a service and never listed. Kind
+  `caprock_old_holder` — a terminal holder this Caprock still lists but whose
+  executable lies outside the answering daemon's install directories: a
+  session that outlived a move between installs. Something still runs in it,
+  so it is said (a row of its own, never a warning), never stopped on its own
+  and never ticked in Clean up; its `why` names the install, its age, whether
+  that program file is gone and whether a live session runs in it. With no
+  daemon to compare installs with, no holder is judged by its executable.
+- **Each item carries what a person needs to decide:** age, CPU, memory, and
+  the command line (`cmd`, cut to 160 characters, credentials hidden). The
+  strip says *3 orphans*; the doctor says *Orphans: 3 · 410 MB*.
+- **Still cheap.** The 10-minute sweep keeps the count; the open doctor's
+  10-second asks are answered from a scan up to 30 s old; Check now,
+  `caprock doctor` and every stop take one at once.
+- **A stop sends one signal, then reports.** SIGTERM, a 5-second wait, and a
+  process still there is reported *still running* — nothing more is sent.
+  SIGKILL is a second, separate click (**Force stop N**, listing each process
+  again) or `caprock doctor --stop <pid> --force`. Previously SIGKILL followed
+  SIGTERM on its own after five seconds; a person who chose a polite stop now
+  sees that it did not work before anything harsher happens. Windows has only
+  TerminateProcess, so its first stop already ends the process.
+- **Unchanged:** never automatic, never from a paired device, never the
+  orchestrator or an agent; every stop is per item, the item seen and
+  confirmable one by one (a *Stop N* lists each on its own line with its own
+  checkbox, nothing bulk without that list); pid and start time re-checked by
+  a fresh scan before each signal; only the named pid, never its children.
 
 ## ADR-060 — Phone access may stay on across restarts, when the owner ticks it
 
@@ -4565,6 +4669,18 @@ Phase 2's smoke adds a Windows target to the matrix.
       `.ai/03-contracts.md`), read on each machine and fetched from the
       other through `/v1/m/{id}/v1/resources`. The thresholds are set from
       OQ-19's measurement, not before.
+  - *PR3 status (2026-10-18): built.* The sidebar's computers and their
+    sessions, tagged; a computer's screen and its sessions in a frame of the
+    dashboard whose `/v1/…` is rewritten to `/v1/m/{id}/…` (the machine
+    page, [04-ui.md § Other computers](04-ui.md)); Settings → Computers with
+    add, rename, forget, check, the steps for the other computer and a link
+    for another computer to reach this one; offline, pending, revoked and
+    refused said in words; *+ Add a machine* with none linked.
+    `/v1/resources` carries `machine` (`cpus`, `load1`, `mem_total`,
+    `mem_available`), but **the busy line is not drawn**: OQ-19 is
+    unmeasured, so there are no thresholds. `bench/peer.mjs` was run
+    through the local relay only (2026-10-18, [21-app.md](21-app.md));
+    the hosted relay and two real computers are still OQ-17/OQ-18.
 - **Phase 2 — start and finish work on another computer:** a Machine picker
   in New agent (projects, folders, models and agents read from the target;
   offline ones disabled); permission buttons, the queue, Changes, diff and
@@ -5277,3 +5393,98 @@ without a key; a module reachable from a paired device.
 **Revisit if:** a module must be reachable from the phone (it would get its own
 paired-device decision), a module from someone else's hands needs isolation
 (a sandboxed, cross-origin frame and a scoped token), or keys need to expire.
+
+## ADR-077 — A project of chosen repositories: no folder of its own, the first one is home
+
+**Date:** 2026-10-18 · **Status:** accepted (owner, 2026-10-18, translated: "I
+still can't understand how to make multi-repo projects."). Amends
+[ADR-055](#adr-055--multi-repo-projects-a-folder-of-repositories-is-one-project-its-members-named-its-agents-given-each-other-repository).
+Contract: [03-contracts.md § Projects and shells](03-contracts.md), *Multi-repo
+projects*; screen: [04-ui.md § New project](04-ui.md).
+
+**Context.** ADR-055 made a multi-repo project out of a folder: Continue on
+`~/dev` scanned it and offered every repository there as a card. The owner
+was looking at the New project dialog with `~/dev` in the field and its
+thirty repositories listed under *Inside ~/dev — a click picks one*, and could
+not see how to put `ai-crm` and `ai-notary` together: a click on a row made
+that one repository a project, and the way to the cards was to press
+Continue on the folder without clicking anything. Had he found it, the
+project would have been worse than his intent:
+
+- Its root would have been `~/dev`, so every agent started there reached all
+  thirty repositories, not the two picked.
+- `projects.root` is `UNIQUE`: `~/dev` could hold one multi-repo project, so
+  `ai-advision` with `ai-foo` could not become a second one.
+- Merge did the same: two repository projects in `~/dev` merged into a new
+  project at `~/dev`, and two in different folders were refused unless they
+  shared one below home.
+
+**Decision.**
+
+- **A project of repositories picked one by one has no folder of its own.**
+  Its root is the first repository picked, its *home repository*, and every
+  repository picked — the home one included — is a member in
+  `project_repos`. It is an ordinary repository project (`kind = 'repo'`)
+  that has members, so the home repository keeps its git state, its
+  worktrees, its Changes and its copies as before. No column, no kind and no
+  migration were added; `roots` as a new list was not needed, because
+  `project_repos` already is that list.
+- **Picked where?** The New project dialog's Folder step has a visible
+  switch, *Put several repositories in one project*, with one line under it.
+  It turns the rows into checkboxes (a folder that is not a repository is
+  still gone into), keeps the picks while the field moves between folders,
+  shows them as chips with the home one marked, and its button reads *Tick
+  two or more*, *1 selected · tick one more*, *2 selected · Continue*. The
+  second step shows the picks as cards, a Name field (the home repository's
+  name when left empty) and the instructions box, and creates with
+  `POST /v1/projects {repos, name?}`.
+- **A folder project is every repository the folder holds.** Continue on a
+  folder still offers its repositories as cards, all ticked: with all of them
+  (those already in another project aside) the folder is the project, as in
+  ADR-055. Untick some and it becomes a project of the ones left, with no
+  folder: the first ticked is home, and the folder stays free.
+- **Later, from the project's menu**: *Add a repository…* opens a sheet with
+  the same folder list and checkboxes; it sends `PATCH repos` with the
+  project's repositories and the ticked ones. On a plain repository project
+  its own root joins the members. The project page's Repositories section
+  has *Add…* beside *Edit*.
+- **Merging** repository projects keeps the first one and makes its
+  repository home; the others are members. Projects in different folders now
+  merge.
+- **Splitting** a project with a home repository lists each other member on
+  its own and keeps the project itself, as that repository, under its name.
+  A repository project left with only its own root after a member moved away
+  is a plain project again.
+- **New agent** in a project of several repositories asks *Repository*: the
+  home repository first (or, for a folder project, the folder, which reaches
+  every repository), then each other one. The agent starts there and gets
+  the others as `--add-dir` (ADR-055, unchanged). A copy (worktree) of a
+  repository that is not the home one starts from what it has checked out:
+  the branch list is the home repository's.
+- **The sidebar adds no rows.** Each session row names its repository where
+  the branch goes (`ai-notary · fix-login`). Repository rows with sessions
+  under them were asked for, and are the shape the owner turned down twice:
+  the sidebar mirrors the tabs, one row per session (owner, 2026-10-09 and
+  2026-10-14). The project page's Repositories section is the per-repository
+  view.
+- **CI and the Pipeline** list each member repository on GitHub as a row of
+  its own under its project (`GET /v1/repos/ci`); the release plan was
+  already per repository, read from the sessions, and stays so.
+
+**Not chosen.**
+
+- **A new `roots` column or table.** `project_repos` already names a
+  project's repositories; a second list would need a migration and a second
+  attribution rule for the same thing.
+- **A synthetic root** (no path, or a path under Caprock's data folder). The
+  root is where agents start, where the Changes panel reads and what dozens of
+  screens key a project by; a repository the user picked is a real place to
+  start.
+- **Making a folder project of the common parent**, as merge did. It is what
+  led here: an agent in `~/dev` reaches everything, and the folder can hold
+  one such project.
+
+**Revisit if:** someone wants agents to start in a folder holding only the
+picked repositories (that would be a folder Caprock makes, which this
+decision avoids), or the home repository proves the wrong default and a
+*Make home* action is asked for.

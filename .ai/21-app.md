@@ -201,7 +201,12 @@ One window, three regions:
   confirmation. Hidden rows are listed under *More…* and come back by
   themselves when they next wait on you. The same actions are in each row's
   right-click / Shift+F10 menu; the buttons are 26px, on hover and focus,
-  and always shown on a touch screen ([04-ui.md](04-ui.md) § Sidebar). A **Dashboard** entry opens the existing
+  and always shown on a touch screen ([04-ui.md](04-ui.md) § Sidebar).
+  Under the projects, the **other computers** (ADR-067): with none linked,
+  one quiet *+ Add a machine* row opening Settings → Computers; with some, a
+  *Computers* heading, each computer and the sessions running there, tagged
+  by its name, opening in the Dashboard tab through `/v1/m/{id}/…`
+  ([04-ui.md](04-ui.md) § Other computers). A **Dashboard** entry opens the existing
   screens in a Dashboard tab pinned at the left of the tab strip (2026-10-09:
   it replaced the whole workspace, and the first tester read that as every
   terminal closing, translated); in it, Now leaves out the session cards and
@@ -385,6 +390,21 @@ One window, three regions:
     after the last key): a click on a row picks it, › looks inside one that is
     not a repository. In the desktop app *Choose…* opens the system's folder
     chooser (`pick_folder`, app/README.md).
+    **Several repositories in one project** (owner, 2026-10-18, translated:
+    "I still can't understand how to make multi-repo projects";
+    [ADR-077](08-decisions.md)). Under the title, a pill switch *Put several
+    repositories in one project* (`aria-pressed`) and, while on, one line:
+    "Tick them here or in other folders. No folder is made: agents start in
+    the first one ticked and reach the rest." The rows then carry a checkbox:
+    a click on a repository ticks or unticks it, a click on a folder that is
+    not one goes inside it (the list says *Inside ~/dev — tick the
+    repositories, › goes inside a folder*). The picks outlive moving between
+    folders and are listed under the rows as chips (*Ticked: ai-crm home ×
+    ai-notary ×*, the first marked *home*). The footer's button counts them —
+    *Tick two or more*, *1 selected · tick one more* (both disabled), *2
+    selected · Continue* — and Enter does what it says. Continue goes to the
+    second step with the picks as cards (`kind: 'chosen'`, `togglePick`,
+    `pickedLabel` in `lib/projectWizard.ts`).
     **A name typed after the last separator searches the folder before it**
     (owner, 2026-10-15, translated: "typing the first letters should search
     these folders in this directory"; until then `~/dev/cap` emptied the
@@ -407,7 +427,16 @@ One window, three regions:
     ticked but one in another multi-repo project, each naming its own
     CLAUDE.md / AGENTS.md (*Create project of N repos*, or *Or add them as N
     separate projects*; a single pick adds that repository alone), or *A plain
-    folder*. One repository below the folder is scanned itself. A folder
+    folder*. With every card ticked the folder is the project (ADR-055:
+    "Agents start in ~/work and reach every repository"); untick some and it
+    is a project of the ones left with no folder of its own (ADR-077: "One
+    project of the repositories picked; no folder is made. Agents start in api
+    and reach the others"), the first ticked marked *home* on its card
+    (`wholeFolder`, `homeOf`, `createRequests`). For two or more as one
+    project a *Name* field follows (its placeholder the folder's or the home
+    repository's name; empty sends none). The picks from *Several
+    repositories* arrive here the same way, headed *2 repositories, one
+    project*, and are created with `POST /v1/projects {repos, name?}`. One repository below the folder is scanned itself. A folder
     already listed says so and *Open project* adds nothing. On the same
     screen: *Already has CLAUDE.md — agents read it* with *Show* (the scan
     returns the text), and an optional *Instructions for every agent here*
@@ -1347,6 +1376,41 @@ What still fails or is close, and what to try next:
   p95 is 19 ms in every run. The socket leg is 2 ms; the rest is the page's
   frame. No fix proposed until a quiet run misses.
 
+### A session on another computer (2026-10-18)
+
+`bench/peer.mjs` ([bench/README.md](../bench/README.md)), ADR-067 PR3: two
+throwaway daemons on one Mac — a target and a controller, each with its own
+HOME, data directory and port, a clean environment and the fake `claude` —
+and `caprock remote relay` on loopback. The controller pairs by link, the
+target allows it, the controller starts the session on the target through
+`/v1/m/{id}/…`; then one key at a time, timed from the send to the frame
+that echoes it (the target's tty echo, terminal protocol v2), 400 keys a leg
+in two alternating rounds, 40 ms apart. *Local* is the target's own terminal
+socket; *peer* is the same session through the controller's proxy, the
+relay, Noise and the target's Host. Raw JSON:
+[bench/results-2026-10-18-peer/peer.json](../bench/results-2026-10-18-peer/peer.json).
+
+Measured on 2026-10-18 (00:31 local), Apple M1 Pro, 10 cores, 16 GB, macOS
+27.0 (Darwin 27.0.0), on the owner's working Mac with a one-minute load of
+27 (a busy machine, not a quiet one):
+
+| Leg   | Keys | Median  | p95     | Max      |
+| ----- | ---- | ------- | ------- | -------- |
+| local | 400  | 2.14 ms | 47.8 ms | 87.6 ms  |
+| peer  | 400  | 2.47 ms | 56.8 ms | 103.0 ms |
+
+What it says, and what it does not:
+
+- On one machine, the hop through the proxy, the relay and Noise added 0.33
+  ms at the median and 9 ms at p95. That is the cost of Caprock's own path,
+  not of a network: both daemons and the relay were on loopback.
+- It does not measure two computers on a home network, from abroad, or the
+  hosted relay (`relay.caprock.dev`): OQ-17 and OQ-18 stay open for those
+  ([12-risks.md](12-risks.md)), and no latency figure for a real link is
+  stated anywhere public before they are measured (rule 6).
+- The p95 of both legs is the busy machine's; re-run on a quiet one before
+  reading the tail.
+
 ### A hidden window does no work (2026-10-13)
 
 The owner measured the WebContent process of an app window with nothing
@@ -1653,7 +1717,11 @@ and the points below say where the build settled what this plan left open.
   the phone was put away, until the session was reopened (Vova, 2026-10-13).
 - **Modes on exit and restore.** When the child exits, or a snapshot repaints,
   the client resets mouse tracking, bracketed paste and the alternate screen
-  before drawing, so a dead TUI's modes never leak into the next one.
+  before drawing, so a dead TUI's modes never leak into the next one. The
+  snapshot then opens with the modes the session's output had set where the
+  held bytes start, the alternate screen and mouse tracking among them
+  (`internal/termbuf/modes.go`), so a live full-screen app such as Codex keeps
+  its screen and its wheel after a repaint ([04-ui.md](04-ui.md)).
 
 ## Projects
 
@@ -1708,6 +1776,27 @@ there, and worktrees as first-class places to work.
   the folder; one started inside a member gets the others as `--add-dir`.
   Members are not watched (contract in 03-contracts.md § Projects and
   shells). A monorepo stays one repository with its per-directory split.
+  **Repositories picked one by one** (2026-10-18, [ADR-077](08-decisions.md))
+  are one project with no folder of its own: its root is the first picked,
+  its *home repository* (marked *home* on its page and in the editor, where
+  it cannot be unticked: it leaves by a split), and every one is a member.
+  Made from the wizard (above), from the project menu's *Add a repository…*
+  or the page's *Add…* (`AddRepoSheet.tsx`: a folder field starting at the
+  parent of the project's root, the folders inside it with each repository
+  a checkbox — those already in the project ticked and greyed, *in this
+  project* — › going inside the others, *Add repository* / *Add N
+  repositories*; `PATCH repos` with the project's and the ticked ones,
+  `addedRepos` in `lib/multirepo.ts`), or by merging repository projects
+  (the first is kept, its repository home). New agent in such a project
+  asks *Repository* in place of the members line: the home repository (or a
+  folder project's folder, *The folder · reaches every repository*) first,
+  then each other one (`repoChoices`); the agent starts there with the
+  others as `--add-dir`. *Where* then offers *This folder* with that
+  repository's branch and *New copy*; a copy of a repository that is not the
+  home one starts from its checkout (*From: main, as it is now*), the branch
+  list being the home repository's. The sidebar gets no repository rows
+  (the tabs model, owner 2026-10-14): each session row names its repository
+  before its branch, *ai-notary · fix-login* (`rowRepo`).
 
 ## Composer
 
@@ -1772,7 +1861,10 @@ replies to a running session: Continue, Shorter and the like"). Built in
   field while the chat can type (`ChatView`, the phone's chat included). A
   session Caprock only watches never gets the row, and the daemon refuses
   its queue whatever the page draws. A sibling after the terminal's box, so
-  it never remounts the host.
+  it never remounts the host. A quiet *Reply to the agent:* leads the row,
+  and each chip's hover names the message it sends (*Sends to the agent:
+  “…”*) (owner, 2026-10-18, translated: the bare row was "not very
+  unambiguous").
 - **Sending** is the composer's path, `POST /v1/agents/{id}/queue`
   (ADR-053): the reply's fixed text, typed in at once at the prompt,
   otherwise held and typed when the turn ends; the daemon types a line
@@ -1843,15 +1935,17 @@ replies to a running session: Continue, Shorter and the like"). Built in
 - **Links in a terminal** (`ui/src/lib/termlinks.ts`, .ai/04-ui.md § Session
   Detail). ⌘-click (Ctrl+click off macOS) opens a link in the default
   browser, through the shell's `open_external`. ⇧⌘-click (Ctrl+Shift+click)
-  on an http(s) link opens a chooser at the pointer: the browsers installed
-  here, the default first and marked, then *Copy link* (owner, 2026-10-17).
-  The daemon finds them (`internal/browser`, `GET /v1/browsers`: LaunchServices
-  on macOS, the registry's StartMenuInternet on Windows, `.desktop` entries
-  for `x-scheme-handler/http(s)` on Linux) and opens a picked one
-  (`POST /v1/browsers/open`), a process Caprock starts (rule 7). The
-  chooser's rows are entry kinds (`lib/linkchooser.ts`); *Open in Caprock*
-  follows the browsers while the in-app browser (beta, ADR-075) is on, and
-  is not listed while it is off.
+  on an http(s) link opens a chooser at the pointer with two choices (owner,
+  2026-10-17): *Default browser*, named and focused, and *Caprock browser*,
+  always in the app — picked while the in-app browser (beta, ADR-075) is off,
+  it turns it on and a toast says where to turn it off — then *Copy link*,
+  and a quiet *Other browser…* that expands in place into the other web
+  browsers. The daemon finds those (`internal/browser`, `GET /v1/browsers`:
+  LaunchServices on macOS, the registry's StartMenuInternet on Windows,
+  `.desktop` entries for `x-scheme-handler/http(s)` on Linux), keeps only
+  the known web browsers and the default (`known.go`), and opens a picked
+  one (`POST /v1/browsers/open`), a process Caprock starts (rule 7). The
+  chooser's rows are entry kinds (`lib/linkchooser.ts`).
 
 ## File tabs
 
@@ -1883,7 +1977,8 @@ with ⌘W and is restored on relaunch like them
 ## Browser tabs
 
 The in-app browser, beta, off until Settings → *In-app browser (beta)* turns
-it on; with it off no page window is ever made. Decided in
+it on, or the user picks *Caprock browser* in the link chooser (which says
+so in a toast); with it off no page window is ever made. Decided in
 [ADR-075](08-decisions.md), which also records why 0.123.0's Page tab
 crashed (ADR-070); what the user sees is in
 [04-ui.md § The app workspace](04-ui.md#the-app-workspace), *Browser tabs*.
@@ -1908,8 +2003,8 @@ crashed (ADR-070); what the user sees is in
   its WebContent process is done with it first (the 0.124.0 crash, ADR-075).
   A dashboard reload hides every page; the tabs that come back show theirs.
 - **Opened from** File → *New Browser Tab* (macOS, a globe), ⌘K and the +
-  menu, an address typed into ⌘K, *Open in Caprock* in the link chooser
-  (`caprockEntry`, `openInCaprock` in `ui/src/lib/browsertab.ts`), and a
+  menu, an address typed into ⌘K, *Caprock browser* in the link chooser
+  (`pickCaprock` in `ui/src/lib/browsertab.ts`), and a
   page's own new window (target=_blank, `window.open`): another tab, never a
   popup. ⌘-click keeps opening the default browser.
 - **A new tab starts in its address box**; plain words search with the

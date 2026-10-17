@@ -18,6 +18,18 @@ import { useNow } from '@/lib/useNow'
 import { Details, Section, Toggle } from '@/components/SettingsParts'
 import { TelegramBotFields } from '@/components/TelegramBot'
 
+/**
+ * Telegram refusing the bot's token ("Unauthorized", or "Not Found" for a
+ * deleted bot): the token was regenerated in BotFather or the bot is gone.
+ * Only a new token fixes it, so the bot's setup card comes back, saying so
+ * (owner, 2026-10-18, translated: "why doesn't the token work … it needs a
+ * clear, short, big instruction of what to do with it").
+ */
+export function tokenRejected(err: string | undefined): boolean {
+  return !!err && /telegram: (unauthorized|not found|http 401|http 404)/i.test(err)
+}
+
+
 export function PhoneAlerts() {
   const settings = useApi(() => api.settings(), [], { live: false })
   const now = useNow(30_000)
@@ -52,7 +64,9 @@ export function PhoneAlerts() {
     }
   }
 
-  const bot = <TelegramBotFields s={s} onSaved={() => settings.refresh?.()} />
+  const rejected = tokenRejected(error) || tokenRejected(s.alert_last_error)
+  // The bot first, always: a setup card until it works, then one line.
+  const bot = <TelegramBotFields s={s} rejected={rejected} onSaved={() => settings.refresh?.()} />
   return (
     <Section
       id="telegram"
@@ -63,7 +77,7 @@ export function PhoneAlerts() {
         A Telegram message when a session needs you or has finished, from any terminal, with buttons to mute it or open it
         on your phone. Free.
       </p>
-      {!configured && <div className="grid gap-3">{bot}</div>}
+      {bot}
       {configured && (
         <Details summary="What a message says">
           <p className="text-[12.5px] leading-relaxed text-fg-muted">
@@ -76,7 +90,7 @@ export function PhoneAlerts() {
       )}
       {configured ? (
         <>
-          {s.alert_approval !== true && s.alert_finished !== true && (
+          {!rejected && s.alert_approval !== true && s.alert_finished !== true && (
             <p className="rounded-[8px] border border-accent/50 bg-accent/10 px-3 py-2 text-[13px] text-fg">
               The bot is connected. Turn on at least one alert below, or nothing is sent.
             </p>
@@ -110,7 +124,7 @@ export function PhoneAlerts() {
             {sent && <span className="text-[12.5px] text-ok">sent — check Telegram</span>}
             {error && <span className="text-[12.5px] text-danger">{error}</span>}
           </div>
-          {!error && s.alert_last_error ? (
+          {!error && s.alert_last_error && !rejected ? (
             <p className="text-[12.5px] text-danger">Last alert failed: {s.alert_last_error}</p>
           ) : s.alert_last_sent_ms ? (
             <p className="text-[12.5px] text-fg-faint">Last alert sent {fmtAgo(s.alert_last_sent_ms, now)}.</p>
@@ -119,9 +133,6 @@ export function PhoneAlerts() {
             Each message has a <span className="text-fg-muted">Mute this session</span> button; <span className="mono">/mute all</span> in
             the chat silences everything until <span className="mono">/unmute</span>.
           </p>
-          <Details summary="Telegram bot">
-            <div className="grid gap-3 text-[12px]">{bot}</div>
-          </Details>
         </>
       ) : null}
     </Section>

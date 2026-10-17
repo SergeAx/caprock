@@ -657,7 +657,7 @@ Every output byte has an offset and every input frame a sequence number, so a re
 
 - **Negotiation.** The client offers `caprock.term.v2` (beside `caprock.device.<token>` on a paired device; the gate reads the token from the request, and only `caprock.term.v2` is echoed). Query: `?client=<id>` (`[A-Za-z0-9_-]{1,64}`, one per tab, numbers its input) and `?since=<offset>` (decimal, the offset one past the last byte the client has; omitted on a first connect). A malformed `client` or `since` is **400**.
 - **Offsets.** Byte `n` of everything the session ever printed has offset `n`. The count lives in the pty-host and survives a daemon restart. A session in a pty-host from before v2 is counted from the daemon's clock in microseconds at reattach, so no offset an earlier daemon handed out falls inside the new range; offsets stay below 2^53 (exact in JavaScript).
-- **Hello.** The first frame is text: `{"hello":{"v":2,"offset":N,"reset":bool,"ack":S}}`. `reset:false`: the ring still holds `since`, `offset` equals it, and the bytes after it follow. `reset:true` (a first connect, or a `since` the ring no longer holds or never had): the next binary frame is a **snapshot** — the mode prefix plus the ring — which the client draws on a cleared terminal, after which its position is `offset`. `ack` is the last input sequence applied for this `client` (0 when unknown).
+- **Hello.** The first frame is text: `{"hello":{"v":2,"offset":N,"reset":bool,"ack":S}}`. `reset:false`: the ring still holds `since`, `offset` equals it, and the bytes after it follow. `reset:true` (a first connect, or a `since` the ring no longer holds or never had): the next binary frame is a **snapshot** — the mode prefix (`ESC[?Nh`/`l` for the DEC private modes in force where the ring starts: cursor keys, cursor, mouse tracking and SGR reports, focus, alternate screen, bracketed paste; `internal/termbuf/modes.go`) plus the ring — which the client draws on a cleared terminal, after which its position is `offset`. `ack` is the last input sequence applied for this `client` (0 when unknown).
 - **Output.** Binary frames: an 8-byte big-endian offset of the frame's first byte, then the bytes. The client keeps `offset + length` and drops any byte it already has. The daemon keeps no per-client queue: it reads from the session's ring at the client's position, so the output never waits for a client. A client that falls behind the ring gets `{"reset":{"offset":N}}` and a snapshot; a single write that blocks for 10 s closes the socket, and the client resumes with `since`.
 - **Input.** Binary frames: a 4-byte big-endian sequence number, then the bytes. Without `client` they are typed as they come. With it, a sequence at or below the last applied for that client is dropped; the table lives in the pty-host (frame `J`, below) and survives a daemon restart, and a client unheard from for **120 s** is forgotten. A frame that could not be confirmed as typed closes the socket with **1011**; the client resends it on reconnect.
 - **Acks.** `{"ack":S}`, the last applied sequence, at most 100 ms after it was applied. The client resends everything above the newest ack (or hello `ack`) after every reconnect.
@@ -1164,6 +1164,7 @@ own memory as below). Only reads: nothing is signalled except by the reap below.
              "hosts": {"count": 19, "mem_bytes": 95000000, "cpu_pct": 0, "orphans": 15, "reapable": 15,
                        "list": [{"pid": 2267, "state": "unreachable-idle", "reap": true, "ours": false, "abandoned": true, "child": "zsh"}]}},
  "thresholds": {"cpu_pct": 100, "mem_bytes": 2147483648, "after_s": 60, "interval_s": 5},
+ "machine": {"cpus": 10, "load1": 3.42, "mem_total": 17179869184, "mem_available": 4342251520},
  "error": "…"}
 ```
 
@@ -1205,6 +1206,18 @@ own memory as below). Only reads: nothing is signalled except by the reap below.
   nobody watches reads no process table. Each sample goes out as a
   `{type:"resources", seq, data:<the object above>}` frame on `/v1/live`. A
   `GET` answers the last sample when it is under 5 s old, otherwise takes one.
+- **The machine as a whole** (2026-10-18, ADR-067): `machine` is read on
+  every sample, before the process table, by `procstat.Machine` — `cpus` the
+  logical cores (`runtime.NumCPU`), `load1` the one-minute load average
+  rounded to 0.01 (absent on Windows, which keeps none: gopsutil's emulation
+  would hold a goroutine and a PDH counter for the life of the daemon),
+  `mem_total` the physical memory and `mem_available` what can be taken
+  without swapping as the OS judges it (gopsutil `VirtualMemory`: macOS free
+  plus inactive pages, Linux `MemAvailable`, Windows available physical
+  memory). Absent when the OS gave none of it, and from a daemon before it.
+  Another computer reads it through `/v1/m/{id}/v1/resources`. Nothing acts
+  on it yet: the New-agent line *"This Mac is busy — run it on …?"* waits for
+  thresholds set from OQ-19's measurement ([12-risks.md](12-risks.md)).
 - **A paired device may read it**; it may not reap.
 
 `GET /v1/resources/history[?since=<unix ms>]` (2026-10-15) is the same
@@ -1266,8 +1279,10 @@ abandoned (`orphans`, 2026-10-14, [ADR-059](08-decisions.md)). `caprock
 doctor` prints it (§ below). Code: `internal/daemon/footprint.go`,
 `scan.go`, `orphans.go`, `footprint_io.go`, `actions.go`.
 
-`GET /v1/footprint?orphans=1` takes the orphan list now (the open doctor
-panel and `caprock doctor` ask so); without it `orphans` carries the last
+`GET /v1/footprint?orphans=1` answers with the orphan list (the open doctor
+panel asks so every 10 s): the last scan's while it is younger than 30 s
+(`orphanListTTL`), a new one otherwise. `&fresh=1` takes one now (the
+panel's Check now, `caprock doctor`). Without `orphans` it carries the last
 scan's counts and an empty list.
 
 ```json
@@ -1287,8 +1302,9 @@ scan's counts and an empty list.
  "duplicates": {"daemons": [{"pid": 9, "exe": "/opt/homebrew/bin/caprock", "data_dir": "/tmp/stand", "mem_bytes": 33000000, "started_at": 1791877083828}],
                 "apps": [{"pid": 2, "exe": "/Applications/Caprock.app/Contents/MacOS/caprock-app", "mem_bytes": 45000000, "started_at": 1791877274439}],
                 "other_install_holders": {"count": 11, "orphans": 11, "exes": [{"exe": "/opt/homebrew/bin/caprock", "count": 9}]}},
- "orphans": {"scanned": true, "at": 1791877758573, "count": 2, "by_kind": {"claude": 1, "mcp_server": 1},
+ "orphans": {"scanned": true, "at": 1791877758573, "count": 2, "by_kind": {"claude": 1, "mcp_server": 1}, "mem_bytes": 289406976,
              "list": [{"pid": 48120, "started_at": 1791784158573, "kind": "claude", "label": "claude",
+                       "cmd": "claude --session-id 2f6c --api-key [hidden] -p \"summarise the logs\"",
                        "exe": "/Users/you/.local/share/claude/versions/2.1.296", "cpu_pct": 0.1, "mem_bytes": 222298112,
                        "why": "A claude whose session ended (last heard from 25h ago), still running with no terminal."}],
              "note": "…"},
@@ -1332,19 +1348,34 @@ scan's counts and an empty list.
   `scanned` is true when `list` was taken for this answer; otherwise `count`
   and `by_kind` are the last scan's (the 10-minute sweep after its reap, the
   doctor's last look, or — the first time a footprint is asked — one taken
-  then) and `list` is empty. `at` is when the counted scan ran. Each item:
+  then) and `list` is empty. `at` is when the counted scan ran; `mem_bytes`
+  is every listed process's memory together (2026-10-18; absent before).
+  Each item:
   `pid` and `started_at` (unix ms; together they name the process), `kind`,
-  `label` (the program and, for Caprock, its subcommand — never the rest of
-  argv), `exe`, `data_dir` and `data_dir_gone` (a Caprock daemon's or
+  `label` (the program and, for Caprock, its subcommand), `cmd` (2026-10-18:
+  the command line — the program by its base name, an argument with a space
+  quoted, whitespace folded, the value of any flag or `KEY=VALUE` whose name
+  says token, secret, password, API key, auth, credential, bearer, cookie or
+  private key replaced by `[hidden]`, a URL's `user:password@` hidden, cut to
+  160 characters; absent when argv cannot be read), `exe`, `data_dir` and
+  `data_dir_gone` (a Caprock daemon's or
   holder's data directory, when it can be told), `cpu_pct` (absent until
   two samples; the orphan list has its own sampler, so it never resets the
   session meter's rates), `mem_bytes`, `why` (a sentence) and `auto` (a
   holder the sweep stops on its own). Kinds: `caprock_daemon` (another
   `caprock up --foreground`), `caprock_holder` (a holder whose verdict is an
-  orphan, any install), `caprock_other` (another caprock command whose
-  parent is gone), `claude` (no terminal, and its parent gone, or the
-  latest ended session in `sessions` with its pid started after the process
-  did), `mcp_server` (parent gone, argv or name says MCP), `claude_child`
+  orphan, any install), `caprock_old_holder` (2026-10-18: a holder this
+  daemon still lists — a live session — whose executable is outside its
+  install directories, the same ones as `other_install_holders`; at least
+  two minutes old; never `auto`; only when a daemon answers, since without
+  one there is no install to compare with), `caprock_other` (another caprock
+  command whose parent is gone), `claude` (no terminal, and its parent gone,
+  or the latest ended session in `sessions` with its pid started after the
+  process did), `codex` (2026-10-18: the Codex CLI — named `codex`, argv[0]
+  `codex`, or node/bun running `@openai/codex` — by the same rule as
+  `claude`; `codex app-server` and anything under an `app-server-daemon`
+  directory are the Codex app's service and never listed), `mcp_server`
+  (parent gone, argv or name says MCP), `claude_child`
   (parent gone, `CLAUDECODE` set in its environment). Parent gone: pid 1, a
   `systemd`/`init`/`launchd` parent (a Linux subreaper), or — Windows does
   not reparent — a parent pid not running or naming a younger process. Never
@@ -1357,8 +1388,9 @@ scan's counts and an empty list.
 - **`verdicts`** are `{level: "ok"|"warn", code, text}`, warnings first.
   Warnings: `duplicate_daemon` (another daemon runs), `duplicate_app` (more
   than one app), `orphans` (holders no Caprock will reattach to),
-  `stray_processes` (a `claude`, an MCP server or a Caprock command in
-  `orphans`; only `claude_child` ones are said at level `ok`),
+  `stray_processes` (a `claude`, a `codex`, an MCP server or a Caprock
+  command in `orphans`; only `claude_child` ones are said at level `ok`, and
+  `caprock_old_holder` ones are left to `other_install_holders`),
   `database_large` (over 2 GiB), `wal_large` (over 256 MiB),
   `disk_reads_high` (the daemon read over 500 MiB in the last hour) and,
   only in `caprock doctor`'s own report, `daemon_not_running`.
@@ -1397,20 +1429,23 @@ scan's counts and an empty list.
   object as `caprock doctor`'s text, and `testdata/footprint/doctor.json`
   with `doctor.txt` pin the two renderings to each other.
 
-`POST /v1/footprint/orphans/stop` `{targets: [{pid, started_at}]}` (1 to 256)
-→ `{stopped: [orphan…], failed: [{pid, error}]}`: the doctor's Clean up
-and row Stop ([ADR-059](08-decisions.md)). The daemon takes the orphan
-list again and stops only a target that list holds with the same
+`POST /v1/footprint/orphans/stop` `{targets: [{pid, started_at}], force?}`
+(1 to 256) → `{stopped: [orphan…], running: [orphan…], failed: [{pid,
+error}]}`: the doctor's Clean up, row Stop and Force stop
+([ADR-059](08-decisions.md), amended 2026-10-18). The daemon takes the
+orphan list again and stops only a target that list holds with the same
 `started_at`; anything else fails with *not on the doctor's list now*.
-Each is sent SIGTERM, then SIGKILL after 5 s if it is still there (Windows:
-TerminateProcess), the start time checked again before each signal (a pid
-whose start changed fails with *the process changed*); targets are stopped
-at once, in parallel, and only the named pid is signalled, never its
-children. A pid of 1 or below or a missing `started_at` is a 400. Machine
+Each is sent one signal — SIGTERM, or SIGKILL when `force` is true
+(Windows: TerminateProcess either way) — the start time checked again
+before it (a pid whose start changed fails with *the process changed*), and
+watched for 5 s: gone is `stopped`, still there is `running`, and nothing
+more is sent. SIGKILL is only ever the user's second request, with `force`,
+for one a stop reported `running`. Targets are stopped at once, in
+parallel, and only the named pid is signalled, never its children. A pid of 1 or below or a missing `started_at` is a 400. Machine
 only — on no paired device's list. Every stop is logged. It is never called
 by the daemon itself, the orchestrator or an agent.
 
-`caprock doctor [--json] [--data-dir <dir>] [--stop <pid>… [--yes]]` prints
+`caprock doctor [--json] [--data-dir <dir>] [--stop <pid>… [--yes] [--force]]` prints
 the footprint as text — memory and CPU, disk, the daemon's disk I/O,
 duplicates, orphans, what was done on its own, and the verdicts — or with
 `--json` the object above, and exits
@@ -1426,7 +1461,12 @@ alone; `note` says so). `--stop <pid>` (repeatable) shows each process from
 the list just taken and asks `[y/N]` (`--yes` skips the question), then
 stops it through the endpoint above — or, with no daemon (or one without
 the endpoint), itself, by the same rule against its own scan; a pid not on
-the list is refused, and the exit status is `1` when any was not stopped.
+the list is refused. One still `running` after SIGTERM is printed with the
+command that finishes it, `caprock doctor --stop <pid> --force` (SIGKILL);
+the exit status is `1` when any was not stopped or is still running. The
+Orphans section's heading carries the count and memory, *Orphans: 3 · 410 MB
+(processes that look abandoned)*, and each process its CPU (once there is a
+rate) and a `$ <cmd>` line.
 User docs:
 [docs/doctor.md](../docs/doctor.md).
 
@@ -1524,7 +1564,7 @@ GitHub token is (§ GitHub, "Where the token lives"):
 
 On a paired device's read list (counts only). `501` without the projects service.
 
-`GET /v1/repos/ci[?older=1][&hide=owner/name,…]` (2026-10-14) → `ReposCI` `{github_connected, status?, repos[], quiet[], recent_days, fetched_at, refreshing?}`: the Now screen's CI/CD section ([04-ui.md § CI/CD on Now](04-ui.md#cicd-on-now)), asked only while that section is unfolded and the window visible (every 2 minutes). Nothing is sent and `repos` is empty while GitHub is not connected. The rows are the listed projects of kind `repo` whose remote is on GitHub, one per GitHub repository, with activity in the last `recent_days` (14: a session's last event in the project's root, or the project's `added_at`), those with a session running first, then by `last_active`, at most 6 (`reposCIMax`); with `older=1` the older ones too, marked `older`, at most 12 in all (`reposCIOlderMax`). A repository named in `hide` (this viewer's hidden ones, case-insensitive, at most 200), one without recent activity while `older` is not asked, and one past the bound are listed in `quiet[]` `{project_id, name, repo, last_active?, why: older|hidden|more}` and nothing is sent to GitHub for them. Each row is read through the kept GitHub reads the Pipeline makes — the pull request list (2 min), the runs list (`github.RepoRuns`) and the releases list (`github.RepoReleases`, below) — so a repository costs GitHub at most those three conditional reads per keep. Rows are read at most 3 at once (`reposCIParallel`), each within 12 s (`reposCIRepoTimeout`), the status page beside them, the whole within 30 s; a row GitHub did not answer in time carries `slow: true` beside its `error`. A row also carries `last_active` (Unix ms), `read_at` (Unix ms, when GitHub last answered its pull request list; with `error`, the row draws on that older read) and, in the quick answer, `pending`. The answer carries `refresh_error` and `refresh_failed_at` as the deck's do. The composed answer is kept as the deck's are (`deckcache.go`, key `reposci` with `older` and the sorted `hide`); a key never composed is answered at once with the rows unread (`pending`, `refreshing`) while the composition goes on. Each `top_prs[]` entry adds `shared` (sessions charged only in part) and `tokens_in`, `tokens_out`, `cache_read`, `cache_write` (`store.PRSpend`, below).
+`GET /v1/repos/ci[?older=1][&hide=owner/name,…]` (2026-10-14) → `ReposCI` `{github_connected, status?, repos[], quiet[], recent_days, fetched_at, refreshing?}`: the Now screen's CI/CD section ([04-ui.md § CI/CD on Now](04-ui.md#cicd-on-now)), asked only while that section is unfolded and the window visible (every 2 minutes). Nothing is sent and `repos` is empty while GitHub is not connected. The rows are the listed projects of kind `repo` whose remote is on GitHub, and each member repository of a multi-repo project on GitHub (2026-10-18, ADR-077: `project_id` its project, `name` "project · repository"), one per GitHub repository, with activity in the last `recent_days` (14: a session's last event in the repository, or the project's `added_at`), those with a session running first, then by `last_active`, at most 6 (`reposCIMax`); with `older=1` the older ones too, marked `older`, at most 12 in all (`reposCIOlderMax`). A repository named in `hide` (this viewer's hidden ones, case-insensitive, at most 200), one without recent activity while `older` is not asked, and one past the bound are listed in `quiet[]` `{project_id, name, repo, last_active?, why: older|hidden|more}` and nothing is sent to GitHub for them. Each row is read through the kept GitHub reads the Pipeline makes — the pull request list (2 min), the runs list (`github.RepoRuns`) and the releases list (`github.RepoReleases`, below) — so a repository costs GitHub at most those three conditional reads per keep. Rows are read at most 3 at once (`reposCIParallel`), each within 12 s (`reposCIRepoTimeout`), the status page beside them, the whole within 30 s; a row GitHub did not answer in time carries `slow: true` beside its `error`. A row also carries `last_active` (Unix ms), `read_at` (Unix ms, when GitHub last answered its pull request list; with `error`, the row draws on that older read) and, in the quick answer, `pending`. The answer carries `refresh_error` and `refresh_failed_at` as the deck's do. The composed answer is kept as the deck's are (`deckcache.go`, key `reposci` with `older` and the sorted `hide`); a key never composed is answered at once with the rows unread (`pending`, `refreshing`) while the composition goes on. Each `top_prs[]` entry adds `shared` (sessions charged only in part) and `tokens_in`, `tokens_out`, `cache_read`, `cache_write` (`store.PRSpend`, below).
 
 - **Row** — `RepoCIRow` `{project_id, name, repo, live, ci?, days?, stuck[], open, merged_7d, top_prs[], authors[], release?, error?}`. `live` counts the sessions not ended under the project's root; `ci` is `github.RunStats` over the runs, 14 days (the `CIStats` of `…/ci/stats`), `days` its local calendar days; `open` and `merged_7d` count the listed pull requests; `release` is the newest published release (`RepoRelease`); a failed list is `error` with the rest absent.
 - **Stuck** — `github.StuckRuns`: `{id, name, branch?, status, url?, since, median_ms?}` for a run `in_progress` longer than twice its workflow's median successful run over the 14 days and at least 10 minutes over it (no median, never), or waiting for a runner (`queued`, `waiting`, `pending`, `requested`) longer than 15 minutes; `since` is `run_started_at`, else `created_at`. The runs list is kept 2 minutes instead of 30 while any run in it is unfinished (`repoRunsActiveKept`), so a stuck run is seen within minutes; a conditional read costs a 304 when nothing changed.
@@ -1838,7 +1878,7 @@ POST   /v1/brain/backfill            {days?, dry_run?} → BrainEstimate; 409 wh
 GET    /v1/terminals                 → {terminals: [{id, name}], preferred}; terminal apps installed here, most preferred first
 GET    /v1/editors                   → {editors: [{id, name}], preferred}; editors installed here (F18), this machine only
 POST   /v1/editors/open              {path, line?, editor?} → {editor: {id, name}}; this machine only
-GET    /v1/browsers                  → {browsers: [{id, name, default}]}; web browsers installed here, the default first; this machine only
+GET    /v1/browsers                  → {browsers: [{id, name, default}]}; known web browsers installed here and the default, the default first; this machine only
 POST   /v1/browsers/open             {browser, url} → {browser: {id, name, default}}; an http(s) url in that browser; this machine only
 POST   /v1/sessions/{id}/open-terminal {terminal?, mode?: resume|move|fork} → {terminal: {id, name}, mode, command}
 PUT    /v1/sessions/{id}/name        {name} → {session_id, name}; "" clears it; 400 without name, 404 for an unknown session (§ Session name DDL)
@@ -2148,7 +2188,7 @@ over the 14 local calendar days ending today:
   workflow with the most such time first.
 
 - **Board** (2026-10-14) — `board` `{cards[], releases[], flow,
-  default_branch?}`, the tab's Board view (`internal/api/prboard.go`). Each
+  default_branch?, ships_by?}`, the tab's Board view (`internal/api/prboard.go`). Each
   `BoardCard` `{number, stage, stage_at?, ci?, why?, failed[]?, os[]?, ci_ms?, review?, release?,
   spend, stale?}` is a pull request of `prs` (its title, `author`, `author_avatar`
   and link are that entry's); closed unmerged ones and merges before the 14
@@ -2197,6 +2237,16 @@ over the 14 local calendar days ending today:
   builds count), drafts and unpublished ones left out, kept 2 minutes (10 before
   2026-10-14: a new release missed the board that long); a failed list
   keeps the last one, and with none is no releases, not an error.
+  `ships_by` (2026-10-18; owner, translated: "why isn't merged the final
+  state — there's one more step after it") is how merged work ships in
+  the repository: `release` when one of those releases was published, or
+  one of the checkout's newest tags (`relplan.Tags`, local, as of the
+  last fetch) naming a version (`v0.132.0`, `1.4`, `app-v2.0.1`) was made,
+  within the last 180 days (`shipsRecentDays`); `merge` when neither was
+  and both the release list and the tags were read — a site deployed on
+  every merge, where merged is the last step; absent when either read
+  failed (or an older daemon), and the dashboard then draws the released
+  step as not known.
 - **The figures day by day** (2026-10-15) — `flow.series` is
   `{flight?, throughput?, ci?, ttm?, lag?, cost?}`, each `[{day, value?, n,
   by_now?}]`: one point per local calendar day of the window (the daemon's
@@ -2340,8 +2390,8 @@ view is shown.
   local one); `current` the checkout's branch. A folder that is no
   repository is `reason` `no_repo` with no rows.
 - **Each branch** — `{name, current?, default?, local, remote, ahead?,
-  behind?, committed_ms, author?, sha?, pr?, live?, cost_usd, sessions,
-  agents[], session_at?, activity_at, stale?}`. A local branch and origin's
+  behind?, committed_ms, author?, sha?, subject?, pr?, live?, cost_usd, sessions,
+  agents[], session_at?, activity_at, stale?, landed?}`. A local branch and origin's
   copy are one row (the local one's commit); other remotes and origin's
   `HEAD` are left out. `ahead` and `behind` are absent when not counted.
 - **Its PR** — `pr` `{number, url, title?, state, draft?, base?,
@@ -2361,6 +2411,16 @@ view is shown.
 - **Order and stale** — the current branch first, then `activity_at` (the
   later of the last commit and the newest session event), newest first.
   `stale`: no commit in 30 days and no open PR; never the default branch.
+- **Subject and landed** (2026-10-18, the release plan's pushed branches) —
+  `subject` is the last commit's subject line (`%(contents:subject)`, read
+  after a NUL so a tab in it is kept). `landed` is true when the branch's
+  changes are already on `base` by content: `git merge-tree --write-tree
+  <base> <sha>` (git 2.38+) gives `base`'s own tree, so a branch shipped by
+  a squash merge or inside another branch's batch — which `git cherry`
+  cannot see, the patch ids differing — is found. Checked only for a branch
+  ahead of `base`, committed in the last 14 days, with no open PR, the
+  newest 40, each pair of commits once (kept in memory); a failed check
+  (an older git, a conflict) leaves it absent, never true.
 
 **`GET /v1/github/actions-usage`** (`?owner=` optional) → `ActionsUsage`
 `{account, org, year, month, available, reason?, needs?, minutes, gross_usd,
@@ -2489,8 +2549,9 @@ field's name predates Make default and means "own"), and recorded on a
 session as `""`. Its name is *Own sign-in* until renamed (`own_labels:
 {agent: label}` in `config.json`). A `Subscription` in the API is `{id,
 agent, label, default, preferred, plan?, dir, env_var?, signed_in, account?,
-login_command, windows: [{window, used_percentage, resets_at, observed_at}],
-sessions_7d, cost_7d_usd, running, created_at?, provider?}`.
+login_command, logout_command?, keychain_item?, windows: [{window,
+used_percentage, resets_at, observed_at}], sessions_7d, cost_7d_usd, running,
+created_at?, provider?}`. Each agent group may carry `ignored_env: [name]`.
 
 - **`provider: "deepseek"`** marks the one entry that is not a sign-in:
   Claude Code on DeepSeek, `id: "deepseek"`, listed last under `claude`
@@ -2528,6 +2589,19 @@ sessions_7d, cost_7d_usd, running, created_at?, provider?}`.
   `CLAUDE_CONFIG_DIR='<dir>' claude auth login` or `CODEX_HOME='<dir>' codex
   login`, `$env:…='<dir>'; …` on Windows — which the page types into a shell
   tab and the user runs. Caprock never runs it.
+- **`logout_command`** is the agent's own sign-out pointed the same way
+  (`claude auth logout`, `codex logout`), on added subscriptions only: Remove
+  offers it first, because a credential in the macOS Keychain or the OS
+  keyring is outside the folder `DELETE` removes. Caprock never runs it.
+- **`keychain_item`** names, on macOS and for an added Claude Code
+  subscription only, the Keychain item its sign-in is kept in: `Claude
+  Code-credentials-` and the first eight hex digits of SHA-256 of the
+  directory (NFC) — how Claude Code 2.1.302 names it, read from its bundle
+  on 2026-10-18. A label for the user to find it by; Caprock never reads,
+  writes or deletes it.
+- **`ignored_env`** names the credential variables the login shell sets
+  (non-blank) that a session on an added subscription runs without — see
+  `POST /v1/agents` below. Names only, never values; absent when none is set.
 - **`POST`** makes the directory and, for Claude Code, writes Caprock's hooks
   and status line into its `settings.json` (the same entries `caprock hooks
   install` writes into `~/.claude/settings.json`) and, when the user's own
@@ -2560,7 +2634,18 @@ one comes from a caller with no picker (an orchestrator task, a Telegram
 request never names one — and the child gets `CLAUDE_CONFIG_DIR` or
 `CODEX_HOME` set to it, replacing any value the login shell exports; Claude
 Code's folder trust is written to that directory's `.claude.json`, not
-`~/.claude.json`. A `resume` runs on the subscription the session ran on,
+`~/.claude.json`. The variables that would make the agent use another
+credential than the directory's are removed from that child's environment:
+for Claude Code `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`,
+`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_PROFILE`,
+`ANTHROPIC_FEDERATION_RULE_ID`, the
+`CLAUDE_CODE_USE_{BEDROCK,VERTEX,FOUNDRY,ANTHROPIC_AWS}` switches and
+`CLAUDE_SECURESTORAGE_CONFIG_DIR`; for Codex `CODEX_API_KEY` and
+`CODEX_ACCESS_TOKEN` (`OPENAI_API_KEY` stays: Codex does not sign in with
+it). A session on the own sign-in keeps them, except
+`CLAUDE_SECURESTORAGE_CONFIG_DIR`, which no session or shell tab Caprock
+starts inherits (Claude Code sets it for its teammates; it moves the
+Keychain entry off the configuration directory's). A `resume` runs on the subscription the session ran on,
 whatever the request says, and is refused when that subscription has been
 removed. An unknown id, or a subscription of the other agent, is `400`.
 
@@ -2846,8 +2931,13 @@ Linux the desktop entries in the XDG data dirs (plus Flatpak's and Snap's
 exports) whose `MimeType` names `x-scheme-handler/http` or `https`, shown and
 with their `TryExec` installed, `id` the desktop file id, the default from
 `mimeapps.list` (the desktop-specific one first, then the config and data
-dirs, then `defaults.list`). Every app registered for https is listed, as
-the OS's own default-browser setting lists it. `POST /v1/browsers/open`
+dirs, then `defaults.list`). Of what the OS names, only the web browsers
+`internal/browser/known.go` knows are listed — by bundle id or app name on
+macOS, executable, StartMenuInternet key or display name on Windows,
+desktop file id or `Name` on Linux — and the default always, known or not:
+an app that merely registers for https (a chat app, a terminal, an editor,
+a bank's "secure browser" wrapper) is left out, and `POST /v1/browsers/open`
+refuses its id as unknown. `POST /v1/browsers/open`
 `{browser, url}` opens an `http` or `https` `url` (a host, no spaces or
 control characters, at most 8 KiB) in that browser and answers `{browser}`;
 a bad URL or an unknown browser is `400`, a launch that fails `502`. Each
@@ -2885,7 +2975,7 @@ protection).
 
 ```
 GET    /v1/projects                        → {projects: [Project]}; pinned first, then sort, then name
-POST   /v1/projects                        {path, repos?} | {create: {parent, name, git_init?}} | {clone: {url, parent, name?}, op_id?}
+POST   /v1/projects                        {path, repos?, name?} | {repos, name?} | {create: {parent, name, git_init?}} | {clone: {url, parent, name?}, op_id?}
                                            path, create → 200 {project, created}; clone → 202 {op, existing}
 GET    /v1/projects/ops                    → {ops: [Op]}; clones and template ops running or ended in the last hour, newest first
 GET    /v1/projects/scan?path=             → ScanResult; what adding a folder would add (machine only)
@@ -2928,9 +3018,13 @@ GET    /v1/shells?project=<id>             → {shells: [Shell]}; every running 
   event, and `cost_today` is the non-internal events since local midnight. A
   `project` frame with `removed: true` and only `id` is sent on unlisting.
 - **Multi-repo projects** (2026-10-12, [ADR-055](08-decisions.md);
-  `internal/projects/multirepo.go`, `internal/api/multirepo.go`). A folder
-  project with member repositories (`project_repos`, migration 0050); `repos`
-  is absent for an ordinary project.
+  2026-10-18, [ADR-077](08-decisions.md); `internal/projects/multirepo.go`,
+  `internal/api/multirepo.go`). A project with member repositories
+  (`project_repos`, migration 0050); `repos` is absent for an ordinary
+  project. Its `root` is either a folder holding them (`kind: "folder"`,
+  ADR-055) or one of them, its **home repository** (`kind: "repo"`,
+  ADR-077), which is then a member too: `repos` lists it beside the others.
+  No new column or kind: the home form is a repository project with members.
   - **`ScanResult`** — `{root, repo_root?, repos: [{path, name, project_id?,
     project_name?, member_of?, instruction_files?}], capped?,
     instruction_files?: [{name, text, truncated?}]}`. The top-level
@@ -2950,11 +3044,32 @@ GET    /v1/shells?project=<id>             → {shells: [Shell]}; every running 
     repository) as one project of `repos` — two or more, each a folder inside
     a repository, which names that repository's root; at most 100. A
     repository listed as a project of its own is unlisted (folded in); one
-    that was another project's member moves. `repos` without `path` is `400`.
+    that was another project's member moves. `name`, when set, names it.
+  - **Adding** `{repos, name?}` (no `path`; 2026-10-18, ADR-077) lists one
+    project of `repos` — two or more, at most 100, each a folder inside a
+    repository, anywhere — with no folder of its own: the first is its home
+    repository, the project's `root`, and every one is a member. The home
+    repository's own project, when listed (or unlisted before), is the row
+    used: `created: false`, its settings, history and id kept, renamed to
+    `name` when set. Others listed on their own are folded in as above. One
+    repository is `400`; from a paired controller every path must be
+    absolute and under home (`403`). Nothing on disk is made or moved.
   - **`PATCH` `repos`** replaces the members whole (`[]` makes the project
-    an ordinary folder again); the project's own folder cannot be one. A
-    removed member is neither deleted nor listed. From a paired controller
-    every path must be absolute and under home (`403`).
+    an ordinary one again); a folder project's own folder cannot be one. On a
+    repository project (*Add a repository…*, ADR-077) its own root is kept
+    among the members whenever another is named, and a list naming no other
+    makes it ordinary; a repository project left holding only its own root
+    after a member moved to another project becomes ordinary too. A removed
+    member is neither deleted nor listed. From a paired controller every path
+    must be absolute and under home (`403`).
+  - **Split** (`POST /v1/projects/{id}/split`) lists each member as a project
+    of its own and unlists the project — except a home repository's: that
+    project stays, as the repository alone, under its name. **Merge**
+    (`POST /v1/projects/merge {ids}`) of repository projects only keeps the
+    first, its repository the home one, the others members (until
+    2026-10-18 it listed the folder holding them all, which for two
+    repositories in `~/dev` was `~/dev`); with a multi-repo project among
+    them, that project takes the others' repositories, as before.
   - **`RepoView`** — `{path, name, exists, git: GitStatus | null, sessions:
     {live, waiting, total}, cost_today, last_activity, open_prs?,
     prs_error?}`. `git` is null until git first answers.
@@ -4209,7 +4324,7 @@ JSON, as the CSRF guard requires. Before the first account exists only `GET
 - `GET /v1/mail/state` — `{accounts, folders, counts: {inbox, unread, flagged, junk}, version, sample, triage}`; `version` moves on every local change and is what the screen polls; `sample` is true while sample mode is on. **Spam in the inbox** is one notion everywhere (`mailstore.SpamSQL`): a message the junk filter flagged (`junk`) or whose conversation the AI triage labelled `spam`. `inbox` and `unread` (and each inbox folder's `unread`) leave spam out; `junk` counts the inbox conversations that are spam (not the Junk folder). `triage` is `{running, pending, by, counts: [{account_id, category, n}]}`: whether a sorting run is on and how many conversations it has left, who sorts (`"Claude Code · haiku"`, `"Sample labels"`), and per account and category the inbox conversations with that label — where `spam` is the same union (a conversation the filter caught counts as `spam` whatever the AI said), so the inbox's Spam filter, its count and `junk` agree.
 - `POST /v1/mail/sample` — `{on}` → `{sample}`. On: two sample accounts on in-process fake servers, a database in a temporary directory and passwords in memory; while it is on every `/v1/mail` route serves the sample, and the real `mail.db` and keychain are not touched (an unused Mail stays unopened). Off: the sample is dropped and the routes serve the real data again. Adding a real account — `POST /v1/mail/accounts`, `POST /v1/mail/import`, a finished OAuth sign-in — turns it off before anything is stored (an added or signed-in account once it has passed its check), so the account lands in the real `mail.db` and the user's mail replaces the sample. `CAPROCK_MAIL_DEMO=1` turns it on for the whole run and `{on: false}` is then `409` (an account added in that run goes to the sample). A mutating route, behind the CSRF guard and pairing like the rest.
 - `GET /v1/mail/providers?email=` — server settings for an address: `{provider, imap_host, imap_port, imap_tls, smtp_host, smtp_port, smtp_tls, note, help_url, known, needs_username, username, source}`. Lookup order, first answer wins, `source` says which: `preset` — the domain is in the table in `internal/mail/providers/providers.go` (about 40 consumer services, each entry citing the provider's own settings page); `mx` — the domain's MX points at a host in that table (Google Workspace, Microsoft 365, iCloud+, Zoho, Fastmail, Yandex 360 and the hosts people put their own domain on: Rackspace, GoDaddy, Namecheap Private Email, Spacemail, IONOS, OVHcloud, Hostinger, Titan, Infomaniak, STRATO, Migadu and others; the longest matching hint wins); `srv` — RFC 6186 records `_imaps._tcp` / `_imap._tcp` and `_submissions._tcp` / `_submission._tcp` (implicit TLS preferred; an IMAP record is required); `autoconfig` — the domain's own Thunderbird-format file, `https://autoconfig.<domain>/mail/config-v1.1.xml?emailaddress=<addr>` then `https://<domain>/.well-known/autoconfig/mail/config-v1.1.xml`, SSL or STARTTLS servers only, `%EMAILADDRESS%` / `%EMAILLOCALPART%` / `%EMAILDOMAIN%` substituted, a redirect followed only within the domain; `guess` — `imap.<domain>` / `smtp.<domain>`, `known: false`. `needs_username` is set for an iCloud+ custom domain (sign-in is the @icloud.com address) and when autoconfig names a sign-in other than the address, given in `username`. Every network call goes to the user's own domain — its DNS and its web server, 3 s each; no third-party directory (Mozilla's ISPDB included) is asked. A preset domain makes no network call at all.
-- `POST /v1/mail/accounts` — `{name, email, username, imap_*, smtp_*, password}`; IMAP and SMTP are tried first and a refusal is `422` with nothing stored. A sign-in name the server refuses is retried with the address and, on iCloud, the part before the @ (SMTP: the @icloud.com form) — at most three names, only on a credentials refusal, never on `NO [UNAVAILABLE]`, which Dovecot (Spacemail and many hosts) sends for a wrong password on a real mailbox and while it locks sign-in after failures; the name that worked is stored. iCloud and Gmail refusals carry what to do (an app-specific password); an `UNAVAILABLE` refusal says the password was not accepted. `PUT /v1/mail/accounts/{id}` edits (a new password is optional; refused with `400` on an OAuth account, whose `auth` only a new sign-in changes), `DELETE` removes the account, its mail and its password or refresh token. Every account carries `auth`: `password` (the default), `oauth2:google` or `oauth2:microsoft`. An OAuth account signs in with SASL XOAUTH2 using an access token refreshed from the stored refresh token and cached in memory until a minute before it expires (a rotated refresh token is saved back); a refresh token the provider refuses (`invalid_grant`), or a token the server refuses, is a sync error that says to sign in again.
+- `POST /v1/mail/accounts` — `{name, email, username, imap_*, smtp_*, password}`; IMAP and SMTP are tried first and a refusal is `422` with nothing stored. A sign-in name the server refuses is retried with the address and, on iCloud, the part before the @ (SMTP: the @icloud.com form) — at most three names, only on a credentials refusal, never on `NO [UNAVAILABLE]`, which Dovecot (Spacemail and many hosts) sends for a wrong password on a real mailbox and while it locks sign-in after failures; the name that worked is stored. iCloud and Gmail refusals carry what to do (an app-specific password); an `UNAVAILABLE` refusal says the password was not accepted. `PUT /v1/mail/accounts/{id}` edits (a new password is optional; refused with `400` on an OAuth account, whose `auth` only a new sign-in changes), `DELETE` removes the account, its mail and its password or refresh token, and answers `{ok: true}`; for an OAuth account it then revokes the refresh token at the provider (Google: `POST https://oauth2.googleapis.com/revoke`, RFC 7009, at most 5 s, best effort; Microsoft has no such endpoint for apps, so nothing is sent) and adds `revoked: bool` — whether the provider confirmed it. The account is gone either way. Every account carries `auth`: `password` (the default), `oauth2:google` or `oauth2:microsoft`. An OAuth account signs in with SASL XOAUTH2 using an access token refreshed from the stored refresh token and cached in memory until a minute before it expires (a rotated refresh token is saved back); a refresh token the provider refuses (`invalid_grant`), or a token the server refuses, is a sync error that says to sign in again.
 - `GET /v1/mail/oauth/providers` — `{google: bool, microsoft: bool}`: which *Sign in with …* buttons work in this build (a provider without a client ID is `false`; see [docs/mail-oauth.md](../docs/mail-oauth.md)). Answers without opening Mail.
 - `POST /v1/mail/oauth/start` — `{provider: "google" | "microsoft", login_hint?}` → `{auth_url, flow}`, the provider's page for the screen to open in the browser; `login_hint` (an address) is passed on so the provider's page starts on that account, and `flow` is an opaque id, not the state, for `GET /v1/mail/oauth/flow`. The authorization code flow with PKCE (S256); `state` and the verifier stay in memory, single use, for 10 minutes. The redirect is this daemon's own port on loopback: `http://127.0.0.1:<port>/v1/mail/oauth/callback` for Google, `http://localhost:<port>/…` for Microsoft (which ignores the port only for `localhost`). `409` when the provider has no client ID, `403` when the request did not reach the daemon by a loopback name (a paired phone: the browser could not come back).
 - `GET /v1/mail/oauth/callback?code=&state=` — where the provider sends the browser. Exchanges the code (with the verifier), reads the address from the ID token, checks IMAP and SMTP with XOAUTH2, stores the refresh token in the secret store under the account's item, and creates the account — or switches an existing account with the same address to the sign-in, keeping its mail. Answers a small self-contained HTML page (*Connected — you can close this tab*, or the error); the screen sees the account through `GET /v1/mail/state`. It is the one `/v1` route admitted as a cross-site top-level GET (the browser arrives from the provider's page): only as `GET`, only on a loopback `Host`; the single-use `state` is its CSRF protection. Unknown, used or expired state is `400`. How the sign-in ended is recorded under its flow id.
@@ -4511,7 +4626,10 @@ CREATE INDEX IF NOT EXISTS idx_project_repos_path ON project_repos(path);
 ```
 
 A multi-repo project's members ([ADR-055](08-decisions.md)). The daemon keeps
-a path in one project's rows at a time. Unlisting the project keeps its rows,
+a path in one project's rows at a time. A project of repositories picked one
+by one ([ADR-077](08-decisions.md)) has its own root among its rows: it is a
+repository project (`kind = 'repo'`) whose root is one of its members, so no
+column, kind or migration was added for it. Unlisting the project keeps its rows,
 so adding its folder again brings it back as it was; a split deletes them.
 
 ### Reclassifying the /clear events already recorded (migration 0021)

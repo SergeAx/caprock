@@ -10,6 +10,7 @@ import type { SessionSummary } from '@/lib/api'
 import { WORKSPACE_KEY } from '@/lib/tabs'
 import { saveSidebarMode } from '@/lib/sidebarMode'
 import { FIND_EVENT } from '@/lib/appkeys'
+import { SETTINGS_FIND_EVENT } from '@/lib/settingsSearch'
 import { CLOSE_TAB_EVENT } from '@/lib/shell'
 // Imported here rather than inside each test: the first dynamic import
 // transformed the whole app inside the first test's 5 s budget, and on a busy
@@ -181,18 +182,19 @@ describe('the app workspace', () => {
     expect(tab).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByTestId('pane-agent-1')).toHaveAttribute('data-active', 'true')
     await cmd('w')
-    // An agent Caprock started, still working: one sentence and two equal
-    // buttons, each with a line saying what it does, Keep in focus, and no
-    // checkbox (owner, 2026-10-17: one button may be the wrong choice).
+    // An agent Caprock started, still working: one short line and two
+    // buttons with a few words each, Keep recommended (filled) and in focus,
+    // no checkbox (owner, 2026-10-17).
     const sheet = await screen.findByRole('dialog', { name: "Close an agent's tab" })
-    expect(within(sheet).getByText(/^“Fix the login bug” is still working\. The conversation is saved either way\.$/)).toBeInTheDocument()
+    expect(within(sheet).getByText(/^“Fix the login bug” is still working\.$/)).toBeInTheDocument()
     const keep = within(sheet).getByRole('button', { name: 'Keep it running' })
     expect(keep).toHaveFocus()
-    expect(keep).toHaveAccessibleDescription(/^Only the tab closes\. It works on in the background/)
+    expect(keep).toHaveAccessibleDescription(/^It works on in the background\.$/)
     const stop = within(sheet).getByRole('button', { name: 'Stop it' })
-    expect(stop).toHaveAccessibleDescription(/^It stops now and the tab closes\./)
-    // Equal weight: the two are drawn alike.
-    expect(stop.className).toBe(keep.className)
+    expect(stop).toHaveAccessibleDescription(/^Continue later from History\.$/)
+    // Keep is the recommended one: drawn filled, Stop outlined.
+    expect(keep.className).toMatch(/bg-accent/)
+    expect(stop.className).not.toMatch(/bg-accent/)
     expect(within(sheet).queryByRole('checkbox')).toBeNull()
     expect(within(sheet).queryAllByRole('button').map((b) => b.textContent).filter((t) => t !== '')).toEqual(['Keep it running', 'Stop it'])
     fireEvent.click(keep)
@@ -1009,6 +1011,23 @@ describe('workspace helpers', () => {
     fireEvent.click(await screen.findByText('Find in the terminal'))
     await waitFor(() => expect(heard).toBe(2))
     window.removeEventListener(FIND_EVENT, on)
+  })
+
+  it('⌘F with Settings in front goes to its search, not to a terminal', async () => {
+    let term = 0
+    let settings = 0
+    const onTerm = () => { term++ }
+    const onSettings = () => { settings++ }
+    window.addEventListener(FIND_EVENT, onTerm)
+    window.addEventListener(SETTINGS_FIND_EVENT, onSettings)
+    await renderApp()
+    await cmd(',')
+    await waitFor(() => expect(location.hash).toMatch(/^#\/settings/))
+    await cmd('f')
+    expect(settings).toBe(1)
+    expect(term).toBe(0)
+    window.removeEventListener(FIND_EVENT, onTerm)
+    window.removeEventListener(SETTINGS_FIND_EVENT, onSettings)
   })
 
   it('opens a project in the default editor from its right-click menu and the palette', async () => {

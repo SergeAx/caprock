@@ -16,6 +16,7 @@ import { stepUiScale } from '@/lib/uiscale'
 import { installExternalLinks } from '@/lib/externalLinks'
 import { pageTitle } from '@/lib/pagetitle'
 import { TabPageBar } from '@/components/WhereAmI'
+import { SETTINGS_FIND_EVENT } from '@/lib/settingsSearch'
 import { DASHBOARD_KEY, FIND_EVENT, INPUT_HIGHLIGHT_KEY, PIPELINE_KEY, THEME_KEY, THEME_MENU_EVENT, WORK_KEY, isArrowCommand, keys, matchAppShortcut, tabDigit, type AppCommand } from '@/lib/appkeys'
 import { loadRowOrders, ROW_ORDER_EVENT, tabRowKey } from '@/lib/rowOrder'
 import { href, parseHash, type SettingsSection } from '@/lib/router'
@@ -85,7 +86,7 @@ import { ChangesView } from '@/components/ChangesView'
 import { AttemptsCompare } from '@/components/AttemptsCompare'
 import { FileView } from '@/components/FileView'
 import { BrowserView } from '@/components/BrowserView'
-import { browserAct, looksLikeAddress, newPageKey, OPEN_BROWSER_EVENT, pageId, pageTitle as browserTitle, pageUrl, useBrowserPrefs, type OpenBrowserDetail } from '@/lib/browsertab'
+import { browserAct, browserOn, looksLikeAddress, newPageKey, OPEN_BROWSER_EVENT, pageId, pageTitle as browserTitle, pageUrl, useBrowserPrefs, type OpenBrowserDetail } from '@/lib/browsertab'
 import { openLink } from '@/lib/termlinks'
 import { attachable, ObservePane } from '@/components/ObservePane'
 import { PipelineHostContext, type PipelineHost } from '@/lib/pipelineHost'
@@ -125,6 +126,7 @@ import { KeysHint } from '@/components/KeysHint'
 import { loadAgentClose } from '@/lib/agentClose'
 import { useSidebarMode } from '@/lib/sidebarMode'
 import { CopiesSheet } from '@/components/CopiesSheet'
+import { AddRepoSheet } from '@/components/AddRepoSheet'
 import { CleanupLine } from '@/components/CleanupLine'
 import { worktreeSlug } from '@/lib/slug'
 import { openPhoneSettings, openSettingsAt, openSettingsSection } from '@/components/Pairing'
@@ -217,6 +219,8 @@ type SheetState =
   | { kind: 'files'; projectId: string; worktree: string; title: string }
   /** *Clean up copies…*: a project's worktrees, their state and size (components/CopiesSheet). */
   | { kind: 'copies'; projectId: string; name: string; preselect?: string[] }
+  /** *Add a repository…*: more repositories in one project (components/AddRepoSheet, ADR-077). */
+  | { kind: 'add-repo'; projectId: string }
   | null
 
 
@@ -508,8 +512,8 @@ export function AppShell() {
    */
   const [browserPrefs] = useBrowserPrefs()
   const browserEnabled = isTauri() && browserPrefs.on
-  const pageCtx = useRef({ tabs: ws.tabs, activeProjectId, projects: model.projects, enabled: browserEnabled })
-  pageCtx.current = { tabs: ws.tabs, activeProjectId, projects: model.projects, enabled: browserEnabled }
+  const pageCtx = useRef({ tabs: ws.tabs, activeProjectId, projects: model.projects })
+  pageCtx.current = { tabs: ws.tabs, activeProjectId, projects: model.projects }
   const [armedPages, setArmedPages] = useState<ReadonlySet<string>>(() => new Set())
   const armPage = useCallback((key: string) => {
     setArmedPages((cur) => (cur.has(key) ? cur : new Set(cur).add(key)))
@@ -521,7 +525,10 @@ export function AppShell() {
    * With the in-app browser off, an address goes to your browser instead.
    */
   const openPage = useCallback((raw?: string, sessionId?: string) => {
-    const { tabs, activeProjectId: pid, projects, enabled } = pageCtx.current
+    const { tabs, activeProjectId: pid, projects } = pageCtx.current
+    // Read now, not from the last render: the link chooser turns the setting
+    // on and asks for the tab in the same breath.
+    const enabled = browserOn()
     const url = raw === undefined ? '' : pageUrl(raw)
     if (url === null) { setToast(`“${raw}” is not a web address.`); return }
     if (!enabled) {
@@ -547,6 +554,7 @@ export function AppShell() {
     const on = (e: Event) => {
       const d = (e as CustomEvent<OpenBrowserDetail>).detail
       openPage(d?.url, d?.sessionId)
+      if (d?.notice) setToast(d.notice)
     }
     window.addEventListener(OPEN_BROWSER_EVENT, on)
     return () => window.removeEventListener(OPEN_BROWSER_EVENT, on)
@@ -1206,7 +1214,12 @@ export function AppShell() {
       case 'next-pane': dispatch({ type: 'cycle-pane', delta: 1 }); break
       case 'prev-pane': dispatch({ type: 'cycle-pane', delta: -1 }); break
       case 'next-waiting': jumpToWaiting(); break
-      case 'find': if (workspaceShown) window.dispatchEvent(new Event(FIND_EVENT)); break
+      // ⌘F finds in the terminal in front; with Settings in front, in its
+      // search field (SettingsSearch). Other dashboard pages have no find.
+      case 'find':
+        if (workspaceShown) window.dispatchEvent(new Event(FIND_EVENT))
+        else if (parseHash(location.hash).name === 'settings') window.dispatchEvent(new Event(SETTINGS_FIND_EVENT))
+        break
       case 'settings': onSettings(); break
       case 'feedback': setFeedbackAt(currentScreen(location.hash, true)); break
       case 'mail': onMail(); break
@@ -1310,6 +1323,10 @@ export function AppShell() {
   const onCleanCopies = useCallback((projectId: string) => {
     const p = projectsById.get(projectId)
     if (p?.kind === 'repo') setSheet({ kind: 'copies', projectId, name: p.name })
+  }, [projectsById])
+  /** *Add a repository…* from a project's menu (ADR-077). */
+  const onAddRepo = useCallback((projectId: string) => {
+    if (projectsById.get(projectId)?.root) setSheet({ kind: 'add-repo', projectId })
   }, [projectsById])
   /** *Review* on the cleanup line: the copies sheet with the finished ones ticked. */
   const onReviewCopies = useCallback((projectId: string, preselect: string[]) => {
@@ -1874,6 +1891,7 @@ export function AppShell() {
               onOpenInEditor={editors ? onOpenProjectInEditor : undefined}
               onRemoveProject={onRemoveProject}
               onCleanCopies={source === 'api' ? onCleanCopies : undefined}
+              onAddRepo={source === 'api' ? onAddRepo : undefined}
               grouped={grouped}
               onGroupedChange={onGroupedChange}
               tabDigits={stripDigits}
@@ -2028,6 +2046,7 @@ export function AppShell() {
                         <RecentInProject
                           key={`${activeProject.root}:${data.sessions.length}`}
                           root={activeProject.root}
+                          repos={activeProject.repos?.map((r) => r.path)}
                           permissions={data.permissions}
                           onOpen={(s) => openSession(s, activeProject.id)}
                           onContinued={(id, title) => { openTab({ kind: 'session', sessionId: id }, activeProject.id, title); data.refresh() }}
@@ -2248,6 +2267,9 @@ export function AppShell() {
       )}
       {folderMenu && <EditorMenu at={folderMenu} editors={editors} onClose={closeFolderMenu} onError={setToast} />}
       {sheet?.kind === 'copies' && <CopiesSheet key={sheet.projectId} projectId={sheet.projectId} name={sheet.name} preselect={sheet.preselect} onClose={closeSheet} onChanged={refresh} />}
+      {sheet?.kind === 'add-repo' && projectsById.get(sheet.projectId) && (
+        <AddRepoSheet key={sheet.projectId} project={projectsById.get(sheet.projectId)!} onClose={closeSheet} onChanged={refresh} />
+      )}
       {sheet?.kind === 'keys' && <ShortcutsSheet isMac={isMac} onClose={closeSheet} />}
       {sheet?.kind === 'share' && <ShareDialog onClose={closeSheet} />}
       {sheet?.kind === 'files' && (

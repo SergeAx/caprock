@@ -1705,6 +1705,12 @@ export interface Subscription {
   account?: string
   /** The agent's own sign-in for this directory, typed into a shell tab, never run by Caprock. */
   login_command: string
+  /** The agent's own sign-out for an added one's directory, typed the same
+   *  way: how its credential leaves the Keychain or keyring before removal. */
+  logout_command?: string
+  /** macOS: the Keychain item an added Claude Code one's sign-in is kept in.
+   *  Named so the user can find it; Caprock never opens it. */
+  keychain_item?: string
   windows: SubscriptionWindow[]
   sessions_7d: number
   cost_7d_usd: number
@@ -1718,7 +1724,12 @@ export interface Subscription {
 }
 
 export interface SubscriptionsResponse {
-  agents: { agent: SubscriptionAgentId; label: string; installed: boolean; subscriptions: Subscription[] }[]
+  agents: {
+    agent: SubscriptionAgentId; label: string; installed: boolean; subscriptions: Subscription[]
+    /** Credential variables the login shell sets that a session on an added
+     *  subscription runs without, so it runs on its own sign-in. Names only. */
+    ignored_env?: string[]
+  }[]
   licensed: boolean
   free_per_agent: number
   home?: string
@@ -1957,7 +1968,7 @@ export interface PairedDevice {
   last_seen: number
   /** A viewer reads; a controller may also start, type into and stop
    *  sessions (ADR-034). Decided on the machine: by the tick beside Show a
-   *  code, which the code carries, or by Let it control sessions afterwards. */
+   *  code, which the code carries, or by Allow control afterwards. */
   role: 'viewer' | 'controller'
   /** How it last reached the machine: `relay` (anywhere, ADR-058),
    *  `tailscale` (the network listener over Tailscale), `lan` (the network
@@ -2182,6 +2193,11 @@ export const api = {
   /** A code that pairs a phone as `role` — the owner's tick, on the machine. */
   pairCode: (role: PairedDevice['role'] = 'viewer') =>
     post<{ code: string; role?: PairedDevice['role']; expires_in_sec: number; url: string }>('/v1/pair/code', { role }),
+  /** A code for another computer's Caprock (ADR-067): it turns access from
+   *  anywhere on if it is off — pressing it is that decision — and the link to
+   *  paste on the other computer is `remote.link`. */
+  pairComputerCode: () =>
+    post<{ code: string; kind: 'machine'; expires_in_sec: number; url: string; remote?: RemoteState }>('/v1/pair/code', { kind: 'machine' }),
   /** Withdraw the outstanding code, so it stops working before it expires. */
   pairCancelCode: () => post<{ cleared: boolean }>('/v1/pair/code', {}, 'DELETE'),
   /** Turn network access on or off without restarting the daemon. */
@@ -2264,11 +2280,15 @@ export const api = {
   reapOrphans: () => post<ReapResult>('/v1/resources/reap', {}),
   /**
    * What Caprock itself costs this machine: memory, disk, its disk I/O, duplicates (lib/footprint.ts).
-   * `orphans` takes the orphan list now, for the open doctor; without it the counts are the last scan's.
+   * `orphans` answers with the orphan list (at most 30 s old), for the open doctor; `fresh` takes it now
+   * (Check now). Without `orphans` the counts are the last scan's.
    */
-  footprint: (orphans = false) => get<Footprint>(orphans ? '/v1/footprint?orphans=1' : '/v1/footprint'),
-  /** Stop processes the user picked from the doctor's orphan list, each by pid and start time (ADR-059). Machine only. */
-  stopOrphans: (targets: OrphanTarget[]) => post<OrphanStopResult>('/v1/footprint/orphans/stop', { targets }),
+  footprint: (orphans = false, fresh = false) => get<Footprint>(orphans ? `/v1/footprint?orphans=1${fresh ? '&fresh=1' : ''}` : '/v1/footprint'),
+  /**
+   * Stop processes the user picked from the doctor's orphan list, each by pid and start time (ADR-059).
+   * SIGTERM; `force` sends SIGKILL — only the second click, on one a stop reported still running. Machine only.
+   */
+  stopOrphans: (targets: OrphanTarget[], force = false) => post<OrphanStopResult>('/v1/footprint/orphans/stop', force ? { targets, force } : { targets }),
   /** Terminal applications installed here, most preferred first. */
   terminals: () => get<TerminalList>('/v1/terminals'),
   /** Open a session in the user's own terminal app. */

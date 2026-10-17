@@ -66,6 +66,7 @@ import { useTodayCard } from '@/lib/todayCard'
 import { SidebarFooter } from './SidebarFooter'
 import { CaprockMark, ChatIcon, EyeIcon, FolderIcon, FolderPlusIcon, PlusIcon, SearchIcon } from './AppIcons'
 import { ModuleRows } from './ModuleRows'
+import { MachineRows } from './MachineRows'
 import { BrainSidebar } from './BrainSidebar'
 import { keys } from '@/lib/appkeys'
 import { loadRowOrders, ROW_ORDER_EVENT, saveRowOrder, type RowOrders } from '@/lib/rowOrder'
@@ -212,6 +213,8 @@ export interface SidebarProps {
   onOpenInEditor?: (path: string, label: string, editorId: string) => void
   /** Removes a project from Caprock's list; never touches its files. */
   onRemoveProject?: (projectId: string) => Promise<void> | void
+  /** Opens Add a repository for a project (components/AddRepoSheet, ADR-077). */
+  onAddRepo?: (projectId: string) => void
   /** Opens Clean up copies for a repository (components/CopiesSheet). */
   onCleanCopies?: (projectId: string) => void
   /**
@@ -577,6 +580,9 @@ export function Sidebar(props: SidebarProps) {
             Listed from where your sessions ran. Git state and clone arrive with the projects API.
           </p>
         )}
+        {/* The other computers and what runs there, each row tagged by its
+          * computer; with none linked, one quiet "+ Add a machine" (ADR-067). */}
+        {props.onRoute && <MachineRows onOpen={props.onRoute} onSettingsSection={props.onSettingsSection} dashboardActive={props.dashboardActive && !props.mailActive && !props.pipelineActive} />}
       </div>
 
       {/* Second Brain under the list (ADR-063), never in its scroll, so its
@@ -624,6 +630,8 @@ export function Sidebar(props: SidebarProps) {
           onHide={(hide) => onHide(menuNode.project.id, hide)}
           onCloseTabs={() => props.onCloseProjectTabs?.(menuNode.project.id)}
           onOpenInEditor={props.onOpenInEditor ? (editorId) => props.onOpenInEditor!(menuNode.project.root, menuNode.project.name, editorId) : undefined}
+          onAddRepo={props.onAddRepo && menuNode.project.root ? () => props.onAddRepo!(menuNode.project.id) : undefined}
+          repos={menuNode.project.repos?.length ?? 0}
           onCopies={props.onCleanCopies && menuNode.project.kind === 'repo' ? () => props.onCleanCopies!(menuNode.project.id) : undefined}
           copies={menuNode.project.worktrees?.length ?? 0}
           onRemove={props.onRemoveProject ? () => props.onRemoveProject!(menuNode.project.id) : undefined}

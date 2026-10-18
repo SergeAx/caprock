@@ -76,6 +76,38 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-18 — unreleased: Obsidian vaults in Second Brain (ADR-079)
+
+Completed the paused import: machine-only management endpoints and a sheet on
+Second Brain, automatic refresh, source markers and excerpts, separate note
+counts and a per-vault choice to let agents use them, off by default. MCP
+reads now apply that consent to graph search, node ids, neighbours and project
+lists; mixed private sources are hidden from MCP rather than exposing their
+search excerpts. Handoff keeps original session summaries while excluding
+private note nodes; extraction excludes private imported topics.
+
+Rooted reads refuse symlink escapes; unreadable walks preserve prior imports.
+Manual refresh rereads files even when metadata stayed unchanged. Removing an
+import preserves original memories, other sources and independent links,
+including links adopted after import. Source files are never modified.
+Migration 0062 preserves the existing graph while adding note provenance.
+
+Local `make check` passed, including 3,439 UI tests and 20 script tests.
+Changed Go packages passed race checks and three runs of changed tests;
+Windows vet/test compilation and all 13 headless golden paths passed.
+Setup and boundaries: [docs/obsidian.md](../docs/obsidian.md). Tests and the
+synthetic measurement command: [13-testing.md](13-testing.md#obsidian-imports).
+
+Measured 2026-10-18 on Apple M1 Pro, macOS/arm64, Go 1.27.1, with a synthetic
+5,000-note disk vault (45,919 imported links). An initial whole-import sample
+was 8.372 s and did not isolate the transaction. Three instrumented runs then
+measured 4.149–6.511 s overall and 2.606–4.206 s for the scan transaction,
+including begin and commit (`Result.write_ms`). Idle refresh was 72–96 ms,
+a one-edit refresh 724–1,117 ms and removal 1.039–1.828 s. Each instrumented
+transaction stayed below the five-second handoff gate, so this change keeps
+one transaction. Timings varied with the machine's other work; these are
+synthetic observations on this Mac, not a guarantee for another vault or OS.
+
 ### 2026-10-18 — unreleased: readable resource doctor
 
 The resource popover now uses a 420 px layout, a short verdict, labelled

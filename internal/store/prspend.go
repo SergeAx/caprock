@@ -84,7 +84,7 @@ type prRow struct {
 // small reads: the repository's sessions with a branch (through
 // idx_sessions_repo_branch), the session_prs rows of the sessions that
 // worked on one of prs, and, for a session cut between several, one sum per
-// slice over its events (through its (session_id, ts) index).
+// slice over its events (through its (sid, ts) index).
 func SpendByPR(ctx context.Context, q Querier, repoRoot string, prs []PRRef) (map[string]PRSpend, error) {
 	out := map[string]PRSpend{}
 	if len(prs) == 0 {
@@ -392,14 +392,15 @@ func sliceSums(ctx context.Context, q Querier, slices []prSlice) error {
 	b.WriteByte(']')
 	rows, err := q.QueryContext(ctx, `
 		WITH a(i, sid, lo, hi) AS MATERIALIZED (
-		  SELECT CAST(key AS INTEGER), json_extract(value, '$[0]'), json_extract(value, '$[1]'), json_extract(value, '$[2]')
+		  SELECT CAST(key AS INTEGER), (SELECT s.sid FROM sessions s WHERE s.session_id = json_extract(value, '$[0]')),
+		         json_extract(value, '$[1]'), json_extract(value, '$[2]')
 		  FROM json_each(?))
 		SELECT a.i,
 		  (SELECT COALESCE(SUM(e.cost_usd),0) FROM events e INDEXED BY idx_events_attr_work
-		   WHERE e.session_id = a.sid AND e.ts > a.lo AND e.ts <= a.hi AND e.internal = 0),
+		   WHERE e.sid = a.sid AND e.ts > a.lo AND e.ts <= a.hi AND e.internal = 0),
 		  (SELECT json_array(COALESCE(SUM(e.tokens_in),0), COALESCE(SUM(e.tokens_out),0), COALESCE(SUM(e.cache_read),0), COALESCE(SUM(e.cache_write),0))
 		   FROM events e INDEXED BY idx_events_attr_work
-		   WHERE e.session_id = a.sid AND e.ts > a.lo AND e.ts <= a.hi AND e.internal = 0)
+		   WHERE e.sid = a.sid AND e.ts > a.lo AND e.ts <= a.hi AND e.internal = 0)
 		FROM a`, b.String())
 	if err != nil {
 		return err

@@ -502,8 +502,11 @@ type Server struct {
 	// shell (POST /v1/shells with replaces).
 	replMu   sync.Mutex
 	replaced map[string]string
-	pairing  *pairing.Store
-	lanURL   string
+	// shellsSent is the shell list last sent as a "shells" frame (PublishShells).
+	shellsMu   sync.Mutex
+	shellsSent []byte
+	pairing    *pairing.Store
+	lanURL     string
 	// altURLs are the other addresses network access answers on, beside
 	// lanURL: the Tailscale one when lanURL is the LAN one, or the reverse,
 	// and the MagicDNS name (WP-15). Empty when off.
@@ -2661,6 +2664,14 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	// The model subagents run on is one of three aliases or absent; it
+	// becomes an environment variable of the child, so nothing else passes.
+	if v, ok := req["subagent_model"]; ok {
+		if m, isStr := v.(string); !isStr || !agents.ValidSubagentModel(m) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "subagent_model is one of " + strings.Join(agents.SubagentModels, ", ") + ", or absent for the session's own model"})
+			return
+		}
+	}
 	// A resume the detail screen would refuse is refused here too, with the
 	// same reason: otherwise a stale button opens a terminal that prints "No
 	// conversation found" and dies. An id the store has never seen is let
@@ -2874,6 +2885,18 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 }
 
 func (s *Server) fail(w http.ResponseWriter, err error) {
+	// Another writer held the database past busy_timeout: nothing was
+	// written and the same request would succeed in a moment, so say so
+	// rather than answer a bare 500 (the dashboard retries a 503).
+	if store.IsBusy(err) {
+		s.d.Log.Warn("api write found the database busy", "component", "api", "err", err)
+		w.Header().Set("Retry-After", "1")
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error":  "the database is busy",
+			"detail": "nothing was saved; try again in a moment",
+		})
+		return
+	}
 	s.d.Log.Error("api error", "component", "api", "err", err)
 	writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 }

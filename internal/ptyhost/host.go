@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -40,6 +41,14 @@ type ready struct {
 	Addr     string `json:"addr,omitempty"`
 	ChildPID int    `json:"child_pid,omitempty"`
 }
+
+// stopGrace is how long a child asked to stop by the holder's SIGTERM has
+// before it is killed: the holder is gone within about a second.
+const stopGrace = 750 * time.Millisecond
+
+// stopDrain is how long a holder asked to stop waits for its child's last
+// output once the child has exited.
+const stopDrain = 200 * time.Millisecond
 
 // ringSize matches the daemon's own ring: what a reattached terminal repaints.
 const ringSize = 256 << 10
@@ -86,7 +95,7 @@ func Main(stdin io.Reader, stdout io.WriteCloser) int {
 	}
 	h := &host{
 		spec: spec, sess: sess, ln: ln, ring: termbuf.NewRing(ringSize), inputs: termbuf.NewInputs(termbuf.InputTTL),
-		pumpDone: make(chan struct{}),
+		pumpDone: make(chan struct{}), childDone: make(chan struct{}),
 		rec: Record{
 			Proto: Proto, SessionID: spec.SessionID, HostPID: os.Getpid(), ChildPID: sess.PID(),
 			Addr: ln.Addr().String(), Token: spec.Token, Cwd: spec.Spec.Dir,
@@ -126,7 +135,10 @@ type host struct {
 	ring     *termbuf.Ring
 	inputs   *termbuf.Inputs // sequenced input applied so far, per client (J frames)
 	rec      Record
+	stopping atomic.Bool // a SIGTERM asked the holder to stop
 	pumpDone chan struct{}
+	// childDone is closed when the child has exited.
+	childDone chan struct{}
 
 	mu     sync.Mutex // guards client and exited, and orders ring writes against attaches
 	client *client
@@ -200,21 +212,43 @@ func (h *host) serve() int {
 	signal.Notify(terms, syscall.SIGTERM)
 	go func() {
 		// Somebody asked the holder to stop. It passes that on to its own
-		// child — the one process it may signal — and ends when the child does.
+		// child — the one process it may signal, with its process group — and
+		// ends when the child does. SIGTERM alone never ended a shell: an
+		// interactive shell ignores it, so a terminal's holder waited for good
+		// and needed SIGKILL (2026-10-19). A hangup first, as closing a
+		// terminal window does, which a shell obeys and passes to its jobs;
+		// then SIGTERM, which Claude Code cleans up on; and what is still
+		// running after stopGrace is killed.
 		for range terms {
+			h.stopping.Store(true)
+			_ = h.sess.Signal(ptyman.SignalHangup)
 			_ = h.sess.Signal(ptyman.SignalTerm)
+			go func() {
+				select {
+				case <-h.childDone:
+				case <-time.After(stopGrace):
+					_ = h.sess.Signal(ptyman.SignalKill)
+				}
+			}()
 		}
 	}()
 	go h.pump()
 	go h.accept()
 
 	err := h.sess.Wait()
+	close(h.childDone)
 	code := exitCode(err)
 	// Let the last output reach the ring and the client before saying the
-	// session is over, so the final screen is not cut short.
+	// session is over, so the final screen is not cut short. Asked to stop,
+	// the holder waits less: on Linux a shell's job that outlives the shell
+	// still holds the terminal open, so the output never ends by itself.
+	drain := 2 * time.Second
+	if h.stopping.Load() {
+		drain = stopDrain
+	}
 	select {
 	case <-h.pumpDone:
-	case <-time.After(2 * time.Second):
+	case <-time.After(drain):
 	}
 	_ = h.ln.Close()
 

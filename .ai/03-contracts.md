@@ -782,7 +782,7 @@ turn fell on. A `start` that is not `YYYY-MM-DD` is `400`.
 `{start, end, partial, from_ms, to_ms, days[], sessions, active_days, turns,
 cost_usd, unpriced_turns?, models[], prs_opened, prs_merged,
 merges_unresolved, commits, files_edited, lines_added, lines_removed,
-ci_wait_ms, tool_ms, agents[], loop?, biggest?, tax?, cost_per_merged_pr?,
+ci_wait_ms, tool_ms, agents[], loop?, biggest?, tax?, subagent_saving?, cost_per_merged_pr?,
 estimates[], pricing_version?}`. `days[]` is `{day, prs_opened, cost_usd,
 active}` × 7; `agents[]` is `{agent, subagent, turns, cost_usd, sessions,
 threads?}`; `loop` is `{agent, tool, kind, calls, first_ms, last_ms, tax_usd?,
@@ -828,9 +828,19 @@ own tool calls recorded:
 title.** The card is made to be posted, so the guard is in the shape of the
 payload rather than in the screen that draws it; a store test asserts it.
 
+- **Subagent saving** (`subagent_saving: {models[], cost_usd, haiku_usd,
+  haiku}`): the window's Claude Code subagent tokens (priced turns of
+  non-internal subagent events, `store.SubagentTokensByModel`) on every model
+  that costs more than the newest current Haiku row of the pricing table,
+  priced at that row's rates and then at Haiku's, token type by type. Absent
+  without a pricing table or a Haiku row, when no subagent ran on a pricier
+  model, and when the difference is under a dollar. An estimate at list prices
+  (the same tokens, which Haiku would not necessarily use); the Haiku 5.5 row
+  carries its lower prompt-length tier, so a long prompt is under-priced on it.
+
 `estimates[]` lists the fields a renderer must mark with "≈"
-(`lines_added`, `lines_removed`, and `cost_per_merged_pr` / `loop.tax_usd`
-when present). Responses are cached for 30 s per `start`.
+(`lines_added`, `lines_removed`, and `cost_per_merged_pr` / `loop.tax_usd` /
+`subagent_saving` when present). Responses are cached for 30 s per `start`.
 
 ### Activity (`GET /v1/activity`)
 
@@ -987,7 +997,7 @@ POST /v1/shutdown                      → 200 (bearer-token gated; `caprock dow
 POST /v1/statusline                    → 204 (bearer-token gated) {session_id, five_hour?, seven_day?} — records rate-limit windows, then runs the plan-window stop's check
 GET  /v1/statusline/{id}               → 200 (bearer-token gated) session counters for the status line; zeros for an unknown session
 GET  /healthz                          → {status:"ok", version}
-WS   /v1/live[?since=<seq>]            → every frame is {type, seq, data} (§ Live socket, replay); first frame is {type:"hello", seq, data:{server_time, reset}}; a "session" frame carries {session, stats}; an "event_update" frame carries an Event already sent as "event", rewritten in place (same id, new payload) — today a reply's words merged into its first transcript line (store.MergeAssistantText), which with thinking on has none: a screen holding that id replaces it, anything counting events ignores the frame; a "permission" frame carries {session_id, permission | null}; a "queue" frame carries an owned session's QueueView after any change (§ Queued messages); an "inbox" frame carries {id, deleted} after an item is saved or deleted (§ Inbox); a "brain" frame carries {id, op: added|changed|deleted, kind?, title?, auto?, session?, project?} after Second Brain changes, or {op: progress} when an automatic read begins or ends (§ Second Brain); a "project" frame carries a Project and an "op" frame an Op (§ Projects and shells); a "notify" frame an alert for the app (§ Notify frame); a "status" frame carries {session_id, kind, at} when input moved an owned session's status before any event (§ Nudges); a "devices" frame carries {} when the paired devices changed (§ Who may connect)
+WS   /v1/live[?since=<seq>]            → every frame is {type, seq, data} (§ Live socket, replay); first frame is {type:"hello", seq, data:{server_time, reset}}; a "session" frame carries {session, stats}; an "event_update" frame carries an Event already sent as "event", rewritten in place (same id, new payload) — today a reply's words merged into its first transcript line (store.MergeAssistantText), which with thinking on has none: a screen holding that id replaces it, anything counting events ignores the frame; a "permission" frame carries {session_id, permission | null}; a "queue" frame carries an owned session's QueueView after any change (§ Queued messages); an "inbox" frame carries {id, deleted} after an item is saved or deleted (§ Inbox); a "brain" frame carries {id, op: added|changed|deleted, kind?, title?, auto?, session?, project?} after Second Brain changes, or {op: progress} when an automatic read begins or ends (§ Second Brain); a "project" frame carries a Project and an "op" frame an Op (§ Projects and shells); a "notify" frame an alert for the app (§ Notify frame); a "status" frame carries {session_id, kind, at} when input moved an owned session's status before any event (§ Nudges); a "devices" frame carries {} when the paired devices changed (§ Who may connect); a "footprint" frame carries GET /v1/footprint's answer without the orphan list when it changed, checked every 10 s while a live client is connected (§ Footprint); a "shells" frame carries {shells: [Shell]}, every running shell as GET /v1/shells answers, after a start and when the list changed, checked every 10 s while a live client is connected (§ Projects and shells)
 ```
 
 **Permission prompts** ([ADR-035](08-decisions.md)). `permission` is the
@@ -1284,6 +1294,15 @@ panel asks so every 10 s): the last scan's while it is younger than 30 s
 (`orphanListTTL`), a new one otherwise. `&fresh=1` takes one now (the
 panel's Check now, `caprock doctor`). Without `orphans` it carries the last
 scan's counts and an empty list.
+
+**On the live socket** (2026-10-19): while a `/v1/live` client is connected
+the daemon builds that same answer every 10 s from the resource meter's last
+sample (taking none of its own, and not counting as asking, so it never
+keeps the meter sampling by itself) and sends it as a `{type:"footprint",
+seq, data}` frame when anything but `at` changed since the last one sent.
+The status strip follows the frames and asks `GET /v1/footprint` on mount
+and once a minute as the fallback for a daemon before them; it asked every
+10 s from every window. Code: `internal/daemon/livepush.go`.
 
 ```json
 {"at": 1791877758573, "daemon_running": true, "data_dir": "…/caprock", "exe": "…/bin/caprock",
@@ -1867,7 +1886,7 @@ machine, never from a forge's API (rule 4):
   guarded recent folder without checking that it still exists.
 
 ```
-POST   /v1/agents                    {cwd?, chat?, create?, worktree?, worktree_base?, worktree_pull?, worktree_pr?, agent?, subscription?, model?, permission_mode?, resume?, fork?, command?, args?, attempts?} → {session_id, cwd, session_ids?, attempt_group?, error?}
+POST   /v1/agents                    {cwd?, chat?, create?, worktree?, worktree_base?, worktree_pull?, worktree_pr?, agent?, subscription?, model?, permission_mode?, subagent_model?, resume?, fork?, command?, args?, attempts?} → {session_id, cwd, session_ids?, attempt_group?, error?}
 GET    /v1/attempts/{group}          → {group, base?, attempts: [AttemptView]}; 404 for an unknown group
 GET    /v1/agents/models?agent=      {agent, default?, models:[{id,label}]}
 GET    /v1/agents/catalog            → {agents: [CatalogEntry], licensed, home?}
@@ -2415,7 +2434,7 @@ view is shown.
   repository is `reason` `no_repo` with no rows.
 - **Each branch** — `{name, current?, default?, local, remote, ahead?,
   behind?, committed_ms, author?, sha?, subject?, pr?, live?, cost_usd, sessions,
-  agents[], session_at?, activity_at, stale?, landed?}`. A local branch and origin's
+  agents[], session_at?, activity_at, stale?, landed?, in_pr?}`. A local branch and origin's
   copy are one row (the local one's commit); other remotes and origin's
   `HEAD` are left out. `ahead` and `behind` are absent when not counted.
 - **Its PR** — `pr` `{number, url, title?, state, draft?, base?,
@@ -2438,13 +2457,28 @@ view is shown.
 - **Subject and landed** (2026-10-18, the release plan's pushed branches) —
   `subject` is the last commit's subject line (`%(contents:subject)`, read
   after a NUL so a tab in it is kept). `landed` is true when the branch's
-  changes are already on `base` by content: `git merge-tree --write-tree
-  <base> <sha>` (git 2.38+) gives `base`'s own tree, so a branch shipped by
-  a squash merge or inside another branch's batch — which `git cherry`
-  cannot see, the patch ids differing — is found. Checked only for a branch
-  ahead of `base`, committed in the last 14 days, with no open PR, the
-  newest 40, each pair of commits once (kept in memory); a failed check
-  (an older git, a conflict) leaves it absent, never true.
+  changes are already on `base` (`branches.Landed`), by any of, cheapest
+  first: every commit `base` lacks has a patch-equivalent there (`git
+  cherry`); merging it changes nothing (`git merge-tree --write-tree <base>
+  <sha>`, git 2.38+, gives `base`'s own tree); every non-merge commit's
+  subject (16 characters or more) is named in a message on `base` since the
+  merge-base — the line itself, a squashed batch's `* subject`, or with
+  ` (#N)`; or file by file the branch's own diff (merge-base..sha) is in
+  that file, on `base`'s tip or in one of `base`'s last 20 commits since the
+  merge-base that touched it: each hunk's new side (context and added
+  lines, in order) stands in the file, an added file was there, a deleted
+  one gone (one `git diff`, one `git log`, one `git cat-file --batch`; a
+  branch of more than 80 changed files is not checked this way). So a
+  branch shipped by a squash or inside a batch is found after `base` edited
+  the same files or a release consumed its changelog fragment (owner,
+  2026-10-19: six shipped branches were listed). `in_pr` is the number of
+  the open PR whose branch already carries the branch's last commit (a
+  batch PR; `git rev-list <base>..<pr head>`, at most 500 commits each, the
+  newest eight open PRs); such a branch is not checked for `landed`. Both
+  are checked only for a branch ahead of `base`, committed in the last 14
+  days, with no open PR of its own, `landed` for the newest 40, each pair
+  of commits once (kept in memory); a failed check (an older git, an
+  unknown commit) leaves it absent, never true.
 
 **`GET /v1/github/actions-usage`** (`?owner=` optional) → `ActionsUsage`
 `{account, org, year, month, available, reason?, needs?, minutes, gross_usd,
@@ -3019,7 +3053,16 @@ POST   /v1/projects/{id}/cleanup           {paths: [path]} → {results: [{path,
 POST   /v1/projects/{id}/cleanup/restore   {ids: [id]} → {results: [{id, path?, restored, error?}], cleanup: CleanupView}
 POST   /v1/shells                          {cwd | project_id, cols?, rows?, replaces?, type?, run?} → {shell: Shell}
 GET    /v1/shells?project=<id>             → {shells: [Shell]}; every running shell without project
+WS     /v1/live "shells" frame             → {shells: [Shell]}: every running shell, after a start and when the list changed
 ```
+
+- **The `shells` frame** (2026-10-19) is `GET /v1/shells`' answer without
+  `project`, sent by `POST /v1/shells` once it has started one and by a check
+  every 10 s while a `/v1/live` client is connected, only when the list
+  (a shell's `program` included) differs from the last one sent. The app
+  follows it and asks `GET /v1/shells` on mount and once a minute as the
+  fallback for a daemon before it; it asked every 10 s. Code:
+  `internal/api/projects.go` (`PublishShells`), `internal/daemon/livepush.go`.
 
 - **`Project`** — `{id, name, root, kind: "repo"|"folder", source:
   "seed"|"session"|"folder"|"new"|"clone", pinned, sort, added_at, archived?,
@@ -3694,7 +3737,11 @@ POST   /v1/brain/backfill       {days?: 1–90 (30), dry_run?} → BrainEstimate
   carries no `licensed`, `free_max` or `free_left` (dropped with the cap).
 - **Errors.** `404` for an unknown node; `409` when a rename would give an
   entity the normalised title of another of its kind; `400` for an unknown
-  kind, an empty title, a self-link.
+  kind, an empty title, a self-link. `503` with `Retry-After: 1` and `{error,
+  detail}` when another writer held the database past busy_timeout: nothing
+  was saved, and the same request lands a moment later (the dashboard tries
+  a drop three more times, a second apart). Every route answers a busy
+  database that way rather than with a bare `500`.
 - **Who.** The four `GET`s are open to every paired device; every write,
   settings and backfill included, is the machine's (a device gets `403`).
 - **Live.** Every change publishes a `brain` frame on `/v1/live`: `{id, op:
@@ -5252,6 +5299,23 @@ A private module's documents ([ADR-076](08-decisions.md), § Private modules):
 `created_at` and `updated_at` are unix ms. Rows stay when a module's files are
 removed, so installing it again finds them.
 
+### Subagent model (migration 0065)
+
+```sql
+ALTER TABLE sessions ADD COLUMN subagent_model TEXT NOT NULL DEFAULT '';
+```
+
+`POST /v1/agents` takes `subagent_model`: `haiku`, `sonnet` or `opus`, or
+absent/empty for the session's own model; anything else (another string, a
+non-string) is a 400 with nothing started. For a Claude Code session the
+daemon sets `CLAUDE_CODE_SUBAGENT_MODEL=<value>` in the child's environment,
+the variable Claude Code reads for its subagents' model (the binary lists it
+with `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`; checked in 2.1.303 on 2026-10-19: the value is lower-cased and resolved by the same alias resolver as `--model`, so `haiku`, `sonnet` and `opus` map to the current full ids, and `inherit` or empty means the lead's model). Nothing
+else from the request reaches the environment, no value is passed through, and
+other agents ignore the field. Absent, the user's own environment is left as it
+is. The choice is recorded once on the session row (`subagent_model`, in the
+`Session` JSON as `subagent_model`, omitted when empty) for the session card.
+
 ### Session generation DDL (migration 0063)
 
 ```sql
@@ -6209,7 +6273,7 @@ The holder starts the child, listens on `127.0.0.1:0`, writes its registry entry
 
 **Compatibility rule.** A holder started by one release must work with the daemon of the next. Frame types are never renumbered or repurposed; a side ignores a frame type it does not know. A change that cannot be made additively raises `proto`, and the daemon keeps speaking every older version while a holder of it can still be running. A registry entry with a newer `proto` than the daemon's is left alone (a downgrade).
 
-**Lifecycle.** The daemon reattaches every registry entry at startup — after `OnExit` is wired, before the first liveness sweep and before the API serves. On shutdown it closes its connections and leaves holders running (`ptyman.ErrDetached` is not an exit and is not recorded as one). The session's pid in `sessions.pid` is the **child's**, so liveness ([ADR-028](08-decisions.md#adr-028--a-session-ends-when-its-process-does)) is unchanged. The holder ignores `SIGHUP` and `SIGINT`, passes `SIGTERM` to its child, and exits when the child does. Pause, resume, kill and resize go through the holder.
+**Lifecycle.** The daemon reattaches every registry entry at startup — after `OnExit` is wired, before the first liveness sweep and before the API serves. On shutdown it closes its connections and leaves holders running (`ptyman.ErrDetached` is not an exit and is not recorded as one). The session's pid in `sessions.pid` is the **child's**, so liveness ([ADR-028](08-decisions.md#adr-028--a-session-ends-when-its-process-does)) is unchanged. The holder ignores `SIGHUP` and `SIGINT`. On `SIGTERM` it sends its child's process group `SIGHUP` (what closing a terminal window sends: an interactive shell ignores `SIGTERM` but exits on a hangup and hangs up its jobs) and then `SIGTERM`, kills the group if the child is still running 750 ms later, and exits when the child does — within about a second. Windows is unchanged: there `SIGTERM` already ends the child. Pause, resume, kill and resize go through the holder.
 
 **Orphans** (2026-10-10). A holder exits when its child does, and a daemon
 reattaches whatever its registry lists — but a holder whose registry is gone
@@ -6248,7 +6312,7 @@ stop every `reap` verdict (§ Resources).
 
 A reap re-reads the process table before every signal and acts only when the
 pid still has the start time it was judged with; it sends `SIGTERM` (the holder
-passes it to the child), and `SIGKILL` after 3 s, which closes the PTY and
+hangs its child up and stops it, § Lifecycle), and `SIGKILL` after 3 s, which closes the PTY and
 hangs the shell up the way closing a terminal window does. Windows has no
 `SIGTERM`, so the holder is terminated at once and its pseudoconsole closes
 the shell.

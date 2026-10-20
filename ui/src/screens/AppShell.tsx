@@ -44,7 +44,7 @@ import {
   type TabTarget,
 } from '@/lib/tabs'
 import { tabLabels } from '@/lib/tablabels'
-import { AGENT_SAVED_TOAST, isShellLeaf, liveShells, planAgentClose, planChatClose, planClose, planProjectClose, shellNames, type AgentClosePlan, type ChatClosePlan, type ClosePlan, type ClosingShell, type ProjectShellsOutcome } from '@/lib/closeShell'
+import { AGENT_SAVED_TOAST, isShellLeaf, liveShells, planAgentClose, planChatClose, planClose, planProjectClose, planTabsChatClose, shellNames, type AgentClosePlan, type ChatClosePlan, type ClosePlan, type ClosingShell, type ProjectShellsOutcome } from '@/lib/closeShell'
 import { baseName, fileKey } from '@/lib/files'
 import { useWorkspaceData } from '@/lib/useWorkspaceData'
 import { useShellTray } from '@/lib/tray'
@@ -104,6 +104,7 @@ import { SetupShellContext } from '@/lib/setupShell'
 import { QuickChatSheet, quickChatRequest, quickChoiceLabel, rememberQuickChoice, rememberedQuickChoice, type QuickChoice } from '@/components/QuickChat'
 import { dismissHint, hintDismissed, isQuickChat, quickChatHint, rememberStartedChat, startedChat } from '@/lib/quickchat'
 import { isChat } from '@/lib/chats'
+import { rememberedViews, rememberView, viewOf, type SessionView } from '@/lib/sessionView'
 import { ChatEnded, ChatHint, type ChatPane } from '@/components/QuickChatPane'
 import { useSpawnableAgents } from '@/components/AgentPicker'
 import { AddProjectSheet } from '@/components/AddProjectSheet'
@@ -144,6 +145,19 @@ const PairScreen = lazy(() => import('@/screens/Pair').then((m) => ({ default: m
 const UI_KEY = 'caprock.app.ui'
 
 /** A route that is a pinned system tab of its own (Mail, Pipeline), not a dashboard screen. */
+/**
+ * planChatClose's two tests, for any close: a session is a quick chat Caprock
+ * started whose agent has not exited in this window (its folder, or this
+ * window started it); one this window started a moment ago, before the
+ * session list has it, counts too.
+ */
+function chatTests(endedChats: ReadonlySet<string>): [(s: SessionSummary) => boolean, (id: string) => boolean] {
+  return [
+    (s) => !endedChats.has(s.session_id) && (isQuickChat(s) || !!startedChat(s.session_id)),
+    (id) => !endedChats.has(id) && !!startedChat(id),
+  ]
+}
+
 function isSystemTabHash(h: string): boolean {
   const name = parseHash(h).name
   return name === 'mail' || name === 'pipeline'
@@ -330,14 +344,16 @@ export function AppShell() {
     | { kind: 'agent'; tabId: string; paneId?: string; chats: readonly string[]; agents: AgentClosePlan; title: string }
     | { kind: 'agent-busy'; tabId: string; paneId?: string; chats: readonly string[]; agents: AgentClosePlan }
     | { kind: 'project'; name: string; plan: ClosePlan; resolve: (o: ProjectShellsOutcome) => void }
+    | { kind: 'chats'; busy: readonly string[] }
     | null
   >(null)
   const [paneStatus, setPaneStatus] = useState<Record<string, PaneStatus>>({})
   // Quick chats whose agent exited in this window: their tab shows that, in place.
   const [endedChats, setEndedChats] = useState<ReadonlySet<string>>(() => new Set())
-  // Sessions whose tab shows the chat over the terminal; the terminal stays
-  // mounted behind it.
-  const [chatOpen, setChatOpen] = useState<ReadonlySet<string>>(() => new Set())
+  // How each agent tab is shown, where it was switched (lib/sessionView):
+  // the chat over the terminal, which stays mounted behind it, or the
+  // terminal. Remembered per session in this window's storage.
+  const [views, setViews] = useState<Readonly<Record<string, SessionView>>>(rememberedViews)
   const [changesView, setChangesView] = useState<ChangesTarget | null>(null)
   // Compare attempts (ADR-052): over the terminals, as the Changes view is.
   const [compare, setCompare] = useState<{ group: string; title: string } | null>(null)
@@ -1119,7 +1135,7 @@ export function AppShell() {
     // A browser tab has nothing running to ask about: it goes with its page.
     if (isPageTab(tab)) { dispatch({ type: 'close', tabId }); return }
     // A chat whose agent already exited (its tab says so) has nothing to stop.
-    const chat = planChatClose(tab, paneId, sessionsById, (s) => !endedChats.has(s.session_id) && (isQuickChat(s) || !!startedChat(s.session_id)), (id) => !endedChats.has(id) && !!startedChat(id))
+    const chat = planChatClose(tab, paneId, sessionsById, ...chatTests(endedChats))
     if (chat.busy.length > 0) { setClosing({ kind: 'chat', tabId, paneId, chat }); return }
     await closeAgents(tabId, paneId, chat.stop)
   }, [closeAgents])
@@ -1305,11 +1321,21 @@ export function AppShell() {
     for (const t of ws.tabs) m.set(t.projectId, (m.get(t.projectId) ?? 0) + 1)
     return m
   }, [ws.tabs])
-  /** Closes the tabs only: every session and shell in them keeps running (rule 7). */
+  /**
+   * Closes a project's tabs — its menu's *Close tabs*, its ×, Hide, Remove
+   * from list. Agents and shells in them keep running (rule 7; the × ends
+   * the shells first, onStopProjectShells). The quick chats Caprock started
+   * end as with ⌘W (planTabsChatClose, owner 2026-10-20): idle ones at once;
+   * ones still answering after one question, asked once the tabs are gone.
+   */
   const onCloseProjectTabs = useCallback((projectId: string) => {
+    const { tabs, sessionsById, endedChats } = closeCtx.current
+    const chats = planTabsChatClose(tabs.filter((t) => t.projectId === projectId), sessionsById, ...chatTests(endedChats))
     setChangesView((cur) => (cur?.projectId === projectId ? null : cur))
     dispatch({ type: 'close-project', projectId })
-  }, [])
+    stopChats(chats.stop)
+    if (chats.busy.length > 0) setClosing({ kind: 'chats', busy: chats.busy })
+  }, [stopChats])
   const onOpenProjectInEditor = useCallback((path: string, label: string, editorId: string) => openInEditor(path, label, editorId), [openInEditor])
   const { archiveLocal } = data
   /** Unlists a project — the daemon's list, or this page's when it keeps none. Its files are never touched. */
@@ -1567,9 +1593,9 @@ export function AppShell() {
   }, [focused, inspectedId, model.projects])
 
   const focusedIsAgent = frontIsAgent
-  // A chat's tab opens on the conversation (ADR-071): for a chat, being in
-  // chatOpen means its terminal was asked for instead.
-  const showChat = focusedIsAgent && !!focused && chatOpen.has(focused.sessionId) !== (isChat(focusedSession) || !!startedChat(focused.sessionId))
+  // A chat's tab opens on the conversation (ADR-071), a project session's
+  // on its terminal, until the tab's Chat / Terminal switch says otherwise.
+  const showChat = focusedIsAgent && !!focused && viewOf(views[focused.sessionId], isChat(focusedSession) || !!startedChat(focused.sessionId)) === 'chat'
   // The permission card shows for the focused agent whether or not its
   // terminal is in front. 0.78.2 hid it behind the terminal as a duplicate
   // (owner, 2026-10-06); the next day he wanted it back — it names the call
@@ -1579,15 +1605,16 @@ export function AppShell() {
   const promptCard = focusedIsAgent && !!focused
   const toggleDeck = useCallback(() => setDeck((d) => ({ ...d, open: !d.open })), [])
   const onResizeDeck = useCallback((height: number) => setDeck((d) => ({ ...d, height })), [])
-  const toggleChat = useCallback(() => {
+  // Chat / Terminal: which view is in front, and nothing else — the
+  // terminal stays mounted under the chat, so the session is not started,
+  // signalled or typed into by the switch.
+  const setView = useCallback((view: SessionView) => {
     if (!focused) return
     const id = focused.sessionId
-    setChatOpen((cur) => {
-      const next = new Set(cur)
-      if (!next.delete(id)) next.add(id)
-      return next
-    })
+    rememberView(id, view)
+    setViews((cur) => (cur[id] === view ? cur : { ...cur, [id]: view }))
   }, [focused])
+  const openTerminalView = useCallback(() => setView('terminal'), [setView])
 
   /** The folder a worktree's files live in, for "Open in editor". */
   const folderOf = useCallback((projectId: string, worktree: string): string | undefined => {
@@ -1932,8 +1959,8 @@ export function AppShell() {
               onNewShell={() => onNewShell()}
               newItems={newItems}
               onToggleInspector={() => setPrefs((p) => ({ ...p, inspector: !p.inspector }))}
-              chatOpen={showChat}
-              onToggleChat={focusedIsAgent ? toggleChat : undefined}
+              view={showChat ? 'chat' : 'terminal'}
+              onView={focusedIsAgent ? setView : undefined}
               deckOpen={deck.open}
               onToggleDeck={focusedIsAgent ? toggleDeck : undefined}
             />
@@ -1976,6 +2003,8 @@ export function AppShell() {
                           chat
                           agent={focusedSession?.agent}
                           prompt
+                          desk
+                          onOpenTerminal={openTerminalView}
                           className="absolute inset-0"
                         />
                         {chatPanes.get(focused.sessionId)?.ended && (
@@ -1990,6 +2019,11 @@ export function AppShell() {
                       canType={!!focusedSession && focusedSession.owned && focusedSession.status !== 'ended' && !focusedSession.detached}
                       agent={focusedSession?.agent}
                       prompt
+                      desk
+                      // The raw keys behind a Keys button, as in a chat: a
+                      // menu only the terminal draws is a switch away.
+                      foldKeys
+                      onOpenTerminal={openTerminalView}
                       className="app-slab absolute inset-0 z-10"
                     />
                   ))}
@@ -2319,6 +2353,14 @@ export function AppShell() {
           agent
           onStop={() => { setClosing(null); void closeEnding(closing.tabId, closing.paneId, closing.chats, closing.agents.all) }}
           onKeep={() => { setClosing(null); void closeShells(closing.tabId, closing.paneId, closing.chats) }}
+          onCancel={() => setClosing(null)}
+        />
+      )}
+      {closing?.kind === 'chats' && (
+        <CloseChatConfirm
+          closed={closing.busy.length}
+          onStop={() => { setClosing(null); stopChats(closing.busy) }}
+          onKeep={() => setClosing(null)}
           onCancel={() => setClosing(null)}
         />
       )}

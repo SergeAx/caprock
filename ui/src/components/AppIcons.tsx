@@ -56,6 +56,12 @@ export const BackIcon = (p: P) => <Icon {...p}><path d="M19 12H5M11 18l-6-6 6-6"
 export const ForwardIcon = (p: P) => <Icon {...p}><path d="M5 12h14M13 18l6-6-6-6" /></Icon>
 /** A turning arrow: load the page again. */
 export const ReloadIcon = (p: P) => <Icon {...p}><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></Icon>
+/** A phone upright: a browser tab's phone mode. */
+export const PhoneIcon = (p: P) => <Icon {...p}><rect x="7" y="2.5" width="10" height="19" rx="2.5" /><path d="M11 18.5h2" /></Icon>
+/** Two arrows turning: rotate the phone. */
+export const RotateIcon = (p: P) => <Icon {...p}><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3M18 3v4h-4M6 21v-4h4" /></Icon>
+/** A fingertip: the mouse acts as a finger. */
+export const TouchIcon = (p: P) => <Icon {...p}><circle cx="12" cy="9" r="4" /><path d="M12 13v8" /></Icon>
 export const ExternalIcon = (p: P) => <Icon {...p}><path d="M14 4h6v6M20 4l-8.5 8.5M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10" /></Icon>
 /** A megaphone: feedback, set apart from Quick chat's speech bubble. */
 // A bug, drawn in amber where it stands for Feedback: the speech bubble was
@@ -67,6 +73,8 @@ export const BugIcon = (p: P) => <Icon {...p}><path d="m8 2 1.88 1.88M14.12 3.88
 export const LightbulbIcon = (p: P) => <Icon {...p}><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5M9 18h6M10 22h4" /></Icon>
 export const QuestionIcon = (p: P) => <Icon {...p}><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01" /></Icon>
 export const ChatIcon =(p: P) => <Icon {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></Icon>
+/** The chat bubble with a plus: start a new chat (the phone home's New chat). */
+export const ChatPlusIcon = (p: P) => <Icon {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><path d="M12 7v6M9 10h6" /></Icon>
 export const MoreIcon = (p: P) => <Icon {...p}><circle cx="5.5" cy="12" r="1.1" fill="currentColor" /><circle cx="12" cy="12" r="1.1" fill="currentColor" /><circle cx="18.5" cy="12" r="1.1" fill="currentColor" /></Icon>
 export const TrashIcon = (p: P) => <Icon {...p}><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l.9 12a1.5 1.5 0 0 0 1.5 1.4h6.2a1.5 1.5 0 0 0 1.5-1.4l.9-12" /></Icon>
 // A gear: sliders did not read as Settings (owner, 2026-10-11). Lucide's

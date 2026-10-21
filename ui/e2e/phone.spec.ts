@@ -7,7 +7,7 @@
  * every phone screen, with content made to be wide: a long URL, a code block
  * with a long line, a wide table, long file paths and long tool lines.
  */
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { devices, type Browser, type Page } from '@playwright/test'
 import { expect, test } from './fixtures'
@@ -144,6 +144,51 @@ async function phone(browser: Browser, width: number): Promise<{ page: Page; clo
   return { page, close: () => ctx.close() }
 }
 
+// Owner, 2026-10-21: the phone home's folds, the Limits line and the filled
+// New chat, folded and unfolded, at the three common phone widths.
+test('the phone home folds and its Limits line fit at 360, 390 and 412 px', async ({ browser, stand }) => {
+  test.setTimeout(180_000)
+  // Plan windows as Claude Code's status line sends them, with the daemon's own token.
+  const { token } = JSON.parse(readFileSync(path.join(stand.dir, 'data', 'runtime.json'), 'utf8')) as { token: string }
+  const resets = Math.floor(Date.now() / 1000)
+  const sl = await fetch(`${stand.daemonURL}/v1/statusline`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ session_id: 'e2e-limits', five_hour: { used_percentage: 96, resets_at: resets + 80 * 60 }, seven_day: { used_percentage: 83, resets_at: resets + 3 * 86_400 } }),
+  })
+  expect(sl.ok, `statusline ${sl.status}`).toBe(true)
+  const inbox = await fetch(`${stand.daemonURL}/v1/inbox`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: `Saved for later: ${LONG_URL}` }),
+  })
+  expect(inbox.ok).toBe(true)
+  const problems: string[] = []
+  for (const width of [360, 390, 412]) {
+    for (const [name, folds] of [['folded', null], ['unfolded', { continue: false, releases: false, saved: false }]] as const) {
+      const { page, close } = await phone(browser, width)
+      page.setDefaultTimeout(5000)
+      try {
+        await page.addInitScript((f) => {
+          localStorage.setItem('caprock.phone.installHint', '1')
+          if (f) localStorage.setItem('caprock.phone.folds', JSON.stringify(f))
+        }, folds)
+        await page.goto(`${stand.pageURL}/#/`)
+        await expect(page.locator('[data-phone-limits]')).toContainText('5h 96%', { timeout: 15_000 })
+        await expect(page.locator('[data-phone-limits]')).toContainText('week 83%')
+        await expect(page.getByRole('button', { name: 'New chat' })).toBeVisible()
+        await expect(page.getByRole('button', { name: /^Saved/ })).toHaveAttribute('aria-expanded', folds ? 'true' : 'false')
+        await page.waitForTimeout(500)
+        const m = await measure(page, width)
+        await page.screenshot({ path: test.info().outputPath(`home-${name}-${width}.png`), fullPage: true })
+        if (m.scroll > width || m.inner > width || m.client > width || m.cut.length || m.sideways.length || m.zoom.length) {
+          problems.push(`${width} ${name}: scroll=${m.scroll} inner=${m.inner} ${[...m.cut, ...m.sideways, ...m.zoom].join(' | ')}`)
+        }
+      } finally {
+        await close()
+      }
+    }
+  }
+  expect(problems).toEqual([])
+})
+
 test('the phone never scrolls sideways or cuts anything off, at 360, 390 and 430 px', async ({ app, browser, stand }) => {
   test.setTimeout(540_000)
   const s = app.session('alpha')
@@ -234,4 +279,54 @@ test('the phone never scrolls sideways or cuts anything off, at 360, 390 and 430
     }
   }
   expect(problems).toEqual([])
+})
+
+test('a link in a chat reply can be tapped on a phone, and a long one wraps, at 360, 390 and 412 px', async ({ browser, stand }) => {
+  test.setTimeout(180_000)
+  const r = await fetch(`${stand.daemonURL}/v1/agents`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat: true }),
+  })
+  const chat = await r.json() as { session_id: string }
+  expect(r.ok, JSON.stringify(chat)).toBe(true)
+  const { cwd } = await (await fetch(`${stand.daemonURL}/v1/sessions/${chat.session_id}`)).json() as { cwd: string }
+  const ARTIFACT = 'https://claude.ai/artifact/XUWK6T8BAtS4msXnSYrbyY'
+  const COMMENT = 'https://github.com/dspv/caprock/pull/768#issuecomment-6322183824'
+  const reply = `Published: ${ARTIFACT}. The PR comment is ${COMMENT}, and the long one (${LONG_URL}).`
+  const dir = path.join(stand.dir, 'home', '.claude', 'projects', cwd.replace(/[^A-Za-z0-9]/g, '-'))
+  mkdirSync(dir, { recursive: true })
+  await new Promise((res) => setTimeout(res, 1000))
+  const line = (type: string, n: number, extra: Record<string, unknown>) => JSON.stringify({
+    isSidechain: false, userType: 'external', entrypoint: 'cli', cwd, sessionId: chat.session_id, version: '2.1.296', gitBranch: 'master',
+    parentUuid: n > 1 ? `l-${n - 1}` : null, type, uuid: `l-${n}`, timestamp: new Date(Date.now() - 30_000 + n * 1000).toISOString(), ...extra,
+  })
+  const usage = { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, service_tier: 'standard' }
+  writeFileSync(path.join(dir, `${chat.session_id}.jsonl`), [
+    line('user', 1, { promptId: 'p-1', message: { role: 'user', content: [{ type: 'text', text: 'where is it?' }] } }),
+    line('assistant', 2, { requestId: 'req-l', message: { model: 'claude-sonnet-4-6', id: 'msg-l', type: 'message', role: 'assistant', content: [{ type: 'text', text: reply }], usage } }),
+  ].join('\n') + '\n')
+
+  for (const width of [360, 390, 412]) {
+    const { page, close } = await phone(browser, width)
+    // Nothing leaves the machine: the tapped address is answered here.
+    await page.context().route(/^https:\/\/(claude\.ai|github\.com)\//, (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<title>opened</title>' }))
+    try {
+      await page.goto(`${stand.pageURL}/#/chats/${chat.session_id}`)
+      // By its href: the ↗ mark (design/tokens.css) is part of the link's name.
+      const link = page.locator(`a[href="${ARTIFACT}"]`)
+      await expect(link).toBeVisible({ timeout: 20_000 })
+      await expect(link).toHaveAttribute('href', ARTIFACT)
+      await expect(link).toHaveAttribute('target', '_blank')
+      await expect(page.getByRole('link', { name: new RegExp(`^${COMMENT.replace(/[.?#/]/g, '\\$&')}`) })).toHaveAttribute('href', COMMENT)
+      await expect(page.locator(`a[href="${LONG_URL}"]`)).toHaveText(LONG_URL)
+      const m = await measure(page, width)
+      expect(m.scroll, `${width}: ${m.cut.join(' | ')}`).toBeLessThanOrEqual(width)
+      expect(m.cut, `${width}`).toEqual([])
+      const [opened] = await Promise.all([page.context().waitForEvent('page'), link.tap()])
+      await opened.waitForLoadState()
+      expect(opened.url()).toBe(ARTIFACT)
+      await opened.close()
+    } finally {
+      await close()
+    }
+  }
 })

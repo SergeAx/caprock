@@ -3741,7 +3741,8 @@ reinstalled the app from its own prompt in a browser tab.
 - **The phone gives up an attempt after 10 s and says why**, checks the
   machine itself, not only the relay, while connected, retries on its own
   with backoff, and names the problem after 5 s with **Retry** and **Pair
-  again** (`.ai/04-ui.md` § From anywhere).
+  again** (`.ai/04-ui.md` § From anywhere; Pair again only for a refused
+  pairing since 2026-10-21, below).
 - **Installing is the page's button, once.** Chrome's automatic prompt is
   held for an **Install the Caprock app** button that exists only while
   Chrome says the app is not installed. The manifest `id` stays `/`, so a
@@ -3811,6 +3812,28 @@ m.caprock.dev itself cannot be reached. A cached shell that then reaches
 nothing says little more than the browser's own error, and a stale shell is
 a risk of its own.
 
+
+*Amended 2026-10-21 — a bad network is not a lost pairing.* The owner
+(translated): "When the phone loses network while Caprock is open, I see
+'Retry' and 'Pair again'. I don't think 'Pair again' belongs there — the
+connection is just bad sometimes … Pair again is a pain: it means pairing
+with the computer all over again." The problem screen offered **Pair again**
+under every failure, timeouts included.
+
+- **Pair again only on the computer's own answer.** It shows for `removed`
+  and `wrong-machine` (both confirmed on separate connections, as above) and
+  for nothing else: never for a timeout, a network error, a relay that is
+  down or a computer that is asleep.
+- **No internet is told apart from the relay.** The browser's `offline`
+  hangs the channel up at once; a drop while the browser is offline is
+  `no-internet`; and when the relay does not answer, the page's own origin
+  is asked (a HEAD for its icon) — if that fails too, it is the phone's
+  network, not the relay. Nothing new leaves the phone: the page asks the
+  address it was loaded from.
+- **Large and calm, with the last screen kept.** A full-width notice names
+  the cause, says it reconnects by itself and when the next try is; Retry
+  is small. The dashboard stays under it, dimmed and inert, with how old it
+  is (`.ai/04-ui.md` § From anywhere, *Why it cannot reach the computer*).
 
 ## ADR-059 — The doctor lists processes that look abandoned, and stops one only on a direct, confirmed click (rule 7 amended)
 
@@ -5337,6 +5360,52 @@ process, and lose the overlay: a window in another process cannot be a
 child of ours); people need to stay signed in to sites (a persistent store
 of the browser's own, kept apart from the dashboard's); or Wayland users
 find the page beside the tab rather than over it.
+
+**Amended 2026-10-21 — Phone mode.** Asked for a front-end developer who
+checks a local site the way a phone shows it (the mockup's variant A,
+approved by the owner; the grid of several devices and *open on my phone*
+are not built). A **Phone** button on the browser tab's toolbar, and ⌥⌘R
+(Safari's own Responsive Design Mode key; Chrome's ⇧⌘M is Mail here) —
+Ctrl+Alt+Shift+D off macOS, since Ctrl+Alt+Shift+R is GNOME's screencast and
+Ctrl+Shift+M is Mail (rule 12; a browser tab's key, never an app chord, so a
+terminal keeps it):
+
+- **The page's own window is the device's page area,** not a scaled
+  picture: the dashboard draws a simple frame (status bar, the browser's
+  bars, the home indicator) and lays the page's window over the area they
+  leave, at the device's size in logical pixels, so media queries,
+  `innerWidth`/`innerHeight` and `100dvh` read the device. When the phone
+  does not fit the tab, the page area alone is drawn in a thin rim; when even
+  that does not fit, it keeps its size and runs past the tab's edge with a
+  line saying so. It is never scaled.
+- **Devices:** iPhone 16 (393×852 @3), iPhone SE 3rd gen (375×667 @2),
+  Pixel 9 (412×923), Galaxy S24 (360×780), and a custom W×H page. The
+  screens are sourced; every bar height is an estimate, marked *est.* in the
+  UI and open in [OQ-23](12-risks.md#open-questions). Rotate swaps the sides;
+  *Bars scrolled away* is a second, hand-picked size.
+- **User agent** per device (iOS Safari's, or Chrome on Android's reduced
+  one), changed in place — WKWebView `customUserAgent`, WebView2
+  `Settings.UserAgent` (its own read first, to give back), WebKitGTK
+  `user-agent` — and the page reloaded. Not a new window: a rebuilt page
+  would lose its non-persistent store, and with it a login.
+- **Touch** (`TOUCH_SCRIPT`, in every page, dormant until a phone's agent or
+  the shell turns it on): the mouse becomes touch-type pointer events aimed
+  at the element pressed, the real mouse events are kept from the page, and
+  a drag over something that scrolls on that axis (and whose `touch-action`
+  lets it) becomes a scroll with momentum after a `pointercancel`; a tap is
+  a click, a drag is not; `maxTouchPoints` reads 5. Approximate on every OS:
+  no TouchEvents, `:hover` still applies, the momentum is the script's. On
+  Windows WebView2's own DevTools emulation would be truer and is not wired
+  yet.
+- **Not emulated, and said so** behind the bar's **?** per OS:
+  `devicePixelRatio`, the engine, meta viewport and pinch zoom, safe-area
+  insets (`env()` reads 0), the on-screen keyboard.
+
+Still beta and off by default. Verified: Rust and UI tests, the frame and
+the rectangle handed to the shell in a headless browser, and the touch
+script driven by a real mouse in headless Chromium and WebKit. Not verified:
+a real Tauri run of the page window at the device size, and the agent change
+on Windows and Linux (compiled in CI only).
 
 ---
 

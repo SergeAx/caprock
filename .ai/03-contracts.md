@@ -734,6 +734,7 @@ GET  /v1/sessions/{id}/diff            → { files: FileDiff[] } | 409 not-a-git
 GET  /v1/stats/summary?range=today     → totals: tokens, cost, sessions, models
 GET  /v1/settings                      → user-stated settings (plan, update checks)
 PUT  /v1/settings                      → store them
+PUT  /v1/tabs                          {viewer, sessions} → 204: the sessions this dashboard has a tab for (§ Open tabs)
 POST /v1/offer                         → {status: "sent"} — forward one offer-survey answer to caprock.dev on the user's click (§ Offer survey, ADR-062)
 POST /v1/support                       → {ok: true} — forward one bug report to Caprock support at caprock.dev on the user's click (§ Report a bug, ADR-073)
 GET  /v1/update                        → cached release status (no network I/O)
@@ -1527,6 +1528,12 @@ mode, `ask` when never chosen; stored as `worktree_cleanup` in `config.json`
 the same way as `keep_awake`. A change checks every project with copies
 again (§ Projects and shells, *Finished copies*).
 
+`GET`/`PUT /v1/settings` carry **`end_idle_after`**: one of `2h`, `12h`,
+`24h`, `never`, else `400` (an empty string included). `GET` returns the
+effective choice, `12h` when never chosen; stored as `end_idle_after` in
+`config.json` the same way as `keep_awake`. It is the idle window of
+§ Ending idle sessions; `never` ends nothing.
+
 `GET`/`PUT /v1/settings` carry **`statusline_mode`**: one of `full`,
 `short`, `hidden`, `off`, else `400` (an empty string included). `GET` returns the
 effective mode, `full` when never chosen; stored as `statusline_mode` in
@@ -1889,7 +1896,7 @@ machine, never from a forge's API (rule 4):
   guarded recent folder without checking that it still exists.
 
 ```
-POST   /v1/agents                    {cwd?, chat?, create?, worktree?, worktree_base?, worktree_pull?, worktree_pr?, agent?, subscription?, model?, permission_mode?, subagent_model?, resume?, fork?, command?, args?, attempts?} → {session_id, cwd, session_ids?, attempt_group?, error?}
+POST   /v1/agents                    {cwd?, chat?, create?, worktree?, worktree_base?, worktree_pull?, worktree_pr?, agent?, subscription?, model?, permission_mode?, subagent_model?, resume?, fork?, command?, args?, attempts?, prompt?, relay_from?, end_when_done?} → {session_id, cwd, session_ids?, attempt_group?, error?}
 GET    /v1/attempts/{group}          → {group, base?, attempts: [AttemptView]}; 404 for an unknown group
 GET    /v1/agents/models?agent=      {agent, default?, models:[{id,label}]}
 GET    /v1/agents/catalog            → {agents: [CatalogEntry], licensed, home?}
@@ -2075,6 +2082,95 @@ defaults to that session's folder. Refused with 400 and a reason: `prompt`
 with `resume` (a continued session has its conversation), `relay_from` with
 `resume`, an unknown `relay_from`, a source folder that no longer exists when
 no `cwd` is given, and a brief over the limit.
+
+**`end_when_done` on `POST /v1/agents`** — end a one-job session once its
+turn finishes (`internal/daemon/enddone.go`, added 2026-10-21). An interactive
+TUI does not exit when its work is done — Codex's never does — so a script
+that starts a session with a prompt every half hour piled up 27 idle Codex
+sessions (94 processes, about 2 GB resident) in a day on the owner's machine.
+`end_when_done: true` asks the daemon to end the session the way
+`POST /v1/agents/{id}/signal {"action":"end"}` does (asked to stop, killed
+after the grace, the plan-window stop released) once its turn finishes and
+nothing waits on anyone.
+
+- **Accepted** only for a new Claude Code or Codex session (`agent` absent,
+  `claude` or `codex`) with a non-blank `prompt`. Refused with 400 and a
+  reason, starting nothing: no prompt, with `resume`, with `command`, for any
+  other agent (theirs is a turn end Caprock does not read), and a value that
+  is not a boolean. `false` or absent is an ordinary start. With `attempts`
+  every attempt carries it. Kept on the manager's own record of the session
+  and in its pty-host's metadata (`end_when_done`), so a restarted daemon
+  still knows; it is not a database column and is not shown anywhere.
+- **The turn finished** is the signal the rest of Caprock reads: Claude
+  Code's main-thread `Stop` hook, not turned back into a running turn by the
+  task runner's Stop-loop; Codex's `task_complete` in the session's rollout
+  (`codex.Ingester.OnTurnDone`; a `turn_aborted` is someone at the keyboard,
+  not done). A Claude Code session reattached after a restart is looked at
+  once: its stored events ending on the main thread's `Stop` count.
+- **Nothing waits** when, 1.5 s after that signal: no permission prompt is
+  pending; for Claude Code the newest main-thread hook event is still that
+  `Stop` (a question, a prompt or a tool call since means the session moved
+  on) and the message queue's own reading is "at the prompt"; no message is
+  queued for the session; and no subagent it started still works
+  (`store.LiveSubagents`). Otherwise the session is left running and the next
+  turn end is looked at the same way. A Codex request that asks for an
+  approval has not written `task_complete` yet.
+- **Rule 7.** Only a session Caprock started with the flag is ever ended; a
+  session started without it, a session Caprock did not start and a shell are
+  never touched.
+- **Not covered:** Claude Code with Caprock's hooks off (no `Stop` reaches the
+  daemon), and a Codex request that finished while the daemon was stopped in
+  a rollout not written to since — both stay running until ended by hand, as
+  without the flag.
+
+**Ending idle sessions** (`internal/daemon/endidle.go`; owner,
+2026-10-21). An agent session Caprock started that no tab shows — a chat from
+Chats, Now or the phone, a Telegram `/new` or forward, a continue, relay,
+fork or attempt, a row under *Running, no tab* — never ends by itself; on
+the owner's Mac 27 idle Codex sessions held about 2 GB. Once one has been
+idle for `end_idle_after` (12 h by default), the daemon ends it the way
+`POST /v1/agents/{id}/signal {"action":"end"}` does (asked to stop so the
+transcript is written, killed after the grace, the plan-window stop
+released). The sessions are looked at once a minute.
+
+- **Idle** means, for the whole window, nothing typed into it, nothing drawn
+  by it and no event from it, and now: no permission prompt pending, no
+  question (`AskUserQuestion`) open, no message queued, no subagent at work
+  (`store.LiveSubagents`), and the process not paused (the spend cap, the
+  plan-window stop). A turn the hooks still call running is not kept alive
+  by that alone: a running turn draws (Claude Code's and Codex's working
+  line animates every second), so one with nothing drawn for the window was
+  interrupted with Esc, which writes no `Stop`.
+- **The last activity** is the newest of the process's start, the session's
+  `last_event_at` and the input and output this daemon saw. Output a
+  pty-host replays to a daemon that reattaches is not activity (the first
+  3 s after the reattach), so a restart does not start the clock again, and
+  nothing is ended in the first 3 minutes after a daemon starts, so a
+  session that is in fact working has drawn again first.
+- **Never ended:** a session Caprock did not start (rule 7: the manager
+  holds no other), a shell, a session any dashboard has a tab for (§ Open
+  tabs), and the orchestrator and its workers while it runs.
+- **Marked, not hidden.** Before the end is asked for, the row gets
+  `idle_ended_at` (unix ms) and `idle_ended_after` (the window, ms;
+  migration 0067), in the `Session` JSON as `idle_ended_at` and
+  `idle_ended_after_ms`, omitted when 0. Both go back to 0 when the session
+  is started again (`store.MarkOwned`): continued with `--resume` under its
+  own id, it is an ordinary session. A Telegram reply to a session ended
+  this way continues it with the reply as its next message (`resume` plus
+  `prompt`, in the mode it last ran in); a reply to one ended otherwise is
+  still refused.
+
+**Open tabs** — `PUT /v1/tabs` `{"viewer": "<id>", "sessions": ["<id>",
+…]}` → `204`. Tabs live in the browser, so the dashboard tells the daemon
+which sessions it has a tab for: the whole list, at once when it changes and
+every 10 minutes while it is open (`ui/src/lib/reportTabs.ts`). `viewer` is
+a random id the browser keeps (`caprock.app.viewer-id`), 1–64 characters;
+`sessions` at most 500, blank and repeated ids dropped; otherwise `400`.
+Each viewer's last list is kept in `<data_dir>/open-tabs.json`
+(`{"viewers": {"<id>": {"at": <unix ms>, "sessions": [...]}}}`, written when
+the list changes or is an hour old), so a restarted daemon still knows, and
+so does one whose app was closed for the night. A viewer that has not
+reported for 7 days no longer counts. `501` when the daemon keeps no list.
 
 **`GET /v1/sessions/{id}/prs`** → `SessionPRs` `{connected, prs, fetched_at,
 refreshing?}`: the session's latest
@@ -5344,6 +5440,17 @@ else from the request reaches the environment, no value is passed through, and
 other agents ignore the field. Absent, the user's own environment is left as it
 is. The choice is recorded once on the session row (`subagent_model`, in the
 `Session` JSON as `subagent_model`, omitted when empty) for the session card.
+
+### Idle end DDL (migration 0067)
+
+```sql
+ALTER TABLE sessions ADD COLUMN idle_ended_at INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE sessions ADD COLUMN idle_ended_after INTEGER NOT NULL DEFAULT 0;
+```
+
+When Caprock ended the session because it sat idle with no tab (unix ms) and
+the idle window that did it (ms); both 0 otherwise, and set back to 0 when
+the session is started again. See § Ending idle sessions.
 
 ### Session generation DDL (migration 0063)
 

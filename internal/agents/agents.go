@@ -104,10 +104,15 @@ type SpawnRequest struct {
 	// "haiku", "sonnet" or "opus" (SubagentModels), or "" to follow the
 	// session. It becomes CLAUDE_CODE_SUBAGENT_MODEL in the child's
 	// environment; nothing else from the request reaches it.
-	SubagentModel string   `json:"subagent_model,omitempty"`
-	Args          []string `json:"args,omitempty"` // extra args
-	Cols          int      `json:"cols,omitempty"`
-	Rows          int      `json:"rows,omitempty"`
+	SubagentModel string `json:"subagent_model,omitempty"`
+	// EndWhenDone asks the daemon to end the session, the way End does,
+	// once its turn finishes with nothing waiting on anyone: a scripted
+	// one-job start that would otherwise sit idle at its prompt for good
+	// (daemon/enddone.go). Claude Code and Codex only, with a prompt.
+	EndWhenDone bool     `json:"end_when_done,omitempty"`
+	Args        []string `json:"args,omitempty"` // extra args
+	Cols        int      `json:"cols,omitempty"`
+	Rows        int      `json:"rows,omitempty"`
 }
 
 // Agent is a live owned session.
@@ -127,6 +132,10 @@ type Agent struct {
 	// start — an OpenCode 2 session (`--session <id>` creates it) — for the
 	// daemon to link at once; "" otherwise.
 	NativeID string
+	// EndWhenDone: the spawn asked for the session to be ended once its
+	// turn finishes (SpawnRequest.EndWhenDone). Kept in the pty-host's
+	// metadata, so a restarted daemon still knows.
+	EndWhenDone bool
 
 	sess ptyman.Session
 	ring *ring
@@ -140,6 +149,16 @@ type Agent struct {
 	exit   int
 	exited bool
 	onExit func(sessionID string, code int)
+
+	// ioAt is when the session last wrote output or was typed into, unix
+	// ns; 0 before either. Unlike outAt it never counts the screen a
+	// pty-host replays to a daemon that reattaches (quietUntil): that is
+	// the past drawn again, and counting it would make every restart look
+	// like activity to the idle end (daemon/endidle.go).
+	ioAt atomic.Int64
+	// quietUntil is, for a reattached session, the unix ns until which
+	// output is the holder's replay, not new activity; 0 otherwise.
+	quietUntil int64
 
 	// cols and rows are the terminal's size as last set, read when a
 	// permission answer reads the screen.
@@ -698,6 +717,9 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Agent, error) {
 	if port > 0 {
 		spec.Meta[metaPort] = strconv.Itoa(port)
 	}
+	if req.EndWhenDone {
+		spec.Meta[metaEndWhenDone] = "1"
+	}
 	// The PTY process is controlled explicitly via Signal/Close; it must not die
 	// when the caller's context (e.g. an HTTP request) ends.
 	sess, err := m.pty.Spawn(context.WithoutCancel(ctx), spec)
@@ -705,7 +727,7 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Agent, error) {
 		return nil, fmt.Errorf("spawn %s: %w", command, err)
 	}
 	a := &Agent{
-		SessionID: sessionID, Cwd: cwd, Worktree: worktree, Command: command + " " + join(args), StartedAt: time.Now(), Kind: agent, Port: port, NativeID: nativeID,
+		SessionID: sessionID, Cwd: cwd, Worktree: worktree, Command: command + " " + join(args), StartedAt: time.Now(), Kind: agent, Port: port, NativeID: nativeID, EndWhenDone: req.EndWhenDone,
 		sess: sess, ring: ringFor(sess, 256<<10), inputs: termbuf.NewInputs(termbuf.InputTTL), log: m.log, subs: map[chan []byte]struct{}{}, done: make(chan struct{}), onExit: m.OnExit,
 	}
 	cols, rows := req.Cols, req.Rows
@@ -1026,6 +1048,9 @@ func (a *Agent) pump(onOutput func(string)) {
 			} else {
 				a.outAt.Store(time.Now().UnixNano())
 			}
+			if now := time.Now().UnixNano(); now > a.quietUntil {
+				a.ioAt.Store(now)
+			}
 			a.mu.Lock()
 			for ch := range a.subs {
 				select {
@@ -1165,8 +1190,23 @@ func (a *Agent) Exited() (int, bool) {
 	return a.exit, a.exited
 }
 
-// Paused reports the pause state.
-func (a *Agent) Paused() bool { return a.sess.Paused() }
+// Paused reports the pause state; false for an Agent with no process
+// behind it (a caller's fake).
+func (a *Agent) Paused() bool { return a.sess != nil && a.sess.Paused() }
+
+// LastIO is when the session last drew output or was typed into, as this
+// daemon saw it; zero before either. A reattached session's replayed screen
+// does not count (quietUntil), so after a restart this is zero until the
+// session draws something new.
+func (a *Agent) LastIO() time.Time {
+	if ns := a.ioAt.Load(); ns != 0 {
+		return time.Unix(0, ns)
+	}
+	return time.Time{}
+}
+
+// TouchIO records activity at t: input typed into the session.
+func (a *Agent) TouchIO(t time.Time) { a.ioAt.Store(t.UnixNano()) }
 
 // PID is the agent's (or shell's) own process id — the child of its pty-host,
 // not the host. The resource meter starts its process tree here.

@@ -76,6 +76,31 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-21 — unreleased: idle untabbed sessions end by themselves
+
+What `end_when_done` left open: nothing ended a session Caprock started that
+no tab holds — a chat from Chats, Now or the phone, a Telegram `/new` or
+forward, a continue, a relay, an attempt. The daemon now ends one that has
+sat idle for `end_idle_after` (12 h by default; Settings → New sessions),
+through the same End, and marks the row (migration 0067) so it reads *Ended
+after 12 h idle — continue* instead of vanishing; a click, opening the chat
+or a Telegram reply continues it with `--resume`. Tabs live in the browser,
+so the app reports them (`PUT /v1/tabs`, kept in `open-tabs.json`). See
+[03-contracts.md](03-contracts.md) § Ending idle sessions.
+
+### 2026-10-21 — unreleased: `end_when_done` on `POST /v1/agents`
+
+A script on the owner's machine started a Codex session with a prompt every
+30 minutes; each did its job in about 4 minutes and then sat idle, because an
+interactive TUI never exits by itself — 27 sessions, 94 processes, about 2 GB
+in a day, and the Mac swapped. `end_when_done: true` (Claude Code and Codex,
+with a prompt) ends the session the way End does once its turn finishes with
+nothing waiting: Claude Code's Stop hook, Codex's `task_complete` read by the
+importer (`codex.Ingester.OnTurnDone`). Opt-in per request, so no screen
+changes. An idle limit for sessions the dashboard, the phone or Telegram start
+followed the same day (the entry above). See
+[03-contracts.md](03-contracts.md) § `end_when_done`.
+
 ### 2026-10-21 — unreleased: a database from a newer Caprock is refused (ADR-082)
 
 `store.Open` reads `meta.schema_version` read-only before it sets a pragma

@@ -28,6 +28,8 @@ func (m *Manager) UseHosts(exe, version string) {
 const (
 	metaKind = "kind" // which coding agent: claude, codex, opencode, gemini
 	metaPort = "port" // an OpenCode TUI's own server port, for linking its id
+	// metaEndWhenDone is "1" for a session started with end_when_done.
+	metaEndWhenDone = "end_when_done"
 )
 
 // Reattach picks up the sessions a previous daemon left running in their
@@ -75,6 +77,7 @@ func (m *Manager) Reattach(ctx context.Context) []*Agent {
 		}
 		port, _ := strconv.Atoi(rec.Meta[metaPort])
 		a := m.adopt(rec, at.Session, kind, worktree, port)
+		a.EndWhenDone = rec.Meta[metaEndWhenDone] == "1"
 		// The row normally already says all of this. It does not when the
 		// sweep of an older run ended it, or the database is newer than the
 		// session; then the holder is the evidence and the row follows it.
@@ -104,6 +107,10 @@ func (m *Manager) Reattach(ctx context.Context) []*Agent {
 	return out
 }
 
+// replayQuiet is how long after a reattach the session's output is taken
+// for the holder's replay of its screen rather than new activity.
+const replayQuiet = 3 * time.Second
+
 // adopt registers a session a previous daemon left in its pty-host; run then
 // starts reading it, once the caller has brought its row up to date.
 func (m *Manager) adopt(rec ptyhost.Record, sess ptyman.Session, kind, worktree string, port int) *Agent {
@@ -111,6 +118,9 @@ func (m *Manager) adopt(rec ptyhost.Record, sess ptyman.Session, kind, worktree 
 		SessionID: rec.SessionID, Cwd: rec.Cwd, Worktree: worktree, Command: rec.Command, StartedAt: rec.StartedAt,
 		Kind: kind, Port: port,
 		sess: sess, ring: ringFor(sess, 256<<10), inputs: termbuf.NewInputs(termbuf.InputTTL), log: m.log, subs: map[chan []byte]struct{}{}, done: make(chan struct{}), onExit: m.OnExit,
+		// What the holder sends first is its screen as it was: not new
+		// activity (Agent.ioAt).
+		quietUntil: time.Now().Add(replayQuiet).UnixNano(),
 	}
 	m.mu.Lock()
 	m.agents[rec.SessionID] = a

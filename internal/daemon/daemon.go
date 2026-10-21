@@ -206,6 +206,14 @@ type Daemon struct {
 	mgr   *agents.Manager
 	// queue holds what the chat field sends while a turn runs (ADR-053).
 	queue *msgQueue
+	// endDone ends the sessions started with end_when_done once their turn
+	// finishes (enddone.go).
+	endDone *endWhenDone
+	// tabs is which sessions each dashboard has a tab for (opentabs.go);
+	// endIdle ends the untabbed sessions Caprock started once they sit idle
+	// for the chosen window (endidle.go).
+	tabs    *openTabs
+	endIdle *endIdle
 	// queueDoneC carries a queued message's finished turn to the alert
 	// loop (queueboard.go).
 	queueDoneC chan queuedDoneMsg
@@ -534,6 +542,9 @@ func (d *Daemon) run(ctx context.Context) error {
 	d.queue = newMsgQueue(d)
 	d.queue.onDone = d.queuedDone
 	d.queue.onTyped = d.queuedTyped
+	d.endDone = newEndWhenDone(d, d.queue)
+	d.tabs = newOpenTabs(d.opt.DataDir)
+	d.endIdle = newEndIdle(d, d.queue, d.tabs)
 	d.mgr.OnExit = func(id string, code int) {
 		d.link.Ended(id)
 		go d.queue.ended(id)
@@ -639,7 +650,7 @@ func (d *Daemon) run(ctx context.Context) error {
 	// Hook receiver. Decide is wired unconditionally: it is a method that
 	// answers nil while no board exists, so the Stop-loop starts working the
 	// moment the task runner is turned on rather than only on the next restart.
-	hh := &hookd.Handler{Token: rt.Token, Recorder: d.rec, Log: d.log, Decide: d.stopDecision, Handoff: d.handoff, Observe: d.observeHook, AfterMain: d.queue.afterMain, Annotate: d.queue.annotate}
+	hh := &hookd.Handler{Token: rt.Token, Recorder: d.rec, Log: d.log, Decide: d.stopDecision, Handoff: d.handoff, Observe: d.observeHook, AfterMain: d.afterMain, Annotate: d.queue.annotate}
 
 	// API.
 	// LAN access, decided before the API is built so the pairing screen has an
@@ -716,6 +727,7 @@ func (d *Daemon) run(ctx context.Context) error {
 		Footprint:       func(ctx context.Context, orphans, fresh bool) any { return d.footprint(ctx, orphans, fresh) },
 		StopOrphans:     func(ctx context.Context, t []api.OrphanTarget, force bool) any { return d.stopOrphans(ctx, t, force) },
 		KeepAwake:       d.keepAwakeStatus,
+		OpenTabs:        d.tabs.report,
 		UpdateBusy:      d.workingSessions,
 		ReapOrphans:     func(ctx context.Context) (any, error) { return d.reapOrphans(ctx, true) },
 		RateLimitsRecorded: func(ctx context.Context) {
@@ -876,6 +888,8 @@ func (d *Daemon) run(ctx context.Context) error {
 	// Sessions reattached above are watched again the way a spawn starts
 	// watching them; here, once the Gemini ingester exists.
 	d.relink(ctx, reattached)
+	d.endDone.reattached(reattached)
+	d.goBg(func() { d.endIdle.run(ctx) })
 
 	d.goBg(func() { d.sweep(ctx) })
 	d.startKeepAwake(ctx)
@@ -1703,6 +1717,7 @@ func (a *settingsAdapter) Get() api.Settings {
 		AlertLastSentMs:  alertSent,
 		KeepAwake:        keepawake.Normalize(c.KeepAwake),
 		WorktreeCleanup:  projects.NormalizeCleanup(c.WorktreeCleanup),
+		EndIdleAfter:     config.NormalizeEndIdle(c.EndIdleAfter),
 		StatuslineMode:   config.NormalizeStatusline(c.StatuslineMode),
 		QuickReplies:     config.EffectiveQuickReplies(c.QuickReplies),
 		AppUpdate:        config.NormalizeAppUpdate(c.AppUpdate),
@@ -1795,6 +1810,10 @@ func (a *settingsAdapter) Set(in api.Settings) error {
 	cleanupChanged := in.WorktreeCleanup != "" && in.WorktreeCleanup != projects.NormalizeCleanup(a.d.opt.Config.WorktreeCleanup)
 	if cleanupChanged {
 		a.d.opt.Config.WorktreeCleanup = in.WorktreeCleanup
+	}
+	// The idle end: 12 h until chosen, like the two above.
+	if in.EndIdleAfter != "" && in.EndIdleAfter != config.NormalizeEndIdle(a.d.opt.Config.EndIdleAfter) {
+		a.d.opt.Config.EndIdleAfter = in.EndIdleAfter
 	}
 	// The status line: Full until chosen, like the two above. Switching it
 	// in or out of Off registers or removes Caprock's own statusLine entry;
@@ -2519,6 +2538,7 @@ func (d *Daemon) startCodex(ctx context.Context, force bool) {
 	}
 	in := codex.NewIngester(dirs, d.rec, d.log, 5*time.Second)
 	in.Link = d.link
+	in.OnTurnDone = d.endDone.codexDone
 	d.cxIn = in
 	go func() {
 		if err := in.Run(ctx); err != nil && ctx.Err() == nil {

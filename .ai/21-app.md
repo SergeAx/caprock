@@ -2388,12 +2388,13 @@ guide [docs/app.md § GitHub](../docs/app.md#github).
 ## Distribution and signing
 
 - **macOS.** Universal `.dmg` and a Homebrew cask in `dspv/homebrew-tap`.
-  Signed with a Developer ID and notarized once the owner has an Apple
-  Developer account ($99 a year); until then, release builds are signed
-  with a stable self-signed certificate so macOS keeps privacy answers
-  across updates ([§ Privacy prompts](#privacy-prompts-on-macos)), other
-  builds ad-hoc, and the install page says how to open an app from an
-  unidentified developer.
+  Release builds are signed with the Developer ID and notarized (the Apple
+  Developer account, an Organization, since 2026-10-20), `.app` and `.dmg`
+  stapled, and the cask has no quarantine step. While the Apple secrets are
+  missing, a release falls back to the stable self-signed certificate
+  ([§ Privacy prompts](#privacy-prompts-on-macos)) and the cask to its
+  quarantine step; other builds are ad-hoc. How:
+  [RELEASING.md § The desktop app](../docs/RELEASING.md#the-desktop-app).
 - **Windows.** NSIS or MSI installer from Tauri's bundler, Scoop
   (`dspv/scoop-bucket`) and winget. Without a code-signing certificate,
   SmartScreen warns on first run; which certificate or signing service to buy
@@ -2413,7 +2414,8 @@ guide [docs/app.md § GitHub](../docs/app.md#github).
 
 macOS asks before a program reads Desktop, Documents, Downloads and a few
 other places, and remembers the answer per program and per code signature
-(ADR-040). What follows from Caprock having no Developer ID yet:
+(ADR-040). What follows for Caprock (the self-signed sections below are
+the fallback since the Developer ID; see *With a Developer ID*):
 
 - **A session asks in its own name** (ADR-044). Until then the daemon was
   the program that asked for every session it ran: a pty-host and the agent
@@ -2487,15 +2489,35 @@ other places, and remembers the answer per program and per code signature
   `NSMicrophoneUsageDescription` (`app/src-tauri/Info.plist`), and
   `scripts/check-app-mic.sh` checks both in CI and in `app-release.sh`. The formula's binary has no runtime
   flag and needs neither.
-- **With a Developer ID** (the Apple account): the Developer ID
-  certificate replaces the self-signed one (`APPLE_CERTIFICATE` and
-  notarization, docs/RELEASING.md), the requirement becomes `anchor apple
-  generic and … certificate leaf[subject.OU] = <team id>`, Gatekeeper opens
-  the app without "Open Anyway", and, with the daemon as an `SMAppService`
-  helper of the app, the prompts carry the app's name and icon — to verify
-  on the first signed build. The change of requirement asks every user once
-  more, as the switch to the self-signed certificate did; drop
-  `macos-selfsign-keychain.sh` and its secrets then.
+- **With a Developer ID** (the Apple account since 2026-10-20): the
+  Developer ID certificate replaces the self-signed one in release builds
+  (`APPLE_CERTIFICATE` and notarization, `scripts/macos-developer-id.sh`,
+  docs/RELEASING.md). The requirement becomes `identifier … and anchor apple
+  generic and … certificate leaf[subject.OU] = <team id>`, which names the
+  team rather than one certificate, so a renewed certificate keeps it.
+  `scripts/check-app-signature.sh` checks it, the hardened runtime and a
+  secure timestamp on all three binaries, and with `--notarized` the
+  stapled ticket and Gatekeeper's `source=Notarized Developer ID`.
+  Gatekeeper opens the app without "Open Anyway". The entitlements stay
+  `audio-input` alone: the hardened runtime was already on, and nothing
+  needs JIT or a library-validation exception.
+  - **The switch asks once more.** TCC stores each answer with the
+    requester's designated requirement (`csreq`) and asks again when the
+    running binary does not satisfy it. The self-signed requirement
+    (`certificate leaf = H"…"`) and the Developer ID one (`anchor apple
+    generic … leaf[subject.OU] = <team>`) cannot both hold, so the first
+    Developer ID release asks every user once more for the microphone and
+    each folder the app or its daemon was allowed, and not after. Not
+    affected: answers held by `claude` or `codex` (sessions ask in their own
+    name, ADR-044); notifications (keyed by the bundle id); the keychain
+    items in `internal/secret` (written and read through
+    `/usr/bin/security`, so their ACL names that tool, not Caprock).
+    Unmeasured: whether macOS shows its "Background Items Added" notice
+    again for the daemon's LaunchAgent under the new signer.
+  - **Not done yet:** the daemon as an `SMAppService` helper of the app, so
+    the prompts carry the app's name and icon — to measure on a signed
+    build. Drop `macos-selfsign-keychain.sh` and its secrets once a
+    notarized release has shipped.
 
 The user-facing note is in [docs/app.md](../docs/app.md#macos-privacy-prompts).
 
@@ -2658,7 +2680,10 @@ The owner said to go ahead with the proposals ("build it to the end"). Taken:
    for a phone with nothing installed.
 2. **Apple Developer Program:** not yet. The macOS build ships unsigned
    (ad-hoc) with the "Open Anyway" note; signing and notarization when the
-   account exists.
+   account exists. *Updated 2026-10-20:* the account exists (an
+   Organization); release builds are Developer ID signed and notarized, with
+   the self-signed certificate as the fallback while the secrets are
+   missing ([§ Distribution and signing](#distribution-and-signing)).
 3. **Windows code signing:** not yet; unsigned with a SmartScreen note.
 4. **GitHub auth:** OAuth device flow with a Caprock OAuth app. Errors are
    always shown, never swallowed. *Amended by WP-19 (ADR-039):* the GitHub

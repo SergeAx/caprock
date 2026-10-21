@@ -385,6 +385,16 @@ others. Installing it: [install-app.md](install-app.md).
   (*Branch into a tab* while it still runs elsewhere) and the permission mode
   beside it. Continuing in another agent, opening it in your own terminal and
   copying the resume command are under *More*.
+- **After `/clear` or a fork.** A `/clear` makes Claude Code start a new
+  session id in the same process, and a fork starts one from a copy of the
+  conversation. Caprock links the new id to the one before — only from that
+  fact, never by guessing from the folder or branch — so the conversation stays
+  one card, which says *continues N earlier sessions* with each earlier part as
+  a link. That record is for you, not memory for Claude: after a `/clear` the
+  model does not remember what came before, and Caprock does not hand it a
+  summary — the note on where the last session left off goes only to a
+  session that starts fresh. If Claude needs the earlier part, tell it what
+  matters, or resume that earlier session instead of clearing.
 - **The permission mode, while it runs.** A chip beside the agent's name in
   the inspector, and in the session's header, says the mode a Claude Code
   session is in — *asks first*, *accept edits*, *plan mode*, *bypass*. For a
@@ -559,6 +569,13 @@ others. Installing it: [install-app.md](install-app.md).
   your file manager and its path is typed at the prompt, quoted, as in any
   terminal; the agent works on that file, not a copy. Drag a tab along the
   strip to reorder it.
+- **A tab after `/clear`.** `/clear` makes Claude Code carry on in the same
+  process under a new session id, and the tab goes with it: the terminal
+  stays attached, the field keeps typing into it, and the chat shows the
+  part before the clear above a line that says *Context cleared — Claude no
+  longer remembers the part above*, the new part under it. The earlier part
+  keeps its own page. A fork is a separate process and never takes the
+  original's tab.
 - **Chat.** An agent tab switches between its terminal and its chat with
   one quiet icon at the right of the tab strip: over the terminal it is a
   chat bubble (*Show as chat*), over the chat a terminal glyph (*Show as
@@ -1012,14 +1029,20 @@ it: nothing that updates behind the sheet takes it from the field you are in.
   sessions whose turn ended), then what is running with its cost, today's
   spend, and the Claude and Codex 5-hour and 7-day windows with when they
   reset. Click a session to open it in the window; Escape or a click
-  elsewhere closes the panel. A right click shows the menu: the same figures,
-  the sessions waiting on you, *Show Caprock* and *Quit*. On Windows and
+  elsewhere closes the panel. Sessions whose turn ended asking nothing are
+  listed apart under *Done · nothing needed*. A right click shows the menu:
+  the same figures, the sessions that need you (each with why: *permission*,
+  *question*, *plan*, *error*, or *question?* when Caprock guessed it from
+  the last message), a *Done, nothing needed* submenu, *Show Caprock* and
+  *Quit*. On Windows and
   Linux the menu is the whole tray. On macOS the sessions waiting on you
   are named beside the icon (*2 waiting*), and a plan window joins them,
   named, once it is 80% full (*2 waiting · 5h 86%*).
 - **Badge.** The Dock icon (a dot on the Windows taskbar) counts the sessions
-  waiting on you — a permission prompt, or an agent that finished and waits
-  for your answer: the popover's *Needs you* — and clears when none do.
+  that need you — a permission prompt, a question, a plan to approve, a turn
+  that stopped on an error, or a last message that asks you something: the
+  popover's *Needs you* — and clears when none do. A session that finished
+  and asks nothing is *Done* and is never counted.
 - **Global shortcut.** ⌃⌥⌘C on macOS, Win+Alt+C on Windows and Linux, brings
   the window up from any app, and hides it when it is already in front.
   Change it or turn it off in Settings → *Global shortcut*. Wayland does not
@@ -1100,7 +1123,10 @@ Anthropic under your login, the place the session itself already went.
 When an agent stops on a permission prompt, the app shows a notification
 naming the project, the session and what it wants to do: `Bash: go test
 ./...`, the file an edit would change, or the question it asked. Nothing is
-shown for the session you are already looking at.
+shown for the session you are already looking at. A turn that ended on a
+question reads *Needs your answer*, one that failed *Stopped: rate limit*;
+a turn that ended asking nothing is *Done* and shows no notification. One
+switch in Settings, *When a session needs you*, covers them all.
 
 On macOS the notification carries buttons:
 

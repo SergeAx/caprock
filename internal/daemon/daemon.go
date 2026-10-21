@@ -639,6 +639,10 @@ func (d *Daemon) run(ctx context.Context) error {
 		// not be cancelled because a hook's HTTP call finished first.
 		d.cap.Check(context.WithoutCancel(ctx))
 	}
+	// A /clear in a session Caprock started: its terminal now serves the
+	// session the /clear started (agents/follow.go), so the tab that follows
+	// it attaches and types through the new id.
+	d.rec.OnClear = func(next, prev string) { d.mgr.Follow(next, prev) }
 
 	// Phase 2 board (opt-in via HiveDir, or turned on later over the API).
 	if d.opt.HiveDir != "" {
@@ -1708,6 +1712,7 @@ func (a *settingsAdapter) Get() api.Settings {
 		AlertApproval:    c.AlertApprovalOn(),
 		AlertFinished:    c.AlertFinishedOn(),
 		AlertReply:       c.AlertReplyOn(),
+		AlertDone:        c.AlertDoneOn(),
 		TelegramChat:     c.TelegramChatOn(),
 		TelegramCode:     c.TelegramCodeOn(),
 		NotifyApproval:   c.NotifyApprovalOn(),
@@ -1780,10 +1785,11 @@ func (a *settingsAdapter) Set(in api.Settings) error {
 	a.d.opt.Config.SpawnPermissionMode = in.SpawnMode
 	a.d.opt.Config.ReportChatID = strings.TrimSpace(in.ReportChatID)
 	a.d.opt.Config.GeminiAPIKey = strings.TrimSpace(in.GeminiAPIKey)
-	approval, finished, reply := in.AlertApproval, in.AlertFinished, in.AlertReply
+	approval, finished, reply, done := in.AlertApproval, in.AlertFinished, in.AlertReply, in.AlertDone
 	a.d.opt.Config.AlertApproval = &approval
 	a.d.opt.Config.AlertFinished = &finished
 	a.d.opt.Config.AlertReply = &reply
+	a.d.opt.Config.AlertDone = &done
 	tgChat, tgCode := in.TelegramChat, in.TelegramCode
 	a.d.opt.Config.TelegramChat = &tgChat
 	a.d.opt.Config.TelegramCode = &tgCode

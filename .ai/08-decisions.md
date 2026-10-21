@@ -3523,8 +3523,15 @@ dashboard and a desktop app on three OSes.
   nothing for a saved password, the browser sign-in for Google and
   Microsoft (an app password when the build has no client ID), an
   app-specific password for iCloud, the server's password otherwise. A
-  source it cannot read (Apple Mail without Full Disk Access) is not shown
-  at all, and each shown source says when its profile was last used.
+  source it cannot read is not shown at all, and each shown source says
+  when its profile was last used. Apple Mail without Full Disk Access is
+  the exception (amended 2026-10-22): hidden, the owner's iCloud account in
+  Apple Mail was simply missing with no reason given, because the launchd
+  daemon is its own responsible process, has no Full Disk Access, and macOS
+  never prompts for it. It now says *Caprock can't read Apple Mail's account
+  list* with a button that opens the Full Disk Access pane and shows the
+  daemon's file in Finder, and offers iCloud's app-password form in its
+  place.
   Outlook for Mac is not read: its profile is
   in another app's group container, behind an OS prompt Caprock does not
   raise, and its accounts are mostly Microsoft 365, which sign-in covers.
@@ -5537,6 +5544,42 @@ too."* The decisions:
 **Rules out (2026-10-21):** a module on a viewer; the admin key or install
 from a device; a phone frame with the dashboard's origin; forwarding a module's
 request to any route but its own.
+
+**Amended 2026-10-22: a module may message the owner, through what Caprock
+already has.** The owner's ask (relayed 2026-10-22): a private module sends
+him messages through his existing Caprock bot, with buttons and replies, and
+shows desktop notifications from the app. The decisions:
+
+- **No second bot.** Telegram lets one reader call `getUpdates` per bot,
+  and the bridge ([ADR-047](#adr-047--the-owner-talks-to-his-agents-through-his-own-telegram-bot-integrations-he-turns-on-may-leave-the-machine))
+  is that reader. So `POST /v1/x/<id>/telegram` hands the message to the
+  bridge, which sends it to the **owner's own paired chat** — no other chat
+  can be named — with the module's name on the first line, so the owner
+  always knows which module is speaking. `/mute all` holds it back (409).
+  It needs no licence or alert switch: the module is already behind the
+  admin key.
+- **Answers go back to the module, not to a session.** A button press or a
+  text reply to a module's message is written into that module's own store
+  (`telegram/<message_id>-<n>`), and the module reads it as it reads any
+  document. It is never typed into a session, so rule 7 is untouched. An
+  answer for a module the key no longer names is not kept.
+- **Reading only as long as needed.** The bridge reads updates while a
+  module message under a day old can be answered, as it does while an alert
+  or two-way chat is on.
+- **A notification is the app's own.** `POST /v1/x/<id>/notify` publishes a
+  `notify` frame (kind `module`), which only the desktop app shows, under the
+  owner's desktop notification switches (either on), titled with the module's
+  name; a click opens `#/x/<id>`, a route the shell accepts only in that
+  shape. The default banner style stays (owner, 2026-10-22); the
+  notification stays in Notification Center like the app's others.
+- **What is sent** (rule 4): to Telegram, the module's name and the text and
+  button labels the module wrote, to the chat the owner paired, through the
+  bot token he gave, as everything else the bridge sends; nothing else.
+  The notification never leaves the machine.
+
+**Rules out (2026-10-22):** a module choosing a chat or a bot; a module's
+answer reaching a session; a notification route other than the module's own
+screen.
 
 ## ADR-077 — A project of chosen repositories: no folder of its own, the first one is home
 

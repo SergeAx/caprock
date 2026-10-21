@@ -233,6 +233,9 @@ type Deps struct {
 	// AdminVerify checks an admin key; nil ⇒ modules.ParseKey, the key
 	// compiled into the build. Tests pass a key pair of their own.
 	AdminVerify func(key string) (modules.Grant, error)
+	// ModuleNotify shows a module's desktop notification (POST
+	// /v1/x/{id}/notify). nil ⇒ the route answers 204 and shows nothing.
+	ModuleNotify ModuleNotifier
 	// DataDir is where Caprock keeps its own state. Needed so a file pasted
 	// into the terminal can be written somewhere Claude Code can read it by
 	// path. Empty ⇒ POST /v1/paste returns 501.
@@ -375,6 +378,10 @@ type Settings struct {
 	// daemon started.
 	AlertLastError  string `json:"alert_last_error,omitempty"`
 	AlertLastSentMs int64  `json:"alert_last_sent_ms,omitempty"`
+	// AlertUntested is a bot token or chat saved since the last alert was
+	// tried: the outcome before it was the old bot's and is forgotten, and
+	// none is known yet. Read-only.
+	AlertUntested bool `json:"alert_untested,omitempty"`
 	// BrowseRoot is the only directory the folder picker may look inside, and
 	// the boundary every path it returns is checked against. Empty means the
 	// user's home directory.
@@ -744,6 +751,7 @@ func New(d Deps) *Server {
 	// a price appears.
 	m.HandleFunc("GET /v1/premium", s.handlePremium)
 	s.routeModules(m)
+	s.routeModuleOut(m)
 	m.HandleFunc("GET /v1/gemini", s.handleGeminiStatus)
 	m.HandleFunc("POST /v1/gemini/ask", s.handleGeminiAsk)
 	m.HandleFunc("GET /v1/pricing", s.handlePricing)

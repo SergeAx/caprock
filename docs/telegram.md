@@ -56,7 +56,9 @@ when it is done.
    and/or *When a session has finished*, then **Send a test alert**. A
    finished turn whose last message asks you something says *Needs your
    answer*; one that asks nothing says *Finished*, unless you untick *Also
-   when it asked nothing (Done)*.
+   when it asked nothing (Done)*. With neither ticked (and two-way chat off)
+   the bot sends nothing and Caprock does not read its messages either; the
+   section says so.
 5. **Talk back (Premium).** With a licence, tick *Let my paired chat talk to
    sessions* in **Talk to your agents from Telegram**, just under. It is off
    until you turn it on, licence or not.
@@ -145,10 +147,17 @@ Telegram can read everything the bot sends. That is:
   and states, then what happened (*✓ Sent to …*). The answer to a forward
   only when you turned *Reply here* on. A forwarded photo, file or voice
   note is downloaded from Telegram to your computer; nothing is uploaded.
+- **A private module's messages** (only with an admin key and a module
+  installed): the module's name on the first line, then the text and the
+  button labels the module wrote, to your paired chat and no other. A button
+  you press or a reply you type to such a message goes back into that
+  module's own data on your computer, never to a session. `/mute all` holds
+  module messages back too.
 
 Nothing is sent until you set up a bot and switch something on. Caprock reads
 updates from Telegram only while there is something to answer — during
-pairing, or while alerts or two-way chat are on.
+pairing, while alerts or two-way chat are on, or for a day after a module
+sent a message you can answer.
 
 ## Security
 
@@ -178,7 +187,9 @@ pairing, or while alerts or two-way chat are on.
   webhook another tool set. Use one bot per computer.
 - **No alerts arrive.** Check the switches, press **Send a test alert**, and
   read the last error under it. A muted session or `/mute all` sends nothing;
-  `/unmute` in the chat.
+  `/unmute` in the chat. Saving a new token, or pairing a new chat, clears
+  the last error — it was about the old one — and the line reads *Saved. Send
+  a test alert to check it reaches you.* until an alert is tried.
 - **A reply got "Two-way chat is off".** Tick *Let my paired chat talk to
   sessions* in Settings.
 - **The Open on phone button is missing.** It appears only when phone access

@@ -908,6 +908,35 @@ are estimates of the phone's bars. The **?** beside it lists, for your
 system, what is real, what is approximate and what is not emulated at all
 (the screen's pixel ratio, the browser engine, the on-screen keyboard).
 
+**Side by side.** *Side by side* on the phone bar shows the same page on an
+iPhone SE, an iPhone 16 and a Pixel 9 in a row, each at its real width (375,
+393 and 412) and drawn smaller together to fit the pane. Reload reloads all
+three, your dev server's hot reload reaches each, and each scrolls on its
+own. A phone whose page is wider than its screen gets a red *cut off*. If
+the pane is too narrow the row scrolls sideways rather than shrink the
+phones past readable; click a phone's name to go back to that one phone.
+Caprock remembers the choice. Each extra phone is one more page in memory
+while side by side is on, and is closed when you turn it off.
+
+**Phone preview, in one click.** When a terminal prints a local dev
+server's address — Vite's `Local: http://localhost:5173/`, Next's, webpack's,
+`127.0.0.1`, `0.0.0.0`, `[::1]` or `*.localhost` — a small *Preview on
+phone* appears after it. Click it and the page opens beside that terminal,
+split, already in Phone mode on the device you used last (iPhone 16 the
+first time) with *Touch* on. It needs no setting: the click is enough, and
+Settings → *In-app browser (beta)* still governs every other page. Your dev
+server's hot reload reloads it as usual; the same address clicked again
+brings its preview forward. ⌘K → *Preview on phone…* lists the local
+servers your terminals have printed in this window, newest first, then
+*Preview a URL on phone…* for any other address; typing an address into
+either list previews it. The preview's × closes it and leaves the terminal.
+While the terminal beside it has the keyboard, every key stays the
+terminal's (Ctrl+L still clears it on Windows and Linux); click the
+preview's toolbar to give it ⌥⌘R and the rest. An address elsewhere on the
+network, a file path or a remote site gets no button. On macOS the page is
+drawn by WebKit, the engine iPhone Safari uses, so an iPhone preview comes
+close to the phone; the **?** still lists what is not the phone's.
+
 Pages share no cookies with Caprock or with each other, keep nothing once
 the app quits (so you are signed out of sites each time), and can call
 nothing of Caprock's. A download goes to your Downloads folder and is never
@@ -950,7 +979,7 @@ On macOS:
 | ⌘\          | Hide or show the sidebar                                                            |
 | ⌘D, ⌘0      | Dashboard tab, where you left it; again: Home, at its top                           |
 | ⌥⌘P         | Theme: open the picker                                                              |
-| ⌥⌘R         | In a browser tab (beta): Phone mode on or off                                       |
+| ⌥⌘R         | In a browser tab (beta) or a phone preview: Phone mode on or off                    |
 | ⌘R          | Reload the window (View → Reload)                                                   |
 
 On Windows and Linux each is Ctrl+Shift with the same letter or arrow
@@ -1328,6 +1357,12 @@ them), the same tabs in the same order with the same one in front, splits
 and their sizes, the sidebar, the window's size and place, each terminal
 scrolled where you left it, and anything you had half typed into an agent. The ▾ beside it
 shows what is new, or **Not now** to hide that version.
+
+The card folds away: the chevron in its corner, or Esc while you are in it,
+hides it and the download goes on in the status strip as a short item —
+*↓ 0.149.0 · 22%* with a thin bar, then *0.149.0 ready · Restart*, or the
+failure in the warning colour. Click the item to bring the card back; it does not come
+back by itself, and a newer version starts with the card open again.
 
 - **Checking.** On its first launch the app asks once: *Check for updates
   automatically?* With **Yes**, Caprock asks GitHub for the newest version

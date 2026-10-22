@@ -159,6 +159,9 @@ type Daemon struct {
 	slow   slowStatus
 	// subSpend keeps the Subscriptions answer's week of spend (subspend.go).
 	subSpend subSpendCache
+	// headless remembers which sessions were print-mode runs (interrupted.go),
+	// by session id; a transcript's entrypoint never changes.
+	headless sync.Map
 	log      *slog.Logger
 	store    *store.Store
 	// roll replaces the handoff holdout's random draw in tests.
@@ -1856,8 +1859,8 @@ func (a *settingsAdapter) Set(in api.Settings) error {
 	cfg := a.d.opt.Config
 	a.d.cfgMu.Unlock()
 	if botChanged || chatChanged {
-		// The last alert's outcome was the old bot's or chat's.
-		a.d.phone.botChanged()
+		// The last alert's and report's outcomes were the old bot's or chat's.
+		a.d.botChanged()
 	}
 	if statuslineChanged {
 		a.d.applyStatuslineMode(cfg)

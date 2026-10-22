@@ -5465,6 +5465,38 @@ script driven by a real mouse in headless Chromium and WebKit. Not verified:
 a real Tauri run of the page window at the device size, and the agent change
 on Windows and Linux (compiled in CI only).
 
+**Amended 2026-10-22 — Phone preview in one click.** Phone mode took four
+steps (the setting, a new browser tab, the address, *Phone*), too many for a
+front-end developer who wants her local site as a phone shows it (the owner's
+approved mockup). A local dev server's address printed in a terminal now gets
+*Preview on phone*, and ⌘K has *Preview on phone…*; either opens the page in
+a pane split beside the terminal, in Phone mode with Touch on. Two rules of
+this ADR bend for that pane alone, marked `preview: true`: it **may be
+split** (beside a terminal, never another page), and it **shows with the
+setting off** — the click on a page the user's own terminal printed is the
+consent, as picking *Caprock browser* in the link chooser is. The setting is
+not turned on: every other way to a page still needs it. Only local
+addresses get the button (rule 4: nothing is fetched that the user did not
+point at; nothing is probed or stored). Verified: UI tests, and the button
+and the split in a headless dashboard with the shell stubbed; not verified:
+a real Tauri run of the preview's page window.
+
+**Amended 2026-10-22 — Side by side.** The same local page on three phones
+at once (iPhone SE, iPhone 16, Pixel 9; the owner's approved mockup), so a
+front-end developer sees every width after one save. Each phone is a page
+window of its own rather than three frames in one: an iframe in the
+dashboard would put a stranger's page inside the dashboard's origin and
+webview, which this ADR exists to avoid, and one window cannot hold three
+layouts. The cost is a WebContent process per extra phone (about 16 MB on a
+small page, measured), so the two extras exist only while the toggle is on.
+The phones are drawn smaller than life; the page window is zoomed out by the
+same factor so the page still lays out at the phone's CSS width — zoom, not
+a smaller viewport. The *cut off* mark comes from a read-only script the
+shell evaluates with a callback (`measure`), never from the page calling
+the shell, so it adds no way for a page to reach Caprock and fakes nothing
+but its own mark. Not verified in the app: the zoom and the callback on each
+engine.
+
 ---
 
 ## ADR-076 — Private modules: a slot opened by a signed admin key, holding nothing of its own

@@ -2,7 +2,7 @@
  * A browser tab's view (ADR-075): what it asks of the shell's page window
  * as the tab comes and goes, its address box, its keys and its nudge.
  */
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BrowserAct } from '@/lib/browsertab'
 
@@ -277,6 +277,105 @@ describe('phone mode (ADR-075, amended 2026-10-21)', () => {
     render(<BrowserView {...props} isMac={false} visible armed />)
     fireEvent.keyDown(window, { key: 'D', code: 'KeyD', ctrlKey: true, altKey: true, shiftKey: true })
     expect(screen.getByRole('button', { name: 'Phone' }).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  // A phone preview (lib/devservers) starts in Phone mode, and beside a
+  // terminal in a split it leaves that terminal its keys — Ctrl+L is the
+  // shell's clear off macOS — until the preview's pane is focused.
+  it('starts a phone preview in Phone mode, and leaves the keys to the terminal beside it on every OS', () => {
+    const cases = [
+      { isMac: true, key: 'pv-mac', keys: [{ key: '®', code: 'KeyR', metaKey: true, altKey: true }, { key: 'l', code: 'KeyL', metaKey: true }, { key: 'ArrowLeft', altKey: true }] },
+      { isMac: false, key: 'pv-other', keys: [{ key: 'D', code: 'KeyD', ctrlKey: true, altKey: true, shiftKey: true }, { key: 'l', code: 'KeyL', ctrlKey: true }, { key: 'PageUp', ctrlKey: true }] },
+    ]
+    for (const c of cases) {
+      const steps: number[] = []
+      const el = (focused?: boolean) => <BrowserView {...props} pageKey={`page:${c.key}`} isMac={c.isMac} phoneFirst visible armed {...(focused === undefined ? {} : { focused })} onStep={(d) => steps.push(d)} />
+      const phone = () => screen.getByRole('button', { name: 'Phone' }).getAttribute('aria-pressed')
+      const view = render(el(false))
+      expect(phone()).toBe('true')
+      // The terminal in the split has the keyboard: none of the page's keys is taken.
+      for (const k of c.keys) expect(fireEvent.keyDown(window, k)).toBe(true)
+      expect(steps).toEqual([])
+      expect(phone()).toBe('true')
+      // Its own pane focused, the phone key is the page's again.
+      view.rerender(el(true))
+      expect(fireEvent.keyDown(window, c.keys[0]!)).toBe(false)
+      expect(phone()).toBe('false')
+      // Turned off by hand, it stays off for the window's life.
+      view.unmount()
+      render(el())
+      expect(phone()).toBe('false')
+      cleanup()
+    }
+  })
+
+  it('shows the page side by side on three phones at their real widths, each its own window, reloaded together', () => {
+    vi.useFakeTimers()
+    render(<BrowserView {...props} visible armed />)
+    fireEvent.click(screen.getByRole('button', { name: 'Phone' }))
+    acts.list = []
+    fireEvent.click(screen.getByRole('button', { name: 'Side by side' }))
+    // Remembered for this viewer.
+    expect(JSON.parse(localStorage.getItem('caprock.app.browser-phone')!).side).toBe(true)
+    // Three page windows: the tab's own is iPhone 16, two more beside it.
+    const opens = acts.list.filter((a) => a.act.do === 'open') as { key: string; act: Extract<BrowserAct, { do: 'open' }> }[]
+    expect(opens.map((o) => o.key).sort()).toEqual(['page:t1', 'page:t1-sbs-iphonese', 'page:t1-sbs-pixel9'])
+    const by = (k: string) => opens.filter((o) => o.key === k).at(-1)!.act
+    expect(by('page:t1-sbs-iphonese').phone).toMatchObject({ ua: IOS_SAFARI_UA, touch: true, width: 375 })
+    expect(by('page:t1').phone).toMatchObject({ ua: IOS_SAFARI_UA, touch: true, width: 393 })
+    expect(by('page:t1-sbs-pixel9').phone).toMatchObject({ ua: ANDROID_CHROME_UA, touch: true, width: 412 })
+    // Drawn smaller than the phones, all at one scale; the shell zooms each page to its width.
+    const scale = by('page:t1').rect.width / 393
+    expect(scale).toBeLessThan(1)
+    expect(by('page:t1-sbs-pixel9').rect.width / 412).toBeCloseTo(scale, 2)
+    // Named under each phone; the bar has no device or rotate of its own.
+    expect(screen.getByRole('button', { name: /^iPhone SE\s·\s375$/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /^Pixel 9\s·\s412$/ })).toBeTruthy()
+    expect(screen.queryByRole('combobox', { name: 'Device' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Rotate' })).toBeNull()
+    expect(screen.getByText('375 · 393 · 412')).toBeTruthy()
+    // Reload: all three.
+    acts.list = []
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }))
+    expect(acts.list.filter((a) => a.act.do === 'reload').map((a) => a.key).sort()).toEqual(['page:t1', 'page:t1-sbs-iphonese', 'page:t1-sbs-pixel9'])
+    // Each is asked, every two seconds, whether its page runs past its edge.
+    acts.list = []
+    act(() => { vi.advanceTimersByTime(2000) })
+    expect(acts.list.filter((a) => a.act.do === 'measure')).toHaveLength(3)
+    // The SE's page is wider than the SE: cut off, on that phone alone.
+    act(() => { window.dispatchEvent(new CustomEvent(BROWSER_EVENT, { detail: { id: 't1-sbs-iphonese', doc: 640, view: 375 } })) })
+    act(() => { window.dispatchEvent(new CustomEvent(BROWSER_EVENT, { detail: { id: 't1', doc: 393, view: 393 } })) })
+    expect(document.querySelector('[data-cut-off="iphonese"]')).toBeTruthy()
+    expect(document.querySelectorAll('[data-cut-off]')).toHaveLength(1)
+    // It fits again after a save: the mark goes.
+    act(() => { window.dispatchEvent(new CustomEvent(BROWSER_EVENT, { detail: { id: 't1-sbs-iphonese', doc: 375, view: 375 } })) })
+    expect(document.querySelector('[data-cut-off]')).toBeNull()
+    // A phone's name: back to that one phone; the two extra windows close.
+    acts.list = []
+    fireEvent.click(screen.getByRole('button', { name: /^iPhone SE\s·\s375$/ }))
+    expect(acts.list.filter((a) => a.act.do === 'close').map((a) => a.key).sort()).toEqual(['page:t1-sbs-iphonese', 'page:t1-sbs-pixel9'])
+    expect(lastOpen()).toMatchObject({ rect: { width: 375 }, phone: { ua: IOS_SAFARI_UA, touch: true } })
+    expect(lastOpen().phone!.width).toBeUndefined()
+    expect(screen.getByRole('button', { name: 'Side by side' }).getAttribute('aria-pressed')).toBe('false')
+    expect((screen.getByRole('combobox', { name: 'Device' }) as HTMLSelectElement).value).toBe('iphonese')
+  })
+
+  it('hides a side-by-side phone scrolled out of the pane rather than draw it over the panes beside', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.dataset.phoneSize) {
+        const w = parseFloat(this.style.width)
+        const h = parseFloat(this.style.height)
+        // The Pixel sits past the pane's right edge.
+        const left = this.closest('[data-side-phone="pixel9"]') ? 1100 : 400
+        return { left, top: 120, width: w, height: h, right: left + w, bottom: 120 + h, x: left, y: 120, toJSON() {} } as DOMRect
+      }
+      return { left: 200, top: 78, width: 1000, height: 900, right: 1200, bottom: 978, x: 200, y: 78, toJSON() {} } as DOMRect
+    })
+    localStorage.setItem('caprock.app.browser-phone', JSON.stringify({ side: true }))
+    render(<BrowserView {...props} visible armed />)
+    fireEvent.click(screen.getByRole('button', { name: 'Phone' }))
+    expect([...new Set(acts.list.filter((a) => a.act.do === 'open').map((a) => a.key))].sort()).toEqual(['page:t1', 'page:t1-sbs-iphonese'])
+    expect(screen.getByText('Scroll to see this phone')).toBeTruthy()
   })
 
   it('says how true it is, per OS, behind its ?', () => {

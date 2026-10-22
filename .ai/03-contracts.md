@@ -859,7 +859,8 @@ own tool calls recorded:
   `gh pr checks`, `gh run watch`, or a script named like `wait-ci`. Tool time,
   not wall clock: parallel calls overlap.
 - **The loop** is the longest episode the live detector would have alerted on
-  — `loop.Signature`, read-only tools skipped, at least `loop_k` calls within
+  — `loop.Signature`, read-only tools and browser observation steps skipped
+  (`loop.Ignored`), at least `loop_k` calls within
   `loop_t_minutes`, the episode running while repeats keep arriving within the
   window — except that repeats issued by one assistant message count once (a
   turn that launches eleven subagents decided once). `tax_usd` is priced by
@@ -1194,7 +1195,12 @@ one as `stopped_at` before overwriting it, lists the sessions of agents whose
 process it watches that were worked in within the day before and were either
 not ended or ended within two minutes of `stopped_at` (`store.RunningAt`, at
 most 12), lets the first sweep ask their pids, and records those now ended in
-`meta.interrupted`. A later restart that interrupted nothing keeps the record.
+`meta.interrupted`. A print-mode or SDK run is left out, at record and on
+read: its transcript's `entrypoint` (Claude Code writes it on every line) is
+`sdk-cli` for `claude -p` and `sdk-ts` / `sdk-py` for the SDKs, against `cli`
+for the interactive terminal; hooks do not carry it, so the daemon reads the
+first 256 KB of the transcript once per session. A session with no readable
+transcript is kept. A later restart that interrupted nothing keeps the record.
 On read, a session continued since (live again) drops out, and a record older
 than 7 days is not reported.
 
@@ -1471,7 +1477,8 @@ carry `memory`, totals only — the live socket reaches every paired device:
  "agents": [{"session_id": "…", "pid": 4242, "mem_bytes": 1932735283, "procs": 9,
              "owned": true, "state": "idle", "idle_since": 1791397480000, "endable": true,
              "max_proc_bytes": 1610612736, "heavy": "growing", "restartable": true}],
- "apps": [{"name": "Google Chrome", "mem_bytes": 7348010288, "procs": 49}],
+ "apps": [{"name": "Google Chrome", "mem_bytes": 7348010288, "procs": 49},
+          {"name": "colima", "mem_bytes": 8770000000, "procs": 5, "vm": true}],
  "idle_end": {"count": 3, "mem_bytes": 2576980377, "session_ids": ["…"]},
  "error": "…"}
 ```
@@ -1493,9 +1500,27 @@ carry `memory`, totals only — the live socket reaches every paired device:
   app — on macOS under the process macOS holds responsible for it, named
   after its outermost `.app` (Chrome's renderers under *Google Chrome*), or
   the program's name. Other users' processes cannot be read and stay in
-  `memory.other`. **Absent for a paired device**, which reads totals and
+  `memory.other`. **`vm`** marks an app one of whose processes holds a
+  virtual machine's guest memory, told by the process table's name alone:
+  `com.apple.Virtualization.VirtualMachine` (Apple's Virtualization
+  framework: colima, lima, Docker Desktop, UTM; cut to 16 bytes by macOS),
+  `qemu-system-*`, `vfkit` or `krunkit`. **Absent for a paired device**, which reads totals and
   agents, not what else runs on the machine. Cost (same machine and date):
   7.8 ms, 89 ms on the first ask while the executables are looked up once.
+- **`memory.other` here** is the larger of the frame's (the rest of `used`)
+  and what every app read holds together, not only the three listed. The
+  two are counted differently: `used` is RAM, compressed memory at the size
+  it takes in the compressor and swapped-out memory not at all, while an
+  app's size is its footprint, which counts its compressed and swapped-out
+  pages at full size. An app whose memory is mostly compressed or in swap is
+  far bigger by footprint than its share of `used` — an idle virtual
+  machine, whose whole guest RAM is one process. Measured on the owner's
+  Mac (2026-10-22, 16 GB): colima's `com.apple.Virtualization.VirtualMachine`
+  had an 8.2 GB footprint (`footprint`: 8 GB of it the guest's memory) with
+  0.5 GB resident and 7.6 GB of swap in use, and the popover listed it at
+  8.2 GB under *Other apps and the system* at 7.6 GB. A group is never
+  smaller than its members, so it takes their sum; `agents + caprock +
+  other` may then pass `used`, and the popover says why.
 - **`idle_end`** is what the button would end: the `endable` agents, how
   many and their memory together.
 
@@ -1794,7 +1819,7 @@ page acts on it; the daemon never installs anything (ADR-042 as amended
 
 `PUT /v1/settings` also accepts `deepseek_api_key`, the user's DeepSeek key for Claude Code on DeepSeek (see **Subscriptions** below), write-only and kept in the secret store (below), never in `config.json`. `GET` reports `deepseek_key_set`, `deepseek_key_where` and `deepseek_key_hint` — the first three and last four characters (`sk-…1a2b`), or `…` for a key under 16 characters — never the value. Trimmed on the way in; `""` clears it; `400` for a value with a line break or a NUL, or over 512 bytes, because it becomes one environment variable of a child process. Caprock never sends it anywhere and never logs it.
 
-`PUT /v1/settings` accepts `report_bot_token` and `report_chat_id` for the weekly report. The **token is write-only**: it is kept in the secret store (below) and never returned by `GET /v1/settings`, which instead carries `report_bot_set` (a bool), `report_bot_where`, `report_last_error` and `report_last_sent_ms`. This is the only write-only field in the API and it exists because the settings response is read on every dashboard render and by `caprock report` — a credential should not ride along on either ([ADR-024](08-decisions.md)). Omitting `report_bot_token` from a PUT leaves the stored one alone, since a UI that reads settings and writes them back always omits it; sending `""` clears it. The chat id is not a credential and round-trips normally.
+`PUT /v1/settings` accepts `report_bot_token` and `report_chat_id` for the weekly report. The **token is write-only**: it is kept in the secret store (below) and never returned by `GET /v1/settings`, which instead carries `report_bot_set` (a bool), `report_bot_where`, `report_last_error` and `report_last_sent_ms`. This is the only write-only field in the API and it exists because the settings response is read on every dashboard render and by `caprock report` — a credential should not ride along on either ([ADR-024](08-decisions.md)). Omitting `report_bot_token` from a PUT leaves the stored one alone, since a UI that reads settings and writes them back always omits it; sending `""` clears it. The chat id is not a credential and round-trips normally. `report_last_error` is the last send's failure, kept in `meta` so it survives a restart; a send that goes through (scheduled or *Send one now*) clears it, and so does saving a different bot token or chat — through `PUT /v1/settings`, `PUT /v1/telegram/token` or pairing — because the failure was the old bot's (a stale *Unauthorized* sat under a fresh *sent — check Telegram*, owner, 2026-10-22). The Weekly report panel reads settings again after *Send one now*, whichever way it went.
 
 **The secret store** (`internal/secret`, [ADR-024](08-decisions.md) amended
 2026-10-14). The DeepSeek key and the Telegram bot token are kept as the
@@ -4406,6 +4431,43 @@ POST   /v1/brain/backfill       {days?: 1–90 (30), dry_run?} → BrainEstimate
   those waiting; absent otherwise. It is its own field, not a kind of
   any catch-up progress, and it adds no frame: a screen reads the status
   while the extraction runs.
+- **Privacy filter** (`internal/redact`, `internal/store/brainredact.go`).
+  A memory is handed on — the handoff, other projects' screens, `caprock
+  mcp` — so a credential or payment detail in one would spread. Every
+  write of a node's `title`, `summary` and `keywords` runs through
+  `redact.Text` before it is clipped: `InsertBrainNode` (the extraction,
+  `POST /v1/brain/nodes`, entities), `UpdateBrainNode` (`PATCH`) and the
+  re-tag's `SetBrainKeywords`; an Obsidian note's `excerpt` is redacted
+  when it is parsed, so an unchanged file still compares equal. A value
+  becomes `[redacted: <kind>]`, kind one of `private key` (a PEM block,
+  or what a clip left of one), `api key` (`sk-…` with a vendor prefix or
+  digits, Stripe `sk|rk|pk_live|test_…`, `AKIA…`/`ASIA…` but not a docs
+  key ending `EXAMPLE`, `AIza…`), `token` (`ghp_…` and the other GitHub
+  prefixes, `github_pat_…`, `xox?-…`, Telegram bot tokens, JWTs, a
+  `Bearer` value), `card number` (13–19 digits, one kind of separator, a
+  network's prefix and length, Luhn), `iban` (a known country's length and
+  mod 97), `password` (after a password label — English, or Russian
+  written as escapes — a value of six or more with a digit or a symbol,
+  never a placeholder, variable, path, URL, identifier or plain word),
+  `secret` (after a key, token or secret label, 16 or more characters with
+  letters and digits, never a dotted name, an environment variable's name
+  or joined words) and `bank account` (6–34 digits after an account,
+  routing, ABA, sort code or BSB label, or the Russian ones). A keyword
+  that held a value is dropped. Ordinary numbers, commit SHAs, UUIDs,
+  versions, dates and prices are left alone. The prose a read sends is
+  filtered the same way (`BuildInputKnown`), and the extraction's
+  instructions forbid recording credentials, card or bank details, home
+  addresses and ID numbers. The memories and note excerpts kept before
+  the filter are scrubbed once on the daemon's start, in one transaction,
+  whether or not the extraction is on (`brain.Engine.ScrubOnce`,
+  `meta.brain_secrets_scrubbed`): changed nodes get their search document
+  rebuilt, a note node is re-synced from its rows, an entity whose new
+  title would collide keeps its title, and the log line holds counts by
+  kind, never a value. On a copy of the owner's database (2026-10-22) it
+  changed none of 1,468 nodes; over the 210,504 typed prompts and answers
+  stored there, the filter matched 21 values, all of them credentials
+  (API keys, bot tokens, a JWT, bearer headers, labelled passwords and
+  keys), and nothing else.
 
 ### Obsidian vaults
 
@@ -4502,9 +4564,12 @@ listener. Stdout carries the protocol and nothing else. Code:
   10 and stop at 50; memory summaries are clipped to 600 runes (1,500 in
   `get_memory`), prose to 1,500. The whole text is capped at 48 KiB on a rune
   boundary, with `[cut at N bytes: ask for fewer items]` appended when cut.
-  Credential-shaped runs (`sk-…`, `ghp_…`/`github_pat_…`, `xox?-…`,
-  `AKIA…`/`ASIA…`, `AIza…`, Telegram bot tokens, Stripe `sk_/rk_/pk_live|test_…`,
-  JWTs, `Bearer …`, PEM private keys) are replaced with `[redacted]`. A
+  Credentials and payment details are replaced with `[redacted: <kind>]`
+  by Second Brain's privacy filter (§ Second Brain, *Privacy filter*:
+  `sk-…`, `ghp_…`/`github_pat_…`, `xox?-…`, `AKIA…`/`ASIA…`, `AIza…`,
+  Telegram bot tokens, Stripe `sk_/rk_/pk_live|test_…`, JWTs, `Bearer …`,
+  PEM private keys, card numbers, IBANs, labelled passwords, secrets and
+  bank accounts). A
   tool's failure — the daemon's 4xx message, a bad argument — is a result
   with `isError: true`, never a protocol error.
 - **Repository.** `repo` is a directory inside it; absent, the directory
@@ -7002,6 +7067,15 @@ No DDL change was needed for either fix here, only honest use of the existing co
   turns (`gpt-6-sol`, `gpt-6-luna`, rows added 2026-09-29) on the owner's
   machine, $96.69 that no total had carried, and on 2026-09-30 the 27
   `gpt-6-astra` turns behind the "Partial cost" line.
+- **A gateway's free variant is priced at $0.** An id with no row that ends
+  in `-free` (OpenCode Zen: `deepseek-v4.1-flash-free`, issue #787) or
+  `:free` (OpenRouter) matches a zero-priced row made in code
+  (`cost.isFreeModel`) with no context window, so the session's context reads
+  "not in pricing table". The gateway bills nothing for those ids, so the
+  figure is measured, not invented; leaving them unpriced asked users to
+  report a model that is free by name. A row in the table still wins. Table
+  `2026-10-22.1` records it; the turns already stored unpriced are priced by
+  `PriceUnpriced` on the next start.
 - **Every write to a turn's cost moves the rollups in the same transaction.**
   `session_stats` and `daily_stats` are accumulated, not recomputed, so an
   event whose cost changes without them leaves every screen disagreeing with
@@ -7032,7 +7106,7 @@ No DDL change was needed for either fix here, only honest use of the existing co
 - **The weekly report states what changed, not what happened.** It is sold on the promise of the repository that cost 3× its usual week and of last week against the one before it, per repository and model — so it must ship as a comparison against the preceding period, not as a digest of the current one. This is not a presentation choice: five readers were shown a digest-shaped description of it and every one of them concluded they would be paying for delivery of figures the free dashboard already shows (FB-027). A digest is a notification; what moved is the thing a week of data can say and a live screen cannot.
 - **`/v1/history` and the wide ranges of `/v1/stats/summary` are cached, with single-flight and stale-while-revalidate** (`internal/api/answercache.go`). Both answer from aggregates over the whole events table — on the owner's 1 GB, 333k-event database `/v1/history?range=all` is ~1.5s and `/v1/stats/summary?range=all` ~1.0s through the Go driver, and 4.7s and 1.5s under a live dashboard (2026-10-04) — and they are asked for in bursts: **five components on the main screen request history on their own timers**, and the share dialog asks for its period's summary (or all-time history) beside the glance. Requests for the same key that arrive while one is in flight wait for it and share its result. A settled answer is served as it is for its TTL (`historyTTL` 3s, `summaryTTL` 10s), and a history answer for **20 times what computing it took** when that is longer (`historyCostScale`, at most `historyCostCeiling` 2 min): today's history, milliseconds to count, keeps the 3 s, while an all-time one that takes a second is refreshed at most every 20 s, so keeping it current costs at most a twentieth of one core however large the history grows — with agents writing, the version always moves and the all-time answer was otherwise counted again on every poll, 40% of the daemon's CPU under the 2026-10-18 profile (resource-usage audit F13). A history that reaches before today (`7d`, `30d`, `all`) is also kept for at least `historyWideTTL` (1 min) however fast it was to count: the cost bound measures wall time, a whole-history scan the page cache answers is fast, and it still reads every event in the range — on a machine short of memory those reads go to disk on every poll (resource-usage audit F16). Today's history keeps the 3 s. The history totals take turns, tool calls, cost, unpriced and background volume from the summary computed beside them (`store.HistoryFrom`) instead of scanning for them a second time; past that it is **still served at once and one background refresh replaces it**, so nobody waits on a whole-table scan once a key has been computed, and what is shown is at most one refresh behind. Past `answerMaxStale` (30 min) an answer is too old to present as current and the caller waits for a fresh one. The daemon computes history for all time and the 7d, 30d and all-time summaries in the background as it starts (`Server.Warm`), so the first screen after a restart finds them ready. **Today's summary is not cached** — it is ~40ms and is the figure people watch move — and neither are the burn rate, throttles and plan windows beside any range, which are read live on every request. Keys carry the range's resolved start as well as its label, so `today`, `7d` and `30d` become new keys at midnight rather than serving yesterday's answer; `?range=` and `?range=today` still share one entry. **Errors are never cached**, and a failed refresh keeps the stale answer. Computations run on a context detached from their first caller: browsers abandon requests routinely, and a caller hanging up must not take the answer away from the callers waiting behind it. Writes do not invalidate — ingest commits several times a second while anyone works, so an invalidated cache would be empty exactly when the screen is busiest. Measured on a copy of the owner's database with a writer committing every 200ms and the main screen's eleven requests fired at once: the slowest went from 3.6s to 0.09s (2026-10-04). `/v1/status` reads its stored-event count the same way, recounted in the background at most every 30 s: a `COUNT(*)` over 333k events is 600ms on a cold connection.
 - **Dated prices (migration-free, `pricing.json`).** A model may have more than one row. A superseded price keeps its own row carrying `until` — the last date it applied, inclusive, UTC — and the current price is the row with no `until`; rows for one id are ordered oldest-first. A turn is priced by `LookupAt`/`PriceAt` at **its own timestamp**, so a rate that has since lapsed still prices the turns that ran under it. Without this, the only way to record a price change is to overwrite the figure, which silently restates history at a price nobody was charged — an invented number (rule 6) about our own past. Sonnet 5 was the first case (introductory $2/$10 through 2026-08-30, $3/$15 announced from 2026-08-31) until the rise was cancelled; no row is dated today. A row whose `until` will not parse is treated as not applying, so an unparseable date falls through to the current price rather than pricing a turn at an expired one. Exactly one row per model id may omit `until`, and a test enforces it.
-- **Corrections (`pricing.json` `corrections`).** A list of `{model, from?, reason}`: turns an earlier table priced *wrongly* — a missing row that fell through to another model by prefix, or a price change that was announced and cancelled. That differs from a price that changed, which never restates history. On start the daemon (`rollup.ApplyCorrections`) reprices every `turn.assistant` whose model starts with `model` and whose time is on or after `from` (UTC; empty = all), at the row in force at the turn's own timestamp, and moves `session_stats` and `daily_stats` by the difference in the same transaction. It runs once per table version, recorded in `meta.price_corrections`; an interrupted pass is finished by the next start, because a turn already at the corrected figure moves by nothing. A malformed `from` or a correction with no model fails the table load. `2026-10-01.1` corrects `claude-opus-5-5` (all turns, previously priced as Opus 5) and `claude-sonnet-5` from 2026-08-31. `2026-10-03.1` adds `gemini-3.8-flash` and `gemini-3.1-flash-lite` with no correction: neither matched another id by prefix, so their turns were unpriced (named in `unpriced`), not mispriced. `2026-10-08.1` adds `claude-haiku-5-5` (its lower, under-100k tier) with no correction, for the same reason. `2026-10-13.1` adds `deepseek-flash` (DeepSeek's off-peak list price; peak hours bill double and are under-reported) with no correction, for the same reason; it prices Claude Code on DeepSeek. The `deepseek-v4-pro` row is unchanged although DeepSeek now lists a higher price, because the date it changed is not known ([OQ-13](12-risks.md#open-questions)).
+- **Corrections (`pricing.json` `corrections`).** A list of `{model, from?, reason}`: turns an earlier table priced *wrongly* — a missing row that fell through to another model by prefix, or a price change that was announced and cancelled. That differs from a price that changed, which never restates history. On start the daemon (`rollup.ApplyCorrections`) reprices every `turn.assistant` whose model starts with `model` and whose time is on or after `from` (UTC; empty = all), at the row in force at the turn's own timestamp, and moves `session_stats` and `daily_stats` by the difference in the same transaction. It runs once per table version, recorded in `meta.price_corrections`; an interrupted pass is finished by the next start, because a turn already at the corrected figure moves by nothing. A malformed `from` or a correction with no model fails the table load. `2026-10-01.1` corrects `claude-opus-5-5` (all turns, previously priced as Opus 5) and `claude-sonnet-5` from 2026-08-31. `2026-10-03.1` adds `gemini-3.8-flash` and `gemini-3.1-flash-lite` with no correction: neither matched another id by prefix, so their turns were unpriced (named in `unpriced`), not mispriced. `2026-10-08.1` adds `claude-haiku-5-5` (its lower, under-100k tier) with no correction, for the same reason. `2026-10-13.1` adds `deepseek-flash` (DeepSeek's off-peak list price; peak hours bill double and are under-reported) with no correction, for the same reason; it prices Claude Code on DeepSeek. `2026-10-22.1` changes no row: it prices ids ending in `-free` or `:free` at $0 (above), with no correction. The `deepseek-v4-pro` row is unchanged although DeepSeek now lists a higher price, because the date it changed is not known ([OQ-13](12-risks.md#open-questions)).
 - Cost per assistant turn = `tokens_in × input + cache_write × cache_write_price + cache_read × cache_read_price + tokens_out × output`, all prices per token (table values are per MTok ÷ 1e6).
 - Cache-savings math (ported from Caprock-python `_savings.py`): `billed_with = in + 1.25·cache_write + 0.10·cache_read` in input-token equivalents; `billed_without = in + cache_write + cache_read`; `saved = billed_without − billed_with`; hit-rate reported as `cache_read / (in + cache_read + cache_write)`. Where the transcript reports the 1h-TTL split (`cache_creation.ephemeral_1h_input_tokens`), those tokens are priced at the 1h write price (2×), not 1.25×.
 - **Source of the numbers:** Anthropic first-party pricing page (`platform.claude.com/docs/en/about-claude/pricing`), fetched 2026-08-18. Bedrock/Vertex have separate partner pricing — first-party only across v0.1–v0.3; recorded as [OQ-02](12-risks.md#open-questions).

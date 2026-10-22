@@ -1946,7 +1946,7 @@ crashed (ADR-070); what the user sees is in
   `get_webview_window` and the drops (§ Dropping a file) work as without a
   browser. One command, `browser_tab` (`{id, act}`; app/README.md § What a
   page may call): open, place, show, hide, close, go, back, forward, reload,
-  focus, pause, retain.
+  focus, pause, measure, retain.
 - **Kept where it was.** Behind, the window is hidden, never reloaded or
   unloaded. A page is closed only with its tab, when the switch is turned
   off, or when a reloaded dashboard no longer has its tab (`retain`); a
@@ -1980,9 +1980,29 @@ crashed (ADR-070); what the user sees is in
   `TOUCH_SCRIPT`, a second initialization script in every page, dormant
   until a phone's agent or `window.__caprockTouch(true)`; the shell re-sends
   its state when a page has loaded. What the user sees is in 04-ui.md.
+- **Phone preview** (ADR-075, amended 2026-10-22): a page pane split beside
+  a terminal, asked for from a dev server's address in that terminal or ⌘K.
+  Nothing new in the shell: the same `open` with `phone`, laid over the
+  pane's page area; `retain` also runs at load when only previews hold pages
+  (the setting off).
+- **Side by side** (ADR-075, amended 2026-10-22): up to three page windows
+  per tab — its own and `<id>-sbs-<device>` for the two others, made only
+  while the toggle is on and closed with it. `phone` may carry `width`, the
+  page's CSS width; when the placed window is narrower the shell zooms the
+  page by window ÷ width (`zoom_for`; WKWebView `pageZoom`, WebView2
+  `ZoomFactor`, WebKitGTK zoom level) on every `place`, and again after a
+  load. `measure` evaluates `MEASURE_SCRIPT` with `eval_with_callback` — the
+  document's `scrollWidth` and `clientWidth`, read only — and tells the
+  dashboard `{id, doc, view}`. Footprint, measured 2026-10-22 on macOS with
+  a probe that builds the same WKWebView as the shell (non-persistent store)
+  on a small static page: each extra page is one WebContent process, about
+  16 MB phys_footprint (24 MB RSS), plus about 1 MB in the app; a real dev
+  app's page weighs more. Bounded at two extra per tab.
 - **Not verified in a real run** (ADR-075): the overlay on Windows and Linux,
   Wayland placement, `navigator.clipboard` and drops inside a page; phone
-  mode's window at the device size, and its agent change off macOS.
+  mode's window at the device size, and its agent change off macOS; side
+  by side's zoom keeping `innerWidth` at the phone's width on each engine,
+  and `measure`'s callback, in the app on any system.
 
 ## Feedback screenshots
 
@@ -2603,6 +2623,19 @@ the user guide [docs/app.md § Updates](../docs/app.md#updates).
   panel with the reason, **Try again** and the release page. The ▾ beside the
   button shows what is new and **Not now**, which hides that version (the
   same key as the dashboard banner).
+- **Folding the card** (owner 2026-10-22, translated: "I want this to be
+  collapsible, with the status continuing to show only in the bottom line.
+  Orca does it that way"). A chevron in the card's corner (tooltip *Hide;
+  progress stays in the status bar*), or Esc while focus is in the card,
+  folds it into the status strip, where the update line becomes a compact
+  item: *↓ 0.149.0 · 22%* over a 2px bar while it downloads, *0.149.0
+  ready · Restart* once a download is held, *0.149.0 · restarting…* while
+  it installs, *0.149.0 · Update* for an offer, and *0.149.0 failed* in the
+  warn colour. A click on the item unfolds the card (on a failure, onto the
+  reason with **Try again**, the release page and **Close**); the item
+  never installs and the card never unfolds by itself. The fold is kept
+  for that version only (`caprock.update.cardFolded` holds the version),
+  so a newer one is announced unfolded (`ui/src/lib/updatecard.ts`).
 - **When a release is found** (owner 2026-10-16, translated: "why isn't
   the update highlighted when there is an update?" — 0.124.0 was out for
   twelve minutes and 0.123.1 showed nothing; then 0.124.1, published at

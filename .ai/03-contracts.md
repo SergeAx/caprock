@@ -6,7 +6,7 @@ Conventions that apply to every contract here: JSON casing is **snake_case**; al
 
 ## Hook shim
 
-- Single Go binary `caprock-hook` (same repo, tiny), installed to Caprock's data dir.
+- Single Go binary `caprock-hook` (same repo, tiny), installed to Caprock's data dir. The daemon brings `<data_dir>/caprock-hook` up to date on every start (`hooks.EnsureShim`): a `caprock-hook` beside the running `caprock` is copied in whenever the bytes differ; with none beside it (the desktop app ships `caprock` alone) an existing data-dir shim is replaced by a copy of the running `caprock`, which runs as the shim when started under that name. Each write is a temporary file in the data dir renamed over the shim, so Claude Code never finds it missing or half-written; on Windows a running shim is left and replaced on the next start. Before this, a shim a Homebrew install had put there in August was still feeding hooks to a 0.147.0 daemon in October.
 - Registered in `~/.claude/settings.json` under events: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `SubagentStop`, `SessionEnd`, `PreCompact`, `StopFailure`, `PermissionRequest`. Installer merges JSON non-destructively; `caprock hooks uninstall` reverts; back up the settings file before first write.
 - Behavior (Phase 0–1: fire-and-forget): read stdin JSON → POST to `http://127.0.0.1:<port>/v1/hook` with `Authorization: Bearer <run-token>` and `X-Caprock-Ppid: <os.Getppid()>` → always exit 0 within a 1s budget. Never print to stdout (a broken shim must not affect the user's Claude session). If the daemon is down, drop silently.
 - One server, one port: `/v1/hook` lives on the same listener as the API and UI (default **22776** on a fresh install; an existing install that never wrote `config.json` keeps its old **4173** origin, because a port is part of a browser origin and moving it would strand bookmarks and LAN-pairing tokens); `<data_dir>/runtime.json` holds `{port, token}`, written by the daemon, read by the shim per invocation.
@@ -138,7 +138,7 @@ unknown), which is how the dashboard tells a `/clear` from a fork
 
 ### settings.json registration shape
 
-The installer writes, for each of the nine events, a matcher-less entry (`matcher` omitted — `UserPromptSubmit` and `Stop` do not accept matchers) of the form `{"hooks":[{"type":"command","command":"<data_dir>/caprock-hook","timeout":5}]}` and leaves every other key, every pre-existing hook, **and the user's key order** untouched (ordered-JSON merge). The registered command is written with **forward slashes and double quotes**, on every platform: Claude Code runs hooks through a POSIX shell, where a backslash is an escape, so a Windows path reached it as `C:UsersVolasAppData…caprock-hook.exe` and every hook failed while the dashboard — still fed by transcript tailing — looked healthy. Windows accepts forward slashes in every API, and the quotes keep a path with a space (`C:/Program Files/…`, or the macOS `~/Library/Application Support/…`) from splitting into two words. Either fix alone is insufficient. `statusLine.command` is written the same way and had the same defect. Entries in any earlier form — bare, quoted, backslashed — are still recognised as ours, so an upgrade neither reports a working install as missing nor overwrites a line the user repaired by hand. When no `caprock-hook` binary sits beside the `caprock` executable, the registered command is `<caprock> hook` (a hidden subcommand running the same shim code). Uninstall removes only entries whose `command` points at a Caprock shim (exact path, or basename `caprock-hook[.exe]`, or `<caprock> hook`) and drops empty containers it leaves behind. Backups are `settings.json.caprock-backup-<unix-ts>` next to the original, taken before a modification **whenever the current content is not already captured by an existing backup** — a backup taken once and never refreshed goes stale (the audited machine had a 10 July snapshot of a file last edited 20 August) and would restore a file the user no longer recognises. Identical content is never snapshotted twice, so repeated runs over an unchanged file add nothing. A same-second second backup gets a `-2` suffix rather than overwriting its predecessor. At most 5 are kept: the oldest (the closest thing to a pre-Caprock state) plus the most recent 4. `caprock hooks restore` lists them and restores one by path, snapshotting the current file first so the restore is itself undoable; it refuses an unparsable backup. An unparsable settings.json is never modified.
+The installer writes, for each of the nine events, a matcher-less entry (`matcher` omitted — `UserPromptSubmit` and `Stop` do not accept matchers) of the form `{"hooks":[{"type":"command","command":"<data_dir>/caprock-hook","timeout":5}]}` and leaves every other key, every pre-existing hook, **and the user's key order** untouched (ordered-JSON merge). The registered command is written with **forward slashes and double quotes**, on every platform: Claude Code runs hooks through a POSIX shell, where a backslash is an escape, so a Windows path reached it as `C:UsersVolasAppData…caprock-hook.exe` and every hook failed while the dashboard — still fed by transcript tailing — looked healthy. Windows accepts forward slashes in every API, and the quotes keep a path with a space (`C:/Program Files/…`, or the macOS `~/Library/Application Support/…`) from splitting into two words. Either fix alone is insufficient. `statusLine.command` is written the same way and had the same defect. Entries in any earlier form — bare, quoted, backslashed — are still recognised as ours, so an upgrade neither reports a working install as missing nor overwrites a line the user repaired by hand. When no `caprock-hook` binary sits beside the `caprock` executable, the registered command is `<caprock> hook` (a hidden subcommand running the same shim code). **Self-repair at daemon start** (`hooks.RepairPaths`, run only by a released binary named `caprock`, never a `dev` or `git describe` build, which would point the hooks at a worktree): an entry of ours whose program is missing or is a different file from the one an install would register now (an uninstalled Homebrew `caprock-hook`, say) is pointed at the current command; where the event already runs the current one, the stale entry is removed instead, so no event fires twice. A user's own hooks are never touched, and nothing is rewritten when the current shim does not exist either. Uninstall removes only entries whose `command` points at a Caprock shim (exact path, or basename `caprock-hook[.exe]`, or `<caprock> hook`) and drops empty containers it leaves behind. Backups are `settings.json.caprock-backup-<unix-ts>` next to the original, taken before a modification **whenever the current content is not already captured by an existing backup** — a backup taken once and never refreshed goes stale (the audited machine had a 10 July snapshot of a file last edited 20 August) and would restore a file the user no longer recognises. Identical content is never snapshotted twice, so repeated runs over an unchanged file add nothing. A same-second second backup gets a `-2` suffix rather than overwriting its predecessor. At most 5 are kept: the oldest (the closest thing to a pre-Caprock state) plus the most recent 4. `caprock hooks restore` lists them and restores one by path, snapshotting the current file first so the restore is itself undoable; it refuses an unparsable backup. An unparsable settings.json is never modified.
 
 ## HTTP API (daemon, loopback)
 
@@ -312,6 +312,7 @@ machine must carry a device token** ([ADR-029](08-decisions.md)).
   the role: `/v1/pair/*` but `me`, settings writes (`PUT /v1/settings`,
   Telegram, GitHub connect, custom agents, subscriptions, Second Brain's
   settings), `POST /v1/footprint/orphans/stop`, `POST /v1/resources/reap`,
+  `POST /v1/system/memory/end-idle`, `POST /v1/system/memory/restart`,
   `POST /v1/shutdown`, `POST /v1/update/check`, `POST /v1/hooks/install`,
   `open-terminal`, the editor routes, `POST /v1/sessions/remove`,
   `/v1/machines` and `/v1/m/…`. Rule 7 is unchanged: the agent manager
@@ -640,6 +641,8 @@ Every error is JSON `{error, detail}`. Returns 501 when the daemon has no data d
 Everything on this socket used to be treated as keystrokes, so there was no way to tell the daemon the window had changed size: `Resize` was declared on the interface and called by nothing, and a PTY kept the size it was born with — 120×40 by default — for its whole life. Claude Code lays its menus out to the terminal size, so on any other window it drew an interface for a screen that was not there. Arrow keys moved a selection nobody could see, which is what the first user reported as "only Enter works".
 
 A text frame that is not valid control JSON is still written through as input, so a dashboard that predates this against a newer daemon keeps typing rather than going mute.
+
+**Refusals, and asking why.** The upgrade is refused with **409** `session is not owned by caprock` when this daemon does not hold the session's terminal (its process is gone, or its pty-host died, say with a restart of the background service), and with **501** `spawning unavailable` only when, on top of that, no agent can be started here: a session the daemon holds is served whether or not a new one could be started (a daemon started with a bare `PATH` used to refuse every open terminal). A browser is never told why an upgrade failed — the socket just closes, 1006 — so a **plain `GET` on the same route, without `Upgrade: websocket`, is the terminal's diagnosis**: **204** when the socket would be accepted, otherwise the same refusal with its reason (409, 501, or 403 for a shell asked for from a phone). It starts nothing and subscribes to nothing. A paired device sends its token as `X-Caprock-Device`. The dashboard asks after three sockets in a row closed without opening, at most every 15 s, and shows the answer with what to do; a 409 still standing when asked again 10 s or more later ends the terminal (`ui/src/lib/termv2.ts`; [04-ui.md](04-ui.md) § the terminal's connection).
 
 ### Permission mode of a running session
 
@@ -1276,7 +1279,7 @@ own memory as below). Only reads: nothing is signalled except by the reap below.
 {"at": 1791400000000,
  "sessions": [{"session_id": "…", "pid": 4242, "cpu_pct": 182.4, "mem_bytes": 1342177280, "procs": 7, "warm": true,
                "top": [{"pid": 4300, "name": "node vite", "cpu_pct": 150.2, "mem_bytes": 1181116006}],
-               "hot": true, "over_since": 1791399800000}],
+               "hot": true, "over_since": 1791399800000, "max_proc_bytes": 1181116006, "heavy": "big"}],
  "caprock": {"daemon": {"pid": 1, "name": "caprock", "cpu_pct": 1.2, "mem_bytes": 220000000},
              "app": {"pid": 2, "name": "caprock-app", "cpu_pct": 2.0, "mem_bytes": 48000000},
              "webview": {"count": 4, "cpu_pct": 2.1, "mem_bytes": 446000000,
@@ -1308,6 +1311,17 @@ own memory as below). Only reads: nothing is signalled except by the reap below.
   under both. The limits are round numbers chosen to separate "an agent
   waiting on the model" (a few percent) from "the machine will feel this", not
   measured thresholds.
+- **Heavy** (2026-10-22). `max_proc_bytes` is the tree's largest process's
+  own memory. `heavy` is `big` when that process holds max(3 GiB, a fifth of
+  `machine.mem_total`), `growing` when its readings — one written down every
+  10 min, kept 4 h — cover 2 h or more, gained 1 GiB or more and never fell
+  back by more than a twentieth between two; absent otherwise, and on a
+  shell. Long sessions of an agent's CLI grow: on the owner's Mac one Claude
+  Code process had a 2.7 GB footprint (peak 3.7 GB), 2 GB of it compressed,
+  with a resident set of 0.6 GB (2026-10-22) — why memory here is the
+  footprint, never the RSS. The figures are chosen, not measured. The
+  readings exist only while the meter samples, so "for hours" is measured by
+  their times, gaps and all.
 - **Caprock itself.** `daemon` is this process; `app` is the desktop app's
   shell process (`caprock-app`), absent when it is not running. `webview`
   (2026-10-13) is the processes that draw the app's window, absent without
@@ -1335,6 +1349,8 @@ own memory as below). Only reads: nothing is signalled except by the reap below.
   without swapping as the OS judges it (gopsutil `VirtualMemory`: macOS free
   plus inactive pages, Linux `MemAvailable`, Windows available physical
   memory). Absent when the OS gave none of it, and from a daemon before it.
+  `memory` (2026-10-22) is the machine's memory split by who holds it, with
+  the OS's pressure (§ System memory).
   Another computer reads it through `/v1/m/{id}/v1/resources`. Nothing acts
   on it yet: the New-agent line *"This Mac is busy — run it on …?"* waits for
   thresholds set from OQ-19's measurement ([12-risks.md](12-risks.md)).
@@ -1388,6 +1404,122 @@ nobody else cleans up after a user's Caprock. Rule 7 allows it because every
 one is a Caprock's own holder, a process some Caprock started; a holder
 running an agent or a command is never stopped. Each reap that stops
 anything is written to the footprint's `actions` (§ Footprint).
+
+#### System memory
+
+The machine's memory as a whole (2026-10-22): how full it is, who holds it,
+and ending the idle agents Caprock started on the user's click. A user's Mac
+froze with agents holding all its memory while the status bar said only what
+the agent in front used. Code: `internal/procstat/sysmem*.go` (the readings),
+`internal/daemon/sysmem.go` (the split, the states, the end). The status
+bar's item and popover are in [04-ui.md § Status strip](04-ui.md).
+
+**On every resource sample** (§ Resources, *When it samples*: every 5 s, only
+while a dashboard is open) the `resources` frame and `GET /v1/resources`
+carry `memory`, totals only — the live socket reaches every paired device:
+
+```json
+"memory": {"label": "Mac", "total": 17179869184, "used": 14110726144,
+           "swap_total": 9663676416, "swap_used": 8957198336, "swap_growing": false,
+           "pressure": "warn", "level": "tight",
+           "agents": 6657199308, "agent_count": 7, "caprock": 419430400, "other": 7034096436}
+```
+
+- **Read from.** macOS: `hw.memsize`, `host_statistics64(HOST_VM_INFO64)`
+  through libSystem (no process started), `vm.swapusage` and
+  `kern.memorystatus_vm_pressure_level` (1 `normal`, 2 `warn`, 4
+  `critical`). `used` is Activity Monitor's *Memory Used*: app memory
+  (anonymous pages less purgeable), wired and compressed; cached files are
+  not in it. Linux: `/proc/meminfo` (`used` is `MemTotal − MemAvailable`)
+  and, where the kernel keeps PSI, `/proc/pressure/memory`: `critical` when
+  `full avg10` ≥ 10, `warn` when `some avg10` ≥ 10 — round numbers chosen,
+  not measured; Linux has no levels of its own. Windows:
+  `GlobalMemoryStatusEx` (gopsutil); no pressure and no swap are read, so
+  `pressure`, `swap_total` and `swap_used` are absent.
+- **`label`** is `Mac`, `Linux`, `Windows`, or `Memory` elsewhere.
+- **`level`.** `critical` when `pressure` is `critical` or `swap_growing`;
+  `tight` when `pressure` is `warn` or `used` is 85% of `total` or more;
+  else `normal`. `swap_growing` is swap in use that grew by 256 MiB or more
+  within the last 30 s of samples. 85%, 256 MiB and 30 s are chosen, not
+  measured: room for one more agent on a 16 GB machine, and well above the
+  trickle an idle Mac swaps.
+- **Per-process memory** is the process's own, as in § Resources: on macOS
+  its physical footprint (`proc_pid_rusage` with `RUSAGE_INFO_V2`,
+  `ri_phys_footprint`, called through libSystem with purego — no cgo),
+  compressed pages included, which is what Activity Monitor shows; the
+  resident set only if that call fails. Linux `RssAnon + RssShmem`, Windows
+  private bytes.
+- **The split.** `agents` is every live session's process tree that is not a
+  shell (§ Resources' trees, each process tree once: `/clear` lists one
+  process under two ids), `agent_count` how many; `caprock` the daemon, the
+  terminal holders, the app and its web view; `other` the rest of `used`,
+  the system's own memory included. Per-process memory is each process's
+  own (§ Resources), so the parts are estimates of who holds `used`, not an
+  exact partition of it.
+- **Test hook.** `CAPROCK_TEST_MEMORY_PRESSURE=normal|warn|critical` in the
+  daemon's environment replaces the OS's `pressure` and sets
+  `"simulated": true`; any other value is ignored. For screenshots and
+  browser checks only; Caprock never sets it.
+- **Cost** (measured 2026-10-22, Apple M1 Pro, 16 GB, 669 processes,
+  `BenchmarkSystemMemory`): 7.4 µs per sample.
+
+`GET /v1/system/memory` is the popover's list, read only while it is open:
+
+```json
+{"at": 1791400000000,
+ "memory": {…the object above…},
+ "agents": [{"session_id": "…", "pid": 4242, "mem_bytes": 1932735283, "procs": 9,
+             "owned": true, "state": "idle", "idle_since": 1791397480000, "endable": true,
+             "max_proc_bytes": 1610612736, "heavy": "growing", "restartable": true}],
+ "apps": [{"name": "Google Chrome", "mem_bytes": 7348010288, "procs": 49}],
+ "idle_end": {"count": 3, "mem_bytes": 2576980377, "session_ids": ["…"]},
+ "error": "…"}
+```
+
+- **`agents`**, largest first: each tree in `memory.agents`, with `owned`
+  (Caprock started it) and `state` — `working` (mid-turn as the keep-awake
+  keeper reads it, or anything drawn or written in the last 2 min), `waiting`
+  (a permission prompt or question open, a message queued, a subagent at
+  work, paused, or the turn ended asking the user something), or `idle`,
+  with `idle_since` its last activity (§ Ending idle sessions' *last
+  activity*). `endable` is an idle agent Caprock started that is not the
+  orchestrator or one of its workers; a session another terminal started is
+  never endable.
+- **`max_proc_bytes`, `heavy`** are the tree's, as in § Resources' *Heavy*.
+  **`restartable`** is an agent Caprock started, not the orchestrator or a
+  worker, whose state is not `working`: Restart it fresh may run now.
+- **`apps`**: the three other apps using the most, every process of this
+  user outside the agents' trees and Caprock's own counted once under its
+  app — on macOS under the process macOS holds responsible for it, named
+  after its outermost `.app` (Chrome's renderers under *Google Chrome*), or
+  the program's name. Other users' processes cannot be read and stay in
+  `memory.other`. **Absent for a paired device**, which reads totals and
+  agents, not what else runs on the machine. Cost (same machine and date):
+  7.8 ms, 89 ms on the first ask while the executables are looked up once.
+- **`idle_end`** is what the button would end: the `endable` agents, how
+  many and their memory together.
+
+`POST /v1/system/memory/end-idle` `{"session_ids": ["…"]}` (1 to 256) →
+`{"ended": ["…"], "skipped": [{"session_id": "…", "why": "working"}]}`.
+Each named session is judged again under its queue lock and ended only if it
+is still `endable`; `why` is its state, `not started by Caprock`, or
+`already ending`. Ending is End's, the same as closing an idle agent's tab:
+asked first, so the transcript is written, killed after the grace; the
+conversation is continued later like any ended one. The session is not
+marked as ended for idling (§ Ending idle sessions) — the user ended it.
+A confirmed user action, never automatic; machine only — on no paired
+device's list.
+
+`POST /v1/system/memory/restart` `{"session_id": "…"}` →
+`{"ended": true, "cwd": "/…", "agent": "claude"}` or `{"ended": false, "why":
+"working"}`: the first half of **Restart it fresh**, offered on a heavy
+agent. The daemon judges the session under its queue lock — started by
+Caprock (`not started by Caprock` otherwise), `restartable` (`why` is its
+state otherwise), not already ending — ends it with End, and answers once the
+process has exited (up to End's grace and 3 s more; `it has not exited yet`
+past that). The dashboard then continues it as Continue does, `POST
+/v1/agents` with `resume` and `fork: false` in `cwd`: same conversation, a
+new process. A click, never automatic; machine only.
 
 #### Footprint
 
@@ -6816,7 +6948,7 @@ together.
 
 ## Statusline
 
-`caprock statusline` is registered as Claude Code's `statusLine.command`. Registration is offered by `caprock up` (same consent contract as hooks — TTY prompt or `--yes`) and can be done or reverted explicitly with `caprock statusline install` / `caprock statusline uninstall`; it writes the single `statusLine` key in `~/.claude/settings.json` (backed up once) and never clobbers a statusLine the user set to something else. One entry of ours **is** rewritten: a version quoted the whole command (`"…/caprock statusline"`), which the shell resolves as a single nonexistent filename, so the line printed nothing and said nothing about why — `up` recognises that spelling, repairs it, and says it did. Nothing else is normalised; a working command of ours is left as it is. Claude Code pipes its status JSON on stdin (per assistant message, 300ms debounce); the command prints a compact one-line status to stdout (`⛰ · model · ctx% · $cost · 5h N% resets HH:MM · 7d N%`) and, best-effort, forwards the `rate_limits` windows (`used_percentage` 0–100, `resets_at` unix seconds) to the daemon via `POST /v1/statusline`. Like the shim it is fire-and-forget and can never break the session: it prints from the stdin JSON **first**, then POSTs with a ≤300ms budget, drops silently if the daemon is down, and always exits 0. `rate_limits` is present only for Pro/Max subscribers (absent → the line still renders, no POST). The daemon's `/v1/stats/summary` returns `rate_limits` (current window state) with a `forecast` string only when the measured usage slope is rising and would reach the limit before the window resets — otherwise the fact alone, never a guess. `limit_at` (unix ms) is set exactly when `forecast` is: the time that same pace reaches 100%, so the dashboard can name the clock time ("around 19:10 — about 1 h before it resets") without parsing the sentence.
+`caprock statusline` is registered as Claude Code's `statusLine.command`. Registration is offered by `caprock up` (same consent contract as hooks — TTY prompt or `--yes`) and can be done or reverted explicitly with `caprock statusline install` / `caprock statusline uninstall`; it writes the single `statusLine` key in `~/.claude/settings.json` (backed up once) and never clobbers a statusLine the user set to something else. One entry of ours **is** rewritten: a version quoted the whole command (`"…/caprock statusline"`), which the shell resolves as a single nonexistent filename, so the line printed nothing and said nothing about why — `up` recognises that spelling, repairs it, and says it did. The daemon, at start, also repoints an entry of ours whose program is missing or is another binary (a `/opt/homebrew/bin/caprock` that was uninstalled) at its own stable path (`hooks.RepairPaths`), keeping any flags after `statusline`. Nothing else is normalised; a working command of ours, by any spelling of this binary's path, is left as it is, and a statusLine of the user's own is never touched. Claude Code pipes its status JSON on stdin (per assistant message, 300ms debounce); the command prints a compact one-line status to stdout (`⛰ · model · ctx% · $cost · 5h N% resets HH:MM · 7d N%`) and, best-effort, forwards the `rate_limits` windows (`used_percentage` 0–100, `resets_at` unix seconds) to the daemon via `POST /v1/statusline`. Like the shim it is fire-and-forget and can never break the session: it prints from the stdin JSON **first**, then POSTs with a ≤300ms budget, drops silently if the daemon is down, and always exits 0. `rate_limits` is present only for Pro/Max subscribers (absent → the line still renders, no POST). The daemon's `/v1/stats/summary` returns `rate_limits` (current window state) with a `forecast` string only when the measured usage slope is rising and would reach the limit before the window resets — otherwise the fact alone, never a guess. `limit_at` (unix ms) is set exactly when `forecast` is: the time that same pace reaches 100%, so the dashboard can name the clock time ("around 19:10 — about 1 h before it resets") without parsing the sentence.
 
 The line also carries **the session's own counters**, which the stdin JSON does not: `N turns · N steps · cache −N% · in N · out N`. They are on by default and need no registration change — an existing `… statusline` entry starts showing them on upgrade, with nothing written to the user's settings. `--plain` opts out. `--rich` survives as a hidden no-op so that a settings.json written while it was still a flag keeps working; nothing new registers it. They come from `GET /v1/statusline/{id}` (bearer-gated), which returns `turns`, `tool_calls`, `tokens_in`, `tokens_out`, `cache_read` and `cache_write` from `session_stats` — one indexed row, no derived work, because this runs ahead of a line the user is waiting for. An unknown session returns zeros rather than 404: the first call of a session races its first turn being recorded, and the caller renders both the same way.
 
@@ -6959,7 +7091,9 @@ on Windows — taken before the database is opened, and writes its pid into
 the file. A second daemon waits up to 5 s (a restart: the app's supervisor,
 a login service, an update) and then exits with `another Caprock daemon (pid
 N) is already running for this data directory (<dir>)`, the pid read from
-`runtime.json`, else from the lock file; `caprock up` shows that line. The
+the lock file, else from `runtime.json` (which is the previous run's until
+the holder listens); `caprock up` shows that line, and the desktop app
+waits for that holder rather than failing ([21-app.md](21-app.md)). The
 OS drops the lock when the process exits however it exits, so nothing stale
 is left; the file stays. Files are opened close-on-exec, so holders never
 inherit it. A filesystem that cannot lock at all is logged and run without

@@ -459,6 +459,7 @@ func (d *Daemon) run(ctx context.Context) error {
 		d.waitBackground(bgStopWithin)
 	}()
 	d.baseCtx = ctx
+	applyMemoryLimit(d.log)
 	startPprof(ctx, d.log)
 	// Before anything reads a credential: a key an older release left in
 	// config.json moves to the secret store here, once.
@@ -731,6 +732,9 @@ func (d *Daemon) run(ctx context.Context) error {
 		ResourceHistory: func(since int64) any { return d.resourceHistory(since) },
 		Footprint:       func(ctx context.Context, orphans, fresh bool) any { return d.footprint(ctx, orphans, fresh) },
 		StopOrphans:     func(ctx context.Context, t []api.OrphanTarget, force bool) any { return d.stopOrphans(ctx, t, force) },
+		SystemMemory:    func(ctx context.Context, paired bool) any { return d.systemMemory(ctx, paired) },
+		EndIdleAgents:   func(ctx context.Context, ids []string) any { return d.endIdle.endIdleNow(ctx, ids) },
+		RestartEnd:      func(ctx context.Context, id string) any { return d.endIdle.restartEnd(ctx, id) },
 		KeepAwake:       d.keepAwakeStatus,
 		OpenTabs:        d.tabs.report,
 		LatestTabs:      d.tabs.latest,
@@ -829,6 +833,9 @@ func (d *Daemon) run(ctx context.Context) error {
 	// normal case and is silent. With the CLI installed it starts even with no
 	// transcripts yet: the first rollout may be one a session Caprock starts.
 	d.startCodex(ctx, d.mgr.AgentAvailable(agents.AgentCodex))
+	// The data-dir shim and our settings.json commands pointed at this
+	// install, off the start path (selfrepair.go).
+	d.goBg(d.repairHookPaths)
 	// Each subscription's directory (ADR-048): its hooks brought up to date
 	// and its transcripts read.
 	d.startSubscriptions()

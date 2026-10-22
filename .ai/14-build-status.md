@@ -77,6 +77,46 @@ Percentages are deliberately coarse — they answer "is this track started, half
 
 ## Log
 
+### 2026-10-22 — unreleased: memory of the window and the daemon
+
+After four hours the owner's window was about 600 MB and the daemon about
+400 MB, and a user's Mac froze when memory ran out. Measured on throwaway
+stands (never the live install):
+
+- **Window.** Every tab kept 10,000 lines of xterm scrollback, 12 bytes a
+  cell: ten full tabs held 103 MB of buffers at 118 columns. A tab out of
+  sight ten minutes now trims to 1,000 lines and gets 10,000 back when shown;
+  the same ten tabs then hold 24 MB (renderer footprint 294 → 193 MB). Not
+  disposing and rebuilding from the ring was deliberate: the ring starts
+  mid-frame. Table and method in [04-ui.md](04-ui.md) under *Scrollback is
+  10,000 lines*; audit F9.
+- **Daemon.** Under 30 minutes of heavy synthetic ingest the live Go heap
+  stayed at about 20 MB (no leak); the footprint grew 25 → 152 MB as Go's
+  headroom (up to 86 MB mapped) and SQLite's page caches (69 MB, bounded by
+  `cache_size`) grew. Fixed what grows without bound: dashboard answer
+  caches dropped no key, so yesterday's ranges stayed for the daemon's life
+  (now swept once a minute when too old to show); an owned session that
+  crashed kept up to 64 tool inputs. A soft 256 MiB `SetMemoryLimit` on
+  Go's memory, a ceiling the load never reached. `/debug/caprock/mem` on the
+  profiling listener splits Go from SQLite. See
+  [10-infrastructure.md](10-infrastructure.md) § Profiling the daemon.
+
+### 2026-10-22 — unreleased: the machine's memory on the status bar
+
+A user's Mac froze with agents holding all its memory while the status bar
+said only what the agent in front used. The bar now shows the machine's
+memory — green, amber when the OS warns or 85% is used, red when the
+pressure is critical or swap keeps growing — read on each resource sample
+(7.4 µs on an M1 Pro: host_statistics64 and two sysctls; `/proc/meminfo` and
+PSI on Linux; GlobalMemoryStatusEx on Windows). A click lists who holds it
+and offers to end the idle agents Caprock started, through End as a closed
+tab does; agents started elsewhere are never touched, and a paired phone gets
+totals without other apps' names. An agent whose one process passes
+max(3 GiB, a fifth of the machine), or grows steadily for hours, is flagged
+in the popover and its inspector with Restart it fresh (End, then continue
+with --resume). See [03-contracts.md](03-contracts.md)
+§ System memory.
+
 ### 2026-10-22 — unreleased: Second Brain re-tags memories without keywords
 
 Migration 0069 gave each new memory English keywords, but the memories kept

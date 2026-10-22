@@ -118,6 +118,10 @@ type Deps struct {
 	// /v1/tabs: a session with a tab is never ended for idling
 	// (daemon/endidle.go). nil ⇒ 501.
 	OpenTabs func(viewer string, sessions []string) error
+	// LatestTabs is the reported list GET /v1/tabs answers with, in tab-strip
+	// order: the window on screen whose tabs changed last; ok is false when
+	// no viewer's report counts. nil ⇒ 501.
+	LatestTabs func() (sessions []string, at int64, ok bool)
 	// WindowStop returns the plan-window stop's state for GET
 	// /v1/window-stop: the share, whether a licence is active, the figures it
 	// acts on and how fresh they are, and the sessions it has paused. nil ⇒ 501.
@@ -188,6 +192,9 @@ type Deps struct {
 	// Catalog answers the agent pickers and keeps the custom agents
 	// (ADR-046). nil ⇒ /v1/agents/catalog and /v1/agents/custom return 501.
 	Catalog AgentCatalog
+	// MCP reads and changes whether `caprock mcp` is registered with Claude
+	// Code and Codex (ADR-078). nil ⇒ /v1/mcp/agents returns 501.
+	MCP MCPRegistrar
 	// Subscriptions keeps the sign-ins of Settings → Subscriptions (ADR-048).
 	// nil ⇒ /v1/subscriptions returns 501.
 	Subscriptions SubscriptionManager
@@ -524,8 +531,12 @@ type Server struct {
 	// shellsSent is the shell list last sent as a "shells" frame (PublishShells).
 	shellsMu   sync.Mutex
 	shellsSent []byte
-	pairing    *pairing.Store
-	lanURL     string
+	// attn is each private module's attention as last read or set, nil for
+	// one known to have none (moduleattention.go).
+	attnMu  sync.Mutex
+	attn    map[string]*ModuleAttention
+	pairing *pairing.Store
+	lanURL  string
 	// altURLs are the other addresses network access answers on, beside
 	// lanURL: the Tailscale one when lanURL is the LAN one, or the reverse,
 	// and the MagicDNS name (WP-15). Empty when off.
@@ -717,6 +728,7 @@ func New(d Deps) *Server {
 	m.HandleFunc("GET /v1/keepawake", s.handleKeepAwake)
 	m.HandleFunc("PUT /v1/settings", s.handlePutSettings)
 	m.HandleFunc("PUT /v1/tabs", s.handlePutTabs)
+	m.HandleFunc("GET /v1/tabs", s.handleGetTabs)
 	m.HandleFunc("POST /v1/report/test", s.handleTestReport)
 	m.HandleFunc("POST /v1/alerts/test", s.handleTestAlert)
 	m.HandleFunc("GET /v1/telegram", s.handleTelegram)
@@ -752,6 +764,7 @@ func New(d Deps) *Server {
 	m.HandleFunc("GET /v1/premium", s.handlePremium)
 	s.routeModules(m)
 	s.routeModuleOut(m)
+	s.routeModuleAttention(m)
 	m.HandleFunc("GET /v1/gemini", s.handleGeminiStatus)
 	m.HandleFunc("POST /v1/gemini/ask", s.handleGeminiAsk)
 	m.HandleFunc("GET /v1/pricing", s.handlePricing)
@@ -882,7 +895,13 @@ func New(d Deps) *Server {
 	m.HandleFunc("DELETE /v1/brain/vaults/{id}", s.handleRemoveBrainVault)
 	m.HandleFunc("GET /v1/brain", s.handleBrainGraph)
 	m.HandleFunc("GET /v1/brain/status", s.handleBrainStatus)
+	// Connect Caprock's MCP server to the user's agents (mcpreg.go, ADR-078).
+	m.HandleFunc("GET /v1/mcp/agents", s.handleMCPAgents)
+	m.HandleFunc("POST /v1/mcp/agents/{agent}/connect", s.handleMCPConnect)
+	m.HandleFunc("POST /v1/mcp/agents/{agent}/disconnect", s.handleMCPDisconnect)
 	m.HandleFunc("GET /v1/brain/handoff", s.handleBrainHandoff)
+	m.HandleFunc("GET /v1/brain/spend", s.handleBrainSpend)
+	m.HandleFunc("GET /v1/brain/decisions", s.handleBrainDecisions)
 	m.HandleFunc("POST /v1/brain/nodes", s.handleBrainDrop)
 	m.HandleFunc("GET /v1/brain/nodes/{id}", s.handleBrainNode)
 	m.HandleFunc("PATCH /v1/brain/nodes/{id}", s.handlePatchBrainNode)

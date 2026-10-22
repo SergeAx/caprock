@@ -21,11 +21,15 @@ const (
 	DefaultModel = "haiku"
 	// DefaultDailyTokens caps what the extraction spends in a rolling day.
 	DefaultDailyTokens = 300_000
-	// Interval is how often the extraction wakes; each wake reads at most
-	// Batch sessions. A wake that read a full Batch is followed by the next
-	// after Continue, not Interval: while a build has sessions waiting it
-	// reads one after another, within the daily cap, so the screen shows it
-	// working instead of a pause of five minutes between every four.
+	// Interval is how often the extraction wakes; each wake makes at most
+	// Batch calls to claude. A session with more unread prose than one read
+	// sends (MaxInputChars) is read in chunks, oldest first and back to
+	// back, each chunk one of the wake's Batch calls; what is left of it
+	// waits for the next wake, which picks it up first. A wake that made a
+	// full Batch is followed by the next after Continue, not Interval: while
+	// a build has sessions waiting it reads one after another, within the
+	// daily cap, so the screen shows it working instead of a pause of five
+	// minutes between every four.
 	Interval = 5 * time.Minute
 	Batch    = 4
 	Continue = 3 * time.Second
@@ -178,7 +182,8 @@ func (e *Engine) Kick() {
 }
 
 // Wake reads up to Batch sessions, if the extraction may run, and returns
-// how many it read. One wake at a time.
+// how many calls it made. With no session waiting it re-tags memories that
+// have no keywords instead (retag.go). One wake at a time.
 func (e *Engine) Wake(ctx context.Context) (int, error) {
 	if !e.Enabled() {
 		return 0, nil
@@ -196,30 +201,59 @@ func (e *Engine) Wake(ctx context.Context) (int, error) {
 		e.running = false
 		e.mu.Unlock()
 	}()
+	if err := e.FindGaps(ctx); err != nil && ctx.Err() == nil {
+		e.log().Warn("second brain: finding the skipped spans failed", "component", "brain", "err", err)
+	}
 	cands, err := e.candidates(ctx, 25)
 	if err != nil {
 		return 0, err
 	}
+	if len(cands) == 0 {
+		// No session waits: the wake's calls go to the catch-up of skipped
+		// text (catchup.go), then what is left of them to the re-tag
+		// (retag.go); a session that comes to wait overtakes both at the
+		// next wake.
+		read, err := e.readGaps(ctx, 0)
+		if err != nil || read >= Batch {
+			return read, err
+		}
+		tagged, err := e.retag(ctx, Batch-read)
+		return read + tagged, err
+	}
 	read := 0
 	for _, c := range cands {
-		if read >= Batch || ctx.Err() != nil || !e.Enabled() {
-			break
-		}
-		if e.spent(ctx) >= e.dailyCap() {
-			e.setError("today's token limit is reached; reading resumes as the day rolls over")
-			break
-		}
-		did, err := e.readSession(ctx, c)
-		if err != nil {
-			// A failure is recorded and retried later; the next session goes on.
-			e.setError(err.Error())
-			e.log().Warn("second brain: a read failed", "component", "brain", "session", c.SessionID, "err", err)
-		}
-		if did {
-			read++
+		// A long session's chunks, oldest first, until it is read through
+		// or the wake's Batch calls are spent. Each chunk moves the cursor,
+		// so the loop always ends.
+		for {
+			if read >= Batch || ctx.Err() != nil || !e.Enabled() {
+				return read, nil
+			}
+			if e.spent(ctx) >= e.dailyCap() {
+				e.setError("today's token limit is reached; reading resumes as the day rolls over")
+				return read, nil
+			}
+			did, through, err := e.readSession(ctx, c)
+			if did {
+				read++
+			}
+			if err != nil {
+				// A failure is recorded and retried later; the next session goes on.
+				e.setError(err.Error())
+				e.log().Warn("second brain: a read failed", "component", "brain", "session", c.SessionID, "err", err)
+				break
+			}
+			if through <= c.Cursor || through >= c.MaxEventID {
+				break
+			}
+			c.Cursor = through
 		}
 	}
-	return read, nil
+	// The catch-up only when no session waits: new sessions come first.
+	if rest, err := e.candidates(ctx, 25); err != nil || len(rest) > 0 {
+		return read, err
+	}
+	return e.readGaps(ctx, read)
 }
 
 func (e *Engine) setError(s string) {
@@ -283,37 +317,89 @@ func (e *Engine) model() string {
 	return DefaultModel
 }
 
-// readSession reads one session: skips it when there is too little to say,
-// gives up after MaxFailures, else asks claude and keeps what comes back.
-// did is true when claude was called.
-func (e *Engine) readSession(ctx context.Context, c store.BrainCandidate) (did bool, err error) {
+// passagesPerRead is the most passages one read fetches. A read sends what
+// fits in MaxInputChars of them; a full page that all fits still leaves the
+// rest for the next read.
+const passagesPerRead = 400
+
+// chunk is the next read of a session after its cursor: the oldest unread
+// passages that fit, and how far the cursor may move once they are read —
+// past the last passage sent when some did not fit, else to the session's
+// newest event.
+func chunk(ctx context.Context, q store.Querier, c store.BrainCandidate, topics []string, known Known) (Input, int64, error) {
+	passages, err := store.BrainPassagesBetween(ctx, q, c.SessionID, c.Cursor, c.MaxEventID, passagesPerRead)
+	if err != nil {
+		return Input{}, 0, err
+	}
+	in := BuildInputKnown(c.Project, topics, known, passages)
+	through := c.MaxEventID
+	if (in.Cut || len(passages) >= passagesPerRead) && in.Through > c.Cursor && in.Through < c.MaxEventID {
+		through = in.Through
+	}
+	return in, through, nil
+}
+
+// readSession reads the next chunk of one session: skips it when there is
+// too little to say, gives up after MaxFailures, else asks claude and keeps
+// what comes back. did is true when claude was called; through is how far
+// the session's cursor now is when the read was recorded (below
+// c.MaxEventID while unread prose remains), 0 when nothing was recorded.
+//
+// Too little to say at the end of a session that has not ended is held,
+// not skipped: the cursor stays, so that prose is read with what the
+// session says next, and the session is not looked at again until it has
+// newer events or ends. Once it has ended, a short tail is marked read.
+func (e *Engine) readSession(ctx context.Context, c store.BrainCandidate) (did bool, through int64, err error) {
 	db := e.Store.DB()
 	started := e.now().UnixMilli()
 	run := store.BrainRun{SessionID: c.SessionID, FromEventID: c.Cursor, ThroughEventID: c.MaxEventID, StartedAt: started, Model: e.model()}
 	n, _, err := store.BrainFailures(ctx, db, c.SessionID)
 	if err != nil {
-		return false, err
+		return false, 0, err
 	}
 	if n >= MaxFailures {
 		run.Status, run.Error, run.FinishedAt = store.BrainRunSkipped, "gave up after repeated failures", started
 		_, err := store.InsertBrainRun(ctx, db, run)
-		return false, err
+		return false, 0, err
 	}
-	passages, err := store.BrainPassages(ctx, db, c.SessionID, c.Cursor, 400)
-	if err != nil {
-		return false, err
-	}
+	c.Project = memoryProject(ctx, c)
 	topics, err := store.BrainEntityTitles(ctx, db, store.BrainTopic, topicsSent)
 	if err != nil {
-		return false, err
+		return false, 0, err
 	}
-	in := BuildInput(c.Project, topics, passages)
-	if in.ProseRunes < MinProseRunes {
+	known, err := knownFor(ctx, db, c.Project)
+	if err != nil {
+		return false, 0, err
+	}
+	in, upTo, err := chunk(ctx, db, c, topics, known)
+	if err != nil {
+		return false, 0, err
+	}
+	run.ThroughEventID = upTo
+	if !in.WorthReading() {
 		run.Status, run.FinishedAt = store.BrainRunSkipped, started
-		_, err := store.InsertBrainRun(ctx, db, run)
-		return false, err
+		if upTo >= c.MaxEventID && !c.Ended {
+			run.Held, run.Error = true, "held: too little to read yet"
+			_, err := store.InsertBrainRun(ctx, db, run)
+			return false, 0, err
+		}
+		if _, err := store.InsertBrainRun(ctx, db, run); err != nil {
+			return false, 0, err
+		}
+		return false, upTo, nil
 	}
-	e.startReading(ctx, c, in.Passages, started)
+	if err := e.ask(ctx, c, in, run, nil); err != nil {
+		return true, 0, err
+	}
+	return true, upTo, nil
+}
+
+// ask sends one read to claude and keeps what comes back, recording the
+// run; `also`, when set, runs inside the transaction that stores it. A
+// failed call is recorded as a failed run, and its error returned.
+func (e *Engine) ask(ctx context.Context, c store.BrainCandidate, in Input, run store.BrainRun, also func(q store.Querier) error) error {
+	db := e.Store.DB()
+	e.startReading(ctx, c, in.Passages, run.StartedAt)
 	res, callErr := e.Runner.Run(ctx, Request{System: System, Prompt: in.Prompt, Model: e.model()})
 	if callErr == nil {
 		e.setPhase(PhaseLinking)
@@ -329,35 +415,41 @@ func (e *Engine) readSession(ctx context.Context, c store.BrainCandidate) (did b
 		var runID int64
 		defer func() { e.publishDone(e.stopReading(), runID, 0) }()
 		if ctx.Err() != nil {
-			return true, ctx.Err()
+			return ctx.Err()
 		}
 		run.Status, run.Error = store.BrainRunFailed, clip(callErr.Error(), 500)
 		id, err := store.InsertBrainRun(ctx, db, run)
 		if err != nil {
-			return true, err
+			return err
 		}
 		runID = id
-		return true, callErr
+		return callErr
 	}
 	run.Status = store.BrainRunOK
 	var added []store.BrainNode
 	var runID int64
-	err = e.Store.WithTx(ctx, func(q store.Querier) error {
+	err := e.Store.WithTx(ctx, func(q store.Querier) error {
 		id, err := store.InsertBrainRun(ctx, q, run)
 		if err != nil {
 			return err
 		}
 		runID = id
-		added, err = keep(ctx, q, id, c, in.Passages, res.Memories, run.FinishedAt)
+		added, err = keep(ctx, q, id, c, in, res.Memories, run.FinishedAt)
 		if err != nil {
 			return err
 		}
-		return store.SetBrainRunNodes(ctx, q, id, len(added))
+		if err := store.SetBrainRunNodes(ctx, q, id, len(added)); err != nil {
+			return err
+		}
+		if also != nil {
+			return also(q)
+		}
+		return nil
 	})
 	r := e.stopReading()
 	if err != nil {
 		e.publishDone(r, 0, 0)
-		return true, err
+		return err
 	}
 	e.setError("")
 	agent := ""
@@ -370,14 +462,53 @@ func (e *Engine) readSession(ctx context.Context, c store.BrainCandidate) (did b
 	// After the memories, so a screen that waits for the read's end has
 	// every one of them by then.
 	e.publishDone(r, runID, len(added))
-	return true, nil
+	return nil
 }
 
+// knownFor is what a read of a session in project is shown of the brain.
+// A session with no project is shown nothing: its memories hang off topics
+// only, and another project-less session's decisions are not its own.
+func knownFor(ctx context.Context, q store.Querier, project string) (Known, error) {
+	if project == "" {
+		return Known{}, nil
+	}
+	decs, err := store.BrainCurrentDecisions(ctx, q, project, KnownDecisions, false)
+	if err != nil {
+		return Known{}, err
+	}
+	recent, err := store.BrainRecentMemories(ctx, q, project, KnownRecent)
+	return Known{Decisions: decs, Recent: recent}, err
+}
+
+// dupScan is how many of a project's newest memories a new one's title is
+// compared with before it is kept.
+const dupScan = 300
+
 // keep stores the memories a read returned, each linked to its project, its
-// topics and the memories it names, and returns the new nodes.
-func keep(ctx context.Context, q store.Querier, runID int64, c store.BrainCandidate, passages []store.BrainPassage, mems []Memory, now int64) ([]store.BrainNode, error) {
+// topics, the memories it names in the answer and the shown memories it
+// cites, and returns the new nodes. A memory whose title is near one the
+// project already keeps (store.BrainTitlesNear), or one kept earlier in the
+// same answer, is left out.
+func keep(ctx context.Context, q store.Querier, runID int64, c store.BrainCandidate, in Input, mems []Memory, now int64) ([]store.BrainNode, error) {
+	passages := in.Passages
 	if len(mems) > 8 {
 		mems = mems[:8]
+	}
+	existing, err := store.BrainRecentMemories(ctx, q, c.Project, dupScan)
+	if err != nil {
+		return nil, err
+	}
+	var titles []string
+	for _, m := range existing {
+		titles = append(titles, m.Title)
+	}
+	isDup := func(title string) bool {
+		for _, t := range titles {
+			if store.BrainTitlesNear(title, t) {
+				return true
+			}
+		}
+		return false
 	}
 	// The passage a memory cites, else the last answer read.
 	var lastAnswer store.BrainPassage
@@ -404,7 +535,7 @@ func keep(ctx context.Context, q store.Querier, runID int64, c store.BrainCandid
 		// A model asked for plain text still sends Markdown now and then; a
 		// title is one line, so its heading marks and stray newlines go.
 		m.Title = strings.Join(strings.Fields(strings.TrimLeft(strings.TrimSpace(m.Title), "#> ")), " ")
-		if store.NormTitle(m.Title) == "" {
+		if store.NormTitle(m.Title) == "" || isDup(m.Title) {
 			continue
 		}
 		src := lastAnswer
@@ -412,7 +543,7 @@ func keep(ctx context.Context, q store.Querier, runID int64, c store.BrainCandid
 			src = passages[m.Passage-1]
 		}
 		n, _, err := store.InsertBrainNode(ctx, q, store.BrainNode{
-			Kind: kind, Title: m.Title, Summary: m.Summary, RunID: runID,
+			Kind: kind, Title: m.Title, Summary: m.Summary, RunID: runID, Keywords: m.Keywords,
 			Source: store.BrainSource{SessionID: c.SessionID, EventID: src.EventID, Ts: src.Ts, Project: c.Project},
 		}, now)
 		if err != nil {
@@ -423,6 +554,7 @@ func keep(ctx context.Context, q store.Querier, runID int64, c store.BrainCandid
 		}
 		ids[i] = n.ID
 		added = append(added, n)
+		titles = append(titles, n.Title)
 		if projectID > 0 {
 			if err := store.LinkBrain(ctx, q, n.ID, projectID, store.EdgePartOf, 1, now); err != nil {
 				return nil, err
@@ -444,6 +576,31 @@ func keep(ctx context.Context, q store.Querier, runID int64, c store.BrainCandid
 	for i, m := range mems {
 		if ids[i] == 0 {
 			continue
+		}
+		// What it says of the memories the read was shown: only ids that
+		// were listed count, so a stray number never touches another
+		// project's memory.
+		if strings.EqualFold(strings.TrimSpace(m.Kind), store.BrainDecision) {
+			for _, old := range m.Supersedes {
+				if !in.Decisions[old] {
+					continue
+				}
+				if err := store.BrainSupersede(ctx, q, ids[i], old, now); err != nil && !errors.Is(err, store.ErrBrainInvalid) {
+					return nil, err
+				}
+			}
+		}
+		for _, link := range []struct {
+			to   []int64
+			kind string
+		}{{m.RelatedIDs, store.EdgeRelates}, {m.ContradictsIDs, store.EdgeContradicts}} {
+			for _, id := range link.to {
+				if in.Shown[id] && id != ids[i] {
+					if err := store.LinkBrain(ctx, q, ids[i], id, link.kind, 1, now); err != nil {
+						return nil, err
+					}
+				}
+			}
 		}
 		for _, link := range []struct {
 			to   []int
@@ -606,7 +763,15 @@ type Status struct {
 	Reading *Reading `json:"reading,omitempty"`
 	// Build is the progress through everything in reach — the sessions
 	// since `since` or `backfill_since` — while it is on.
-	Build         *Build `json:"build,omitempty"`
+	Build *Build `json:"build,omitempty"`
+	// CatchUp is a catch-up's progress while one has reads left — the
+	// skipped text (kind `skipped`) first, else the backfill (`backfill`) —
+	// while it is on; null otherwise. Generic, so each kind reports the
+	// same way.
+	CatchUp *CatchUp `json:"catch_up"`
+	// Retag is the re-tag's progress while memories without keywords wait
+	// for it and it is on.
+	Retag         *Retag `json:"retag,omitempty"`
 	Since         int64  `json:"since,omitempty"`
 	BackfillSince int64  `json:"backfill_since,omitempty"`
 	LastWake      int64  `json:"last_wake,omitempty"`
@@ -644,6 +809,34 @@ type Handoff struct {
 	Memories    int  `json:"memories"`
 }
 
+// The kinds of catch-up, as CatchUp.Kind names them.
+const (
+	// CatchUpBackfill is the backfill: sessions from before the extraction
+	// was turned on, read because a backfill reached back to them.
+	CatchUpBackfill = "backfill"
+	// CatchUpSkipped is the text reads before 2026-10-22 skipped
+	// (catchup.go).
+	CatchUpSkipped = "skipped"
+)
+
+// CatchUp is the progress of reading something the extraction has not
+// reached on its own: how many reads are done of how many, and about how
+// many days are left at the daily limit. A screen shows a line while one is
+// present and hides it otherwise.
+type CatchUp struct {
+	// Kind is what is being caught up on, one of the CatchUp* values.
+	Kind string `json:"kind"`
+	Done int    `json:"done"`
+	// Total is Done plus the reads left; Truncated when those were counted
+	// only to 200.
+	Total     int  `json:"total"`
+	Truncated bool `json:"truncated,omitempty"`
+	// DaysLeft is an estimate: the reads left, times the mean tokens of the
+	// reads in the last 14 days, over the daily limit, rounded up. 0 (and
+	// absent) before any read has been measured.
+	DaysLeft int `json:"days_left,omitempty"`
+}
+
 // Build is how far the extraction has got through the sessions in reach.
 type Build struct {
 	// From is the start of what is in reach, unix ms (the earlier of `since`
@@ -675,15 +868,7 @@ const statusPending = 200
 // build counts the progress through what is in reach; cands are the
 // sessions waiting (from candidates). A session read before and waiting
 // again counts once, as waiting, with the memories it already gave.
-func (e *Engine) build(ctx context.Context, cands []store.BrainCandidate) (*Build, error) {
-	from := e.readFrom()
-	if from <= 0 {
-		return nil, nil
-	}
-	read, err := store.BrainReadSessions(ctx, e.Store.DB(), from)
-	if err != nil {
-		return nil, err
-	}
+func (e *Engine) build(from int64, cands []store.BrainCandidate, read []store.BrainReadSession) *Build {
 	b := &Build{From: from, Truncated: len(cands) >= statusPending, Sources: []BuildSource{}}
 	by := map[string]*BuildSource{}
 	src := func(p string) *BuildSource {
@@ -722,8 +907,49 @@ func (e *Engine) build(ctx context.Context, cands []store.BrainCandidate) (*Buil
 	if len(b.Sources) > 12 {
 		b.Sources = b.Sources[:12]
 	}
-	return b, nil
+	return b
 }
+
+// catchUpWindow is how far back the reads a catch-up's days left are
+// counted from reach.
+const catchUpWindow = 14 * 24 * time.Hour
+
+// catchUpBackfill is the backfill's progress while it has reads left: the sessions
+// in reach that went quiet before the extraction was turned on (`since`),
+// which only the backfill brought into reach. Nil when there is no backfill
+// before `since`, or nothing of it waits. cands and read are the status's.
+func (e *Engine) catchUpBackfill(ctx context.Context, cands []store.BrainCandidate, read []store.BrainReadSession) *CatchUp {
+	c := e.Config()
+	if c.BackfillSince <= 0 || c.Since <= 0 || c.BackfillSince >= c.Since {
+		return nil
+	}
+	cu := &CatchUp{Kind: CatchUpBackfill, Truncated: len(cands) >= statusPending}
+	left := 0
+	waiting := make(map[string]bool, len(cands))
+	for _, s := range cands {
+		waiting[s.SessionID] = true
+		if s.LastEventAt < c.Since {
+			left++
+		}
+	}
+	if left == 0 {
+		return nil
+	}
+	for _, r := range read {
+		if r.LastEventAt < c.Since && !waiting[r.SessionID] {
+			cu.Done++
+		}
+	}
+	cu.Total = cu.Done + left
+	if per, _, err := store.BrainTokensPerRead(ctx, e.Store.DB(), e.now().Add(-catchUpWindow).UnixMilli()); err == nil && per > 0 {
+		capTokens := e.dailyCap()
+		cu.DaysLeft = int((int64(left)*per + capTokens - 1) / capTokens)
+	}
+	return cu
+}
+
+// DailyTokens is the daily limit the reads keep to.
+func (e *Engine) DailyTokens() int64 { return e.dailyCap() }
 
 // Status reports the extraction's state.
 func (e *Engine) Status(ctx context.Context) Status {
@@ -752,10 +978,17 @@ func (e *Engine) Status(ctx context.Context) Status {
 	if st.On {
 		if cands, err := e.candidates(ctx, statusPending); err == nil {
 			st.Pending = len(cands)
-			if b, err := e.build(ctx, cands); err == nil {
-				st.Build = b
+			if from := e.readFrom(); from > 0 {
+				if read, err := store.BrainReadSessions(ctx, e.Store.DB(), from); err == nil {
+					st.Build = e.build(from, cands, read)
+					st.CatchUp = e.catchUpBackfill(ctx, cands, read)
+				}
 			}
 		}
+		if cu := e.catchUpSkipped(ctx); cu != nil {
+			st.CatchUp = cu
+		}
+		st.Retag = e.retagStatus(ctx)
 	}
 	if runs, err := store.LastBrainRuns(ctx, e.Store.DB(), 5); err == nil {
 		st.Recent = runs
@@ -827,16 +1060,25 @@ func (e *Engine) EstimateFrom(ctx context.Context, since int64) (Estimate, error
 	}
 	est := Estimate{DailyCap: e.dailyCap(), Truncated: len(cands) == most}
 	for _, c := range cands {
-		passages, err := store.BrainPassages(ctx, e.Store.DB(), c.SessionID, c.Cursor, 400)
-		if err != nil {
-			return Estimate{}, err
+		// Every chunk a long session takes, as the reads will send them.
+		counted := false
+		for {
+			in, through, err := chunk(ctx, e.Store.DB(), c, nil, Known{})
+			if err != nil {
+				return Estimate{}, err
+			}
+			if in.WorthReading() {
+				if !counted {
+					est.Sessions++
+					counted = true
+				}
+				est.Tokens += int64(len(in.Prompt)/4) + OverheadTokens + 400
+			}
+			if through <= c.Cursor || through >= c.MaxEventID {
+				break
+			}
+			c.Cursor = through
 		}
-		in := BuildInput(c.Project, nil, passages)
-		if in.ProseRunes < MinProseRunes {
-			continue
-		}
-		est.Sessions++
-		est.Tokens += int64(len(in.Prompt)/4) + OverheadTokens + 400
 	}
 	if est.Tokens > 0 {
 		est.Days = int((est.Tokens + est.DailyCap - 1) / est.DailyCap)

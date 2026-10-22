@@ -915,6 +915,18 @@ export interface RateLimits {
   seven_day?: RateWindow
 }
 
+/**
+ * `GET /v1/tabs`: the tabs the computer's app has open, in strip order
+ * (03-contracts.md § Open tabs). `known` is false when no app has reported
+ * for a week; `items` are the sessions among `sessions`, in the same order.
+ */
+export interface TabsAnswer {
+  known: boolean
+  at: number
+  sessions: string[]
+  items: SessionSummary[]
+}
+
 /** `GET /v1/stats/limits`: the plan windows, as the summary carries them. */
 export interface LimitsAnswer {
   rate_limits?: RateLimits
@@ -1506,7 +1518,8 @@ export interface SavedDraft { kind: 'prompt' | 'command'; name: string; text: st
 
 /** Second Brain's node kinds (03-contracts.md § Second Brain): four memories, then three entities. */
 export type BrainKind = 'note' | 'idea' | 'decision' | 'finding' | 'question' | 'topic' | 'person' | 'project'
-export type BrainEdgeKind = 'relates' | 'follows' | 'contradicts' | 'part_of'
+/** `supersedes` goes from a newer decision to the older one it replaces. */
+export type BrainEdgeKind = 'relates' | 'follows' | 'contradicts' | 'part_of' | 'supersedes'
 
 /** One node of Second Brain: a memory, or a topic, person or project it hangs off. */
 export interface BrainNode {
@@ -1530,6 +1543,10 @@ export interface BrainNode {
   rank?: number
   /** In a search: some word matched only a word a typo or an ending away. */
   close?: boolean
+  /** English search keywords the extraction gave it; none on older memories. */
+  keywords?: string[]
+  /** The newest memory that supersedes it: it is no longer current. */
+  superseded_by?: number
 }
 
 export interface BrainEdge { from: number; to: number; kind: BrainEdgeKind; weight: number }
@@ -1550,11 +1567,16 @@ export interface BrainLink { node: BrainNode; kind: BrainEdgeKind; out: boolean;
 /** What GET /v1/brain/handoff says a new session in a project is handed (03-contracts.md § Second Brain). */
 export interface BrainHandoffView {
   project: string
+  /** The current decisions, newest first, handed before the memories. */
+  decisions?: BrainNode[]
   /** The memories, with summaries, in the order the handoff carries them. */
   memories: BrainNode[]
-  /** How many it may carry, and the runes they share. */
+  /** How many memories it may carry, and the runes they share. */
   max: number
   budget: number
+  /** How many decisions it may carry, and the runes they share. */
+  decisions_max?: number
+  decisions_budget?: number
   /** Whether a session opening there now would be served a handoff at all. */
   served?: {
     /** Settings → Memory between sessions. */
@@ -1572,6 +1594,22 @@ export interface BrainVault {
 }
 export interface BrainNoteSource {
  vault_id: number; vault: string; path: string; title: string; aliases?: string[]; excerpt: string; mtime: number
+}
+/** One agent's registration of `caprock mcp` (GET /v1/mcp/agents, ADR-078). */
+export interface McpAgent {
+  agent: 'claude' | 'codex'
+  name: string
+  state: 'not_installed' | 'not_connected' | 'connected' | 'different'
+  /** What the agent's config starts, when caprock is registered. */
+  command?: string
+  config?: string
+}
+export interface McpAgents {
+  /** The caprock path Connect registers. */
+  executable?: string
+  /** Why Connect would refuse that path (a temporary location). */
+  unstable?: string
+  agents: McpAgent[]
 }
 export interface BrainStatus {
   notes?: number
@@ -1626,6 +1664,45 @@ export interface BrainAutoStatus {
   handoff?: BrainHandoff
   /** The agents whose sessions a read went through in the last 24 hours, most sessions first: the card's faces. */
   agents_24h?: BrainAgentRead[]
+  /** A catch-up's progress while one has reads left (`skipped` first, then
+   *  `backfill`); null (or absent, from an older daemon) otherwise. */
+  catch_up?: BrainCatchUp | null
+  /** The re-tag of memories without keywords, while some wait and it is on:
+   * `done` given keywords, `total` that plus those waiting. */
+  retag?: { done: number; total: number }
+}
+
+/** What a catch-up is reading: `backfill` the sessions from before the yes
+ *  a backfill reached back to; `skipped` the text earlier reads skipped. */
+export type BrainCatchUpKind = 'backfill' | 'skipped'
+
+/** A catch-up's progress (03-contracts.md § Second Brain): reads done of
+ *  all, and an estimate of the days left at the daily limit (absent before
+ *  any read was measured). */
+export interface BrainCatchUp {
+  kind: BrainCatchUpKind | string
+  done: number
+  total: number
+  truncated?: boolean
+  days_left?: number
+}
+
+/** One local day of the reads (GET /v1/brain/spend). */
+export interface BrainDaySpend { day: string; start: number; tokens: number; cost_usd: number; reads: number }
+
+/** One project's share of the reads over the window; `retag` marks the one
+ *  row that is no project: the batches that gave older memories keywords. */
+export interface BrainProjectSpend { project: string; retag?: boolean; reads: number; tokens: number; cost_usd: number; memories: number }
+
+/** GET /v1/brain/spend: what the reads spent per day and per project, the
+ *  daily limit, and the last 24 hours of the reads and of Claude Code's
+ *  recorded sessions (the reads not among them). */
+export interface BrainSpend {
+  days: BrainDaySpend[]
+  projects: BrainProjectSpend[]
+  daily_tokens: number
+  spent_24h: number
+  claude_tokens_24h: number
 }
 
 /** One agent whose sessions Second Brain read: distinct sessions, and when the newest read finished (unix ms). */
@@ -1945,6 +2022,21 @@ export interface ModuleInfo {
   version?: string
   /** Where the daemon serves its pages: /x/<id>/. */
   url: string
+  /** What the module last said waits on the owner (PUT /v1/x/<id>/attention); absent at 0 or after a day without a report. */
+  attention?: ModuleAttention
+}
+
+/** One thing waiting in a module: a short line, and the route inside its page that shows it. */
+export interface ModuleAttentionItem {
+  label: string
+  href: string
+}
+
+/** A module's attention: how many things wait, up to eight of them named, and when it said so. */
+export interface ModuleAttention {
+  count: number
+  items: ModuleAttentionItem[]
+  updated_at: number
 }
 
 /** GET /v1/admin: whether a valid admin key is stored, and what it opens. */
@@ -2298,8 +2390,10 @@ export const api = {
   checkUpdateSoon: () => post<UpdateStatus>('/v1/update/check?soon=1', {}),
   updateBusy: () => get<UpdateBusy>('/v1/update/busy'),
   saveSettings: (s: Settings) => post<Settings>('/v1/settings', s, 'PUT'),
-  /** The sessions this viewer has a tab for, the whole list (PUT /v1/tabs): none of them is ever ended for idling. */
+  /** The sessions this viewer has a tab for, the whole list in tab-strip order (PUT /v1/tabs): none of them is ever ended for idling, and the phone home mirrors them. */
   putTabs: (viewer: string, sessions: string[]) => post<void>('/v1/tabs', { viewer, sessions }, 'PUT'),
+  /** The computer's open tabs in strip order (GET /v1/tabs), for the phone home's Continue. */
+  tabs: () => get<TabsAnswer>('/v1/tabs'),
   summary: (range: 'today' | '7d' | '30d' | 'all' = 'today', agent?: string) =>
     get<Summary>(`/v1/stats/summary?range=${range}${agent && agent !== 'all' ? `&agent=${agent}` : ''}`),
   /** The plan windows alone (`GET /v1/stats/limits`): the summary's rate_limits and codex_rate_limits without the rest. */
@@ -2429,6 +2523,11 @@ export const api = {
   refreshBrainVault: (id: number) => post<{ vault: BrainVault }>(`/v1/brain/vaults/${id}/refresh`, {}),
   removeBrainVault: (id: number) => post<void>(`/v1/brain/vaults/${id}`, {}, 'DELETE'),
   brainStatus: () => get<BrainStatus>('/v1/brain/status'),
+  /** What the reads spent over the last `days` local days (1–90). */
+  brainSpend: (days = 14) => get<BrainSpend>(`/v1/brain/spend?days=${days}`),
+  mcpAgents: () => get<McpAgents>('/v1/mcp/agents'),
+  mcpConnect: (agent: string) => post<McpAgent>(`/v1/mcp/agents/${agent}/connect`, {}),
+  mcpDisconnect: (agent: string) => post<McpAgent>(`/v1/mcp/agents/${agent}/disconnect`, {}),
   brainHandoff: (project: string) => get<BrainHandoffView>(`/v1/brain/handoff?project=${encodeURIComponent(project)}`),
   brainNode: (id: number) => get<{ node: BrainNode; links: BrainLink[]; sources?: BrainNoteSource[] }>(`/v1/brain/nodes/${id}`),
   dropBrain: (d: BrainDrop) => post<{ node: BrainNode; created: boolean }>('/v1/brain/nodes', d),
@@ -2436,7 +2535,8 @@ export const api = {
     post<{ node: BrainNode }>(`/v1/brain/nodes/${id}`, p, 'PATCH'),
   removeBrain: (id: number) => post<void>(`/v1/brain/nodes/${id}`, {}, 'DELETE'),
   linkBrain: (from: number, to: number, kind: BrainEdgeKind = 'relates') => post<void>('/v1/brain/links', { from, to, kind }),
-  unlinkBrain: (from: number, to: number) => post<void>('/v1/brain/links', { from, to }, 'DELETE'),
+  /** Every edge between two nodes; with `kind`, only that one edge from → to (undoing a supersedes). */
+  unlinkBrain: (from: number, to: number, kind?: BrainEdgeKind) => post<void>('/v1/brain/links', kind ? { from, to, kind } : { from, to }, 'DELETE'),
   /** The automatic extraction: on or off and its limits (machine only). Turning it on wakes the reader at once. */
   brainSettings: (b: BrainSettings) => post<BrainAutoStatus>('/v1/brain/settings', b, 'PUT'),
   /** What reading the last `days` would take; with run, starts it (needs building on). */

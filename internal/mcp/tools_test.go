@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http/httptest"
@@ -163,8 +164,8 @@ func (f *fixture) call(t *testing.T, name string, args any) (map[string]any, str
 
 func TestToolsAreReadOnlyAndDescribed(t *testing.T) {
 	f := newFixture(t)
-	if len(f.tools) != 11 {
-		t.Errorf("%d tools, want 11", len(f.tools))
+	if len(f.tools) != 12 {
+		t.Errorf("%d tools, want 12", len(f.tools))
 	}
 	for name, tl := range f.tools {
 		if tl.Description == "" || tl.Schema["type"] != "object" {
@@ -233,8 +234,51 @@ func TestNextSessionHandoff(t *testing.T) {
 	if out["project"] != f.project {
 		t.Errorf("project %v, want %v", out["project"], f.project)
 	}
-	if mems := out["memories"].([]any); len(mems) != 1 {
+	// The repository's one memory is a decision: it goes first, as a
+	// current decision, and is not repeated among the memories.
+	if decs := out["current_decisions"].([]any); len(decs) != 1 || decs[0].(map[string]any)["title"] != "Refresh SSO tokens early" {
+		t.Errorf("current decisions %v", decs)
+	}
+	if mems := out["memories"].([]any); len(mems) != 0 {
 		t.Errorf("memories %v", mems)
+	}
+}
+
+// current_decisions is the registry: the project's decisions nothing
+// supersedes, newest first; a superseded one is marked in a search and
+// ranked after the current ones.
+func TestCurrentDecisionsAndSupersededInSearch(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	db := f.st.DB()
+	s, _ := f.call(t, "search_memories", map[string]any{"query": "sso"})
+	oldID := s["memories"].([]any)[0].(map[string]any)["id"]
+	newer, _, err := store.InsertBrainNode(ctx, db, store.BrainNode{Kind: store.BrainDecision, Title: "Refresh SSO tokens on every request",
+		Keywords: []string{"sso", "token refresh"}, Source: store.BrainSource{Project: f.project}}, time.Now().UnixMilli())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.BrainSupersede(ctx, db, newer.ID, int64(oldID.(float64)), time.Now().UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	out, errText := f.call(t, "current_decisions", map[string]any{})
+	if errText != "" {
+		t.Fatal(errText)
+	}
+	decs := out["decisions"].([]any)
+	if len(decs) != 1 || decs[0].(map[string]any)["title"] != newer.Title || out["project"] != f.project {
+		t.Errorf("current decisions %v", out)
+	}
+	if kw, _ := decs[0].(map[string]any)["keywords"].([]any); len(kw) != 2 {
+		t.Errorf("keywords %v", decs[0])
+	}
+	s, _ = f.call(t, "search_memories", map[string]any{"query": "sso"})
+	mems := s["memories"].([]any)
+	if len(mems) != 2 || mems[0].(map[string]any)["title"] != newer.Title || mems[1].(map[string]any)["superseded_by"] != float64(newer.ID) {
+		t.Errorf("superseded last and marked: %v", mems)
+	}
+	if out, _ := f.call(t, "search_memories", map[string]any{"query": "zebra"}); out["hint"] == nil {
+		t.Errorf("an empty search says to rephrase: %v", out)
 	}
 }
 
@@ -413,5 +457,55 @@ func TestMCPRespectsVaultConsent(t *testing.T) {
 	}
 	if _, msg := f.call(t, "get_memory", map[string]any{"id": id}); !strings.Contains(msg, "not found") {
 		t.Fatalf("revoked read: %s", msg)
+	}
+}
+
+func TestMemoryTopicsOfOneProject(t *testing.T) {
+	f := newFixture(t)
+	out, errText := f.call(t, "memory_topics", map[string]any{"project": "elsewhere"})
+	if errText != "" {
+		t.Fatal(errText)
+	}
+	if out["memories"].(float64) != 1 {
+		t.Errorf("memories %v, want the project's 1, not the global 2", out["memories"])
+	}
+	ps := out["projects"].([]any)
+	if len(ps) != 1 || ps[0].(map[string]any)["project"] != "elsewhere" {
+		t.Errorf("projects %v, want only elsewhere", ps)
+	}
+	out, _ = f.call(t, "memory_topics", map[string]any{"project": "no-such-project"})
+	if out["memories"].(float64) != 0 || len(out["projects"].([]any)) != 0 {
+		t.Errorf("unknown project: %v", out)
+	}
+}
+
+func TestSessionSummaryCapsTheFileList(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	const n = 4172
+	for i := range n {
+		if _, err := store.TouchFile(ctx, f.st.DB(), "s-new", fmt.Sprintf("/repo/file-%04d.go", i), int64(1000+i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.AddStats(ctx, f.st.DB(), store.Stats{SessionID: "s-new", FilesTouched: n}); err != nil {
+		t.Fatal(err)
+	}
+	out, errText := f.call(t, "session_summary", map[string]any{"session_id": "s-new"})
+	if errText != "" {
+		t.Fatal(errText)
+	}
+	files := out["files"].([]any)
+	if len(files) != maxFiles || files[0] != fmt.Sprintf("/repo/file-%04d.go", n-1) {
+		t.Fatalf("files: %d, first %v; want %d, the latest first", len(files), files[0], maxFiles)
+	}
+	if out["files_not_shown"].(float64) != n-maxFiles {
+		t.Errorf("files_not_shown %v, want %d", out["files_not_shown"], n-maxFiles)
+	}
+	if note, _ := out["files_note"].(string); !strings.Contains(note, fmt.Sprintf("+%d more", n-maxFiles)) {
+		t.Errorf("files_note %q", note)
+	}
+	if b, _ := json.Marshal(out); len(b) > 8<<10 {
+		t.Errorf("answer is %d bytes", len(b))
 	}
 }

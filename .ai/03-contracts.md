@@ -202,8 +202,8 @@ machine must carry a device token** ([ADR-029](08-decisions.md)).
   `/v1/sessions/{id}/commands`, `/v1/sessions/{id}/files`, `/v1/projects`,
   `/v1/projects/ops`, `/v1/projects/{id}/worktrees`, `/v1/projects/{id}/changes`,
   `/v1/projects/{id}/changes/diff`, `/v1/projects/{id}/file`,
-  `/v1/projects/{id}/files`, `/v1/projects/{id}/image`, `/v1/brain`, `/v1/brain/status` and
-  `/v1/brain/nodes/{id}`. Everything else is `403` — every `POST`, `PUT` and
+  `/v1/projects/{id}/files`, `/v1/projects/{id}/image`, `/v1/brain`, `/v1/brain/status`,
+  `/v1/brain/spend` and `/v1/brain/nodes/{id}`. Everything else is `403` — every `POST`, `PUT` and
   `DELETE` (spawn, input, signal, paste, settings, tasks, approvals,
   orchestrator, hive, licence, pairing, shutdown), and three `GET`s that are
   not reads: `/v1/agents/{id}/term` (its socket types into the session), and
@@ -568,20 +568,32 @@ nothing. [ADR-030](08-decisions.md). A session opening in the filesystem root,
 the home directory or the temp directory (`store.NotAProject`) gets nothing and
 runs no lookup.
 
-A served handoff also carries up to five of the repository's Second Brain
-memories (§ Second Brain), pinned first then newest, each `- kind: title —
-summary` with the summary clipped to 160 runes, in a budget of 700 runes of
-their own after the passage; none when the repository has none. How many
-went is recorded on the session (migration 0058: `ALTER TABLE sessions ADD
+A served handoff also carries the repository's Second Brain (§ Second
+Brain), after the passage, in two parts each with a budget of its own
+(`store.BrainHandoff`): first its **current decisions** — the decisions no
+newer memory supersedes — newest first, at most 15, one line each `- #id
+title`, in 1,500 runes; then up to five of its **other memories**, pinned
+first then newest, **at most one per source session** (so one long session
+cannot fill it), a decision already listed and a superseded memory left
+out, each `- kind: title — summary` with the summary clipped to 160 runes,
+in 700 runes. With **no passage** recent enough (none of 400 runes or more
+within 14 days), the decisions and memories go alone; nothing goes only
+when there is neither. The whole reply is then at most 1,200 + 1,500 + 700
+runes and two headings, about 3,500. How many memories went is recorded on
+the session (migration 0058: `ALTER TABLE sessions ADD
 COLUMN handoff_brain INTEGER NOT NULL DEFAULT 0` and `CREATE INDEX
 idx_sessions_handoff_brain ON sessions(started_at) WHERE handoff_brain >
 0`), so the Second Brain status can say how often agents start with its
 memories (§ Second Brain, `handoff`), and said on the live socket as a
 `brain` frame `{op: "handoff", session, project, memories}` (§ Second
 Brain, Live) so the sidebar can show them going into the session's tab.
+The length of the reply's `additionalContext`, in runes, is recorded too
+(migration 0069: `ALTER TABLE sessions ADD COLUMN handoff_runes INTEGER NOT
+NULL DEFAULT 0`; 0 when nothing was handed), so delivery can be measured.
 
-**Measuring it.** Whenever there is a passage to hand over, the session records
-whether it got it: `sessions.handoff` is `1` (served) or `2` (held back);
+**Measuring it.** Whenever there is anything to hand over — a passage, or,
+since 2026-10-22, Second Brain's decisions and memories alone — the session
+records whether it got it: `sessions.handoff` is `1` (served) or `2` (held back);
 `0` means nothing was there, and those sessions are in neither group
 (migration 0028: `ALTER TABLE sessions ADD COLUMN handoff INTEGER NOT NULL
 DEFAULT 0`). `settings.memory_holdout_pct` (0–50, default 0; a value outside
@@ -759,7 +771,8 @@ GET  /v1/stats/summary?range=today     → totals: tokens, cost, sessions, model
 GET  /v1/stats/limits                  → {rate_limits?, codex_rate_limits?} — the plan windows alone, as the summary carries them
 GET  /v1/settings                      → user-stated settings (plan, update checks)
 PUT  /v1/settings                      → store them
-PUT  /v1/tabs                          {viewer, sessions} → 204: the sessions this dashboard has a tab for (§ Open tabs)
+PUT  /v1/tabs                          {viewer, sessions} → 204: the sessions this dashboard has a tab for, in strip order (§ Open tabs)
+GET  /v1/tabs                          → TabsAnswer {known, at, sessions, items}: the computer's tabs the phone home mirrors (§ Open tabs)
 POST /v1/offer                         → {status: "sent"} — forward one offer-survey answer to caprock.dev on the user's click (§ Offer survey, ADR-062)
 POST /v1/support                       → {ok: true} — forward one bug report to Caprock support at caprock.dev on the user's click (§ Report a bug, ADR-073)
 GET  /v1/update                        → cached release status (no network I/O)
@@ -1094,7 +1107,7 @@ POST /v1/shutdown                      → 200 (bearer-token gated; `caprock dow
 POST /v1/statusline                    → 204 (bearer-token gated) {session_id, five_hour?, seven_day?} — records rate-limit windows, then runs the plan-window stop's check
 GET  /v1/statusline/{id}               → 200 (bearer-token gated) session counters for the status line; zeros for an unknown session
 GET  /healthz                          → {status:"ok", version}
-WS   /v1/live[?since=<seq>]            → every frame is {type, seq, data} (§ Live socket, replay); first frame is {type:"hello", seq, data:{server_time, reset}}; a "session" frame carries {session, stats}; an "event_update" frame carries an Event already sent as "event", rewritten in place (same id, new payload) — today a reply's words merged into its first transcript line (store.MergeAssistantText), which with thinking on has none: a screen holding that id replaces it, anything counting events ignores the frame; a "permission" frame carries {session_id, permission | null}; a "queue" frame carries an owned session's QueueView after any change (§ Queued messages); an "inbox" frame carries {id, deleted} after an item is saved or deleted (§ Inbox); a "brain" frame carries {id, op: added|changed|deleted, kind?, title?, auto?, session?, project?, run?, agent?} after Second Brain changes, {op: progress, phase: start|done, session?, project?, agent?, run?, added?} when an automatic read begins or ends, or {op: handoff, session, project, memories} when a new session was handed memories (§ Second Brain); a "project" frame carries a Project and an "op" frame an Op (§ Projects and shells); a "notify" frame an alert for the app (§ Notify frame); a "status" frame carries {session_id, kind, at} when input moved an owned session's status before any event (§ Nudges); a "devices" frame carries {} when the paired devices changed (§ Who may connect); a "footprint" frame carries GET /v1/footprint's answer without the orphan list when it changed, checked every 10 s while a live client is connected (§ Footprint); a "shells" frame carries {shells: [Shell]}, every running shell as GET /v1/shells answers, after a start and when the list changed, checked every 10 s while a live client is connected (§ Projects and shells)
+WS   /v1/live[?since=<seq>]            → every frame is {type, seq, data} (§ Live socket, replay); first frame is {type:"hello", seq, data:{server_time, reset}}; a "session" frame carries {session, stats}; an "event_update" frame carries an Event already sent as "event", rewritten in place (same id, new payload) — today a reply's words merged into its first transcript line (store.MergeAssistantText), which with thinking on has none: a screen holding that id replaces it, anything counting events ignores the frame; a "permission" frame carries {session_id, permission | null}; a "queue" frame carries an owned session's QueueView after any change (§ Queued messages); an "inbox" frame carries {id, deleted} after an item is saved or deleted (§ Inbox); a "brain" frame carries {id, op: added|changed|deleted, kind?, title?, auto?, session?, project?, run?, agent?} after Second Brain changes, {op: progress, phase: start|done, session?, project?, agent?, run?, added?} when an automatic read begins or ends, or {op: handoff, session, project, memories} when a new session was handed memories (§ Second Brain); a "project" frame carries a Project and an "op" frame an Op (§ Projects and shells); a "notify" frame an alert for the app (§ Notify frame); a "status" frame carries {session_id, kind, at} when input moved an owned session's status before any event (§ Nudges); a "devices" frame carries {} when the paired devices changed (§ Who may connect); an "admin" frame carries {} when a private module's attention was set or cleared, so a dashboard showing modules reads GET /v1/admin again (§ Private modules); a "footprint" frame carries GET /v1/footprint's answer without the orphan list when it changed, checked every 10 s while a live client is connected (§ Footprint); a "shells" frame carries {shells: [Shell]}, every running shell as GET /v1/shells answers, after a start and when the list changed, checked every 10 s while a live client is connected (§ Projects and shells)
 ```
 
 **Permission prompts** ([ADR-035](08-decisions.md)). `permission` is the
@@ -1855,9 +1868,11 @@ existed; it keeps working.
 `PUT /v1/settings` accepts `telegram_chat` and `telegram_code` (bools, off
 unless turned on; `GET` returns them). `<data_dir>/telegram.json` (`0600`) is
 the bridge's own: `{bot_id, bot_username, chat_id, chat_name, paired_at,
-offset, refs: [{message_id, session_id, prompt_id, kind, at}], muted:
-{session_id: ms}, mute_all, premium_note_at, forward_reply}` — the last 400 messages and the
-sessions they were about, so a reply finds its session across a restart. The
+offset, refs: [{message_id, session_id, prompt_id, kind, at, module,
+buttons, order, chosen, answers}], muted: {session_id: ms}, mute_all,
+premium_note_at, module_pins: {module_id: message_id}, forward_reply}` — the last 400 messages and the sessions (or
+private modules) they were about, so a reply finds its session, and a module
+its own message, across a restart. The
 token stays in `config.json`.
 
 `GET /v1/gemini` reports whether asking Gemini is possible here: `{available, env_var, licensed, model}`. It performs **no network I/O** and **never returns the key** — `available` says only that one is present. `POST /v1/gemini/ask` takes `{prompt, model?}` and answers `{text, model, usage}`, where `usage` carries the response's own `promptTokenCount` / `candidatesTokenCount` / `cachedContentTokenCount` / `thoughtsTokenCount`. It is the one endpoint in the product that checks the licence **server-side** (402 without an active key) rather than leaving the paywall to the UI, because the call spends the user's Gemini quota and opens an outbound connection — the reasoning and its limits are in [ADR-023](08-decisions.md). With no key set it answers 412 with the variable to set, which is a different problem from 402 and is reported separately so the screen can say which. The key is read from `GEMINI_API_KEY` in the daemon's environment at call time; it is never stored, never accepted by `PUT /v1/settings`, and never present in `GET /v1/settings`.
@@ -2022,6 +2037,7 @@ GET    /v1/inbox/{id}/files/{n}      → an item's image, for its thumbnail (§ 
 GET    /v1/brain                     ?q=&project=&since=&until=&limit=&summaries=1 → BrainGraph (§ Second Brain)
 GET    /v1/brain/status              → BrainStatus: counts, projects (§ Second Brain)
 GET    /v1/brain/handoff             ?project= → {project, memories, max, budget, served?}; what a new session there is handed (§ Second Brain)
+GET    /v1/brain/spend               ?days= → BrainSpend; what the automatic reads spent, per day and project (§ Second Brain)
 POST   /v1/brain/nodes               {text | title, summary?, kind?, event_id?, session_id?, project?, topics?, pinned?} → {node, created}; no cap
 GET    /v1/brain/nodes/{id}          → {node, links}
 PATCH  /v1/brain/nodes/{id}          {kind?, title?, summary?, pinned?} → {node}
@@ -2091,8 +2107,8 @@ next read of any total is without it. `caprock sessions rm [ids…]
 agent's argv builder translates or drops it (`internal/agents/argv.go`; the
 per-agent flags are in [19-codex.md](19-codex.md) and
 [16-opencode.md](16-opencode.md)). With `resume`, the agent is the stored
-session's, whatever the request says, and a Codex or OpenCode resume is given
-the session's `native_id` when it has one. `fork` with Codex or OpenCode is a
+session's, whatever the request says, and a Codex, OpenCode or Hermes resume
+is given the session's `native_id` when it has one. `fork` with Codex or OpenCode is a
 400: their forks copy history with its cost.
 
 **A request with no `permission_mode` gets one from the daemon**
@@ -2264,15 +2280,33 @@ released). The sessions are looked at once a minute.
 
 **Open tabs** — `PUT /v1/tabs` `{"viewer": "<id>", "sessions": ["<id>",
 …]}` → `204`. Tabs live in the browser, so the dashboard tells the daemon
-which sessions it has a tab for: the whole list, at once when it changes and
-every 10 minutes while it is open (`ui/src/lib/reportTabs.ts`). `viewer` is
-a random id the browser keeps (`caprock.app.viewer-id`), 1–64 characters;
-`sessions` at most 500, blank and repeated ids dropped; otherwise `400`.
-Each viewer's last list is kept in `<data_dir>/open-tabs.json`
-(`{"viewers": {"<id>": {"at": <unix ms>, "sessions": [...]}}}`, written when
-the list changes or is an hour old), so a restarted daemon still knows, and
-so does one whose app was closed for the night. A viewer that has not
-reported for 7 days no longer counts. `501` when the daemon keeps no list.
+which sessions it has a tab for: the whole list in tab-strip order (each
+pane of a split in turn), at once when it or its order changes and every 10
+minutes while it is open (`ui/src/lib/reportTabs.ts`). Only the app
+workspace (`screens/AppShell.tsx`) reports; the phone's page never does.
+`viewer` is a random id the browser keeps (`caprock.app.viewer-id`), 1–64
+characters; `sessions` at most 500, blank and repeated ids dropped (the
+first kept); otherwise `400`. Each viewer's last list is kept in
+`<data_dir>/open-tabs.json` (`{"viewers": {"<id>": {"at": <unix ms>,
+"changed": <unix ms>, "sessions": [...]}}}`; `changed` is when the list or
+its order last changed, absent in a file from before it, which then reads as
+`at`; written when the list changes or is an hour old), so a restarted daemon
+still knows, and so does one whose app was closed for the night. A viewer
+that has not reported for 7 days no longer counts. `501` when the daemon
+keeps no list.
+
+`GET /v1/tabs` → `TabsAnswer` `{"known": bool, "at": <unix ms>, "sessions":
+[...], "items": [SessionSummary...]}`: the list the phone home's Continue
+mirrors (04-ui.md § The phone home). Of the viewers within the 7 days, one
+that reported in the last 30 minutes (on screen: three heartbeats) wins over
+one that did not, then the one whose list changed last — so two windows
+heartbeating the same lists never take turns — then the later report, then
+the lower viewer id. `sessions` is that list as reported, file and page keys
+included; `items` is each of them that is a session in the store, in the
+same order, as `GET /v1/sessions` describes it, shells left out. `known` is
+false (and the arrays empty, `at` 0) when no viewer counts. A paired device,
+viewer or controller, may read it (`pairedDeviceRoutes`); it may not report
+(`PUT` stays the machine's). `501` when the daemon keeps no list.
 
 **`GET /v1/sessions/{id}/prs`** → `SessionPRs` `{connected, prs, fetched_at,
 refreshing?}`: the session's latest
@@ -3095,12 +3129,13 @@ the main transcript
 (`<project>/<session-id>.jsonl`, found from `transcript_path` or from the cwd's
 Claude Code folder) still existing. `command` is offered whenever the agent has
 one, including when Caprock cannot run it (folder gone, `claude` not found) —
-except when the transcript is gone, where no command could work. Codex and
-OpenCode: `command` is `cd <cwd> && codex resume <id>` / `opencode --session
-<id>` with the agent's own id (`native_id` when set); `ok` is false while the
-session is not ended (two processes on one thread), when its folder is gone,
-when Caprock started it and nothing was ever sent (nothing to continue), or
-when the binary is not found.
+except when the transcript is gone, where no command could work. Codex,
+OpenCode and Hermes: `command` is `cd <cwd> && codex resume <id>` /
+`opencode --session <id>` / `hermes chat --resume <id>` with the agent's own
+id (`native_id` when set); `ok` is false while the session is not ended (two
+processes on one thread), when its folder is gone, when Caprock started it and
+nothing was ever sent (nothing to continue), when the binary is not found, or,
+for Hermes, when its `state.db` is gone.
 
 **`open_terminal`** — `{modes, reason?}`, filled wherever `resume` is: how the
 session can be opened in the user's **own** terminal application (Ghostty,
@@ -3846,45 +3881,101 @@ Brain DDL (migrations 0055, 0056).
 ```
 GET    /v1/brain                ?q=&project=&since=&until=&limit=&summaries=1 → {nodes: [BrainNode], edges: [BrainEdge], total, terms?, close?}
 GET    /v1/brain/status         → {memories, manual, projects: [{project, count}], auto?, db_path?}
-GET    /v1/brain/handoff        ?project= → {project, memories: [BrainNode], max, budget, served?: {on, left_off_at?, holdout_pct}}
+GET    /v1/brain/handoff        ?project= → {project, decisions: [BrainNode], memories: [BrainNode], max, budget, decisions_max, decisions_budget, served?: {on, left_off_at?, holdout_pct}}
+GET    /v1/brain/spend          ?days=1–90 (14) → {days: [{day, start, tokens, cost_usd, reads}], projects: [{project, reads, tokens, cost_usd, memories}], daily_tokens, spent_24h, claude_tokens_24h}
+GET    /v1/brain/decisions      ?project=&limit= → {project, decisions: [BrainNode]}
 POST   /v1/brain/nodes          {text?, title?, summary?, kind?, event_id?, session_id?, project?, topics?: [string], pinned?} → {node, created}
 GET    /v1/brain/nodes/{id}     → {node: BrainNode, links: [{node, kind, out, weight}]}
 PATCH  /v1/brain/nodes/{id}     {kind?, title?, summary?, pinned?} → {node}
 DELETE /v1/brain/nodes/{id}     → 204
 POST   /v1/brain/links          {from, to, kind?} → 204
-DELETE /v1/brain/links          {from, to} → 204
+DELETE /v1/brain/links          {from, to, kind?} → 204
 PUT    /v1/brain/settings       {auto?, daily_tokens?, model?} → BrainAutoStatus
 POST   /v1/brain/backfill       {days?: 1–90 (30), dry_run?} → BrainEstimate
 ```
 
 - **`/v1/brain/handoff`** — what a new session in `project` (required,
-  exact; else `400`) is handed from Second Brain with a served handoff
-  (§ SessionStart handoff): the memories, with their summaries, picked by
-  the code the handoff itself runs (`store.BrainHandoff`) — pinned first,
-  then newest, at most `max` (5), each line `- kind: title — summary` (the
-  summary clipped to 160 runes) counted against `budget` (700 runes), and
-  the first that does not fit ends the list. `served` is whether a session
-  opening there now would be served a handoff at all, which is what carries
-  them: `on` is Memory between sessions, `left_off_at` when the passage it
-  would be handed was written (unix ms; absent when none of 400 runes or
-  more is within 14 days, and then nothing goes), `holdout_pct` the share
-  of new sessions held back at random (§ SessionStart handoff, *Measuring
-  it*). `served` is absent from a daemon that does not wire it (tests). A
-  read: it writes nothing, rolls no holdout and records nothing on a
-  session.
+  exact; else `400`) is handed from Second Brain with its handoff
+  (§ SessionStart handoff), picked by the code the handoff itself runs
+  (`store.BrainHandoff`): `decisions`, the current decisions, newest
+  first, at most `decisions_max` (15), each line `- #id title` counted
+  against `decisions_budget` (1,500 runes); then `memories`, with their
+  summaries — pinned first, then newest, at most one per source session,
+  none superseded and no decision already listed, at most `max` (5), each
+  line `- kind: title — summary` (the summary clipped to 160 runes)
+  counted against `budget` (700 runes). In each part the first line that
+  does not fit ends it. `served` is whether a session opening there now
+  would be handed the passage too: `on` is Memory between sessions,
+  `left_off_at` when the passage it would be handed was written (unix ms;
+  absent when none of 400 runes or more is within 14 days, and then the
+  decisions and memories go alone), `holdout_pct` the share of new
+  sessions held back at random (§ SessionStart handoff, *Measuring it*).
+  `served` is absent from a daemon that does not wire it (tests). A read:
+  it writes nothing, rolls no holdout and records nothing on a session.
+- **`/v1/brain/spend`** — what the automatic extraction's reads spent,
+  from `brain_runs` (code: `internal/api/brainspend.go`,
+  `internal/store/brainspend.go`). `days` is one entry per local day of
+  the daemon's time zone, oldest first, today the last, every day present:
+  `day` its date (`YYYY-MM-DD`), `start` its midnight (unix ms; a day with
+  a clock change is 23 or 25 hours), `tokens` the reads' `tokens_in +
+  tokens_out` by when each finished, `cost_usd` their summed `cost_usd`
+  (what claude reported, at API list price), `reads` the runs that asked
+  claude (status `ok` or `failed`; a `skipped` session is no read, and
+  costs nothing). `projects` is the same window by the read session's
+  project (`brain_runs` joined to `sessions`; `""` when the session has no
+  project or is gone), most tokens first: `reads`, `tokens`, `cost_usd`,
+  and `memories` — the `nodes` of the reads with status `ok`; a project
+  with nothing but skipped sessions is left out. The re-tag batches
+  (*Re-tag* below) are one row of their own, `{project: "", retag: true,
+  …}`, `memories` the memories they gave keywords, never folded into the
+  `""` of reads without a project; they count in `days` like a read, and
+  are left out of the mean a catch-up's `days_left` is counted from. `daily_tokens` is the
+  daily limit (0 in a build without the extraction). `spent_24h` is the
+  reads' tokens in the last 24 hours (the status's `spent`) and
+  `claude_tokens_24h` the input, output, cache-read and cache-write tokens
+  of Claude Code's assistant turns in the recorded sessions in the same 24
+  hours (agent `claude`, `internal = 0`; a fork's copy of a turn carries
+  none). The reads are not sessions — no transcript, no hooks — so they are
+  not in it: the share of all Claude tokens is `spent_24h / (spent_24h +
+  claude_tokens_24h)`. `days` outside 1–90 or not a number is `400`. A
+  read: it writes nothing.
+- **Current decisions** (`/v1/brain/decisions`, migration 0069). A
+  decision is current until a newer memory has a `supersedes` edge to it.
+  The route returns `project`'s (required, exact; else `400`) current
+  decisions, newest first, at most `limit` (default 50, at most 100);
+  `agents=1` leaves out what may not reach an agent, as the graph read
+  does. The automatic extraction is shown the same registry (*A read*,
+  below) and may answer that a new decision supersedes one; a person can
+  too, with `POST /v1/brain/links {from: newer, to: older, kind:
+  "supersedes"}` — both must be memories of the same project and `to` a
+  decision, else `400`. **Undo** is `DELETE /v1/brain/links {from, to,
+  kind: "supersedes"}`: with a `kind`, the delete removes that one edge
+  from `from` to `to` and leaves any other link between them; without
+  one, every edge between the two in either direction, as before. A
+  search ranks a superseded memory after every current one, and the
+  graph read and a node's own read name its replacement
+  (`superseded_by`).
 - **`db_path`** on `/v1/brain/status` — the database the memories live in, `caprock.db` in the daemon's data directory (`config.DBPath`), resolved by the daemon rather than guessed per OS by the page; the screen's *Where it's kept* shows it. Omitted when the daemon has no data directory (tests).
 - **`BrainNode`** — `{id, kind, title, summary, source: {session_id?,
   event_id?, ts?, project?}, manual, pinned, run_id?, created_at, updated_at,
-  degree?, rank?, close?, vault?}`; times are unix ms. `kind` is `idea`, `decision`, `finding` or
+  degree?, rank?, close?, vault?, keywords?, superseded_by?}`; times are unix ms. `kind` is `idea`, `decision`, `finding` or
   `question` (a memory), `note` (an Obsidian import; § Obsidian vaults), or
   `topic`, `person` or `project` (an entity).
   `title` is at most 80 runes and `summary` 400, clipped with `…` on the way
   in. `manual` is true for a node dropped in by hand; `run_id` names the
   automatic extraction's read that made it. `degree` is the number of
   returned edges touching the node, in a graph read only; `rank` and
-  `close` are a search's (below).
+  `close` are a search's (below). `keywords` are the five to eight English
+  search keywords the extraction gave a memory, whatever language its title
+  is in (migration 0069; trimmed, a comma made a space, deduplicated
+  folded, at most 8 of at most 40 runes); none on an imported note, nor
+  on a memory made before them or by hand until the extraction's re-tag
+  gives it some (*Re-tag* below). `superseded_by`
+  is the newest memory with a `supersedes` edge to this one, in the graph
+  read and a node's own read; absent while it is current.
 - **`BrainEdge`** — `{from, to, kind, weight}`; `kind` is `relates`,
-  `follows`, `contradicts` or `part_of`. One edge per `(from, to, kind)`;
+  `follows`, `contradicts`, `part_of` or `supersedes` (from a newer
+  decision to the older one it replaces; migration 0069). One edge per `(from, to, kind)`;
   linking an existing pair again adds its weight, capped at 10. A memory
   hangs off its project and topics with `part_of`.
 - **The graph read** returns the newest memories and imported notes that pass the filter
@@ -3898,31 +3989,52 @@ POST   /v1/brain/backfill       {days?: 1–90 (30), dry_run?} → BrainEstimate
   node's own read carries its summary.
 - **Search (`q`).** The query is folded — NFKD, the combining diacritics
   of U+0300–U+036F dropped, Unicode lower case, `ς` as `σ`
-  (`store.FoldSearch`) — and split at whitespace into at most 8 words,
-  punctuation and wildcards kept literally. A memory matches when every
-  word, in any order, is a substring of its folded title, summary or
-  project, or of the name of a topic, person or project it has an edge to:
-  `ΑΘΗΝΑ` finds *Αθήνα*, `CAFE` finds *café*, `タワー` finds *東京タワー*.
-  When fewer than 5 memories match that way, a word of 4–7 letters may
-  also match a word 1 edit away, and one of 8 or more 2 edits (insert,
-  delete, change, or swap two neighbours), or the start of a longer word
-  that close — a typo or a different ending; such a memory is a close
+  (`store.FoldSearch`) — and split into words at anything that is not a
+  letter, digit or mark, in every script. Common English function words
+  (`a`, `the`, `of`, `per`, `no`, `as`, …; `store.brainStopwords`) are
+  dropped unless the query is nothing else. A word, or two neighbouring
+  words, in a synonym set make one **term** that looks for every member:
+  `pr` = `prs` = `pull request` = `pull requests`; `cost` = `costs` =
+  `price` = `prices` = `pricing` = `spend` = `spending`; `decision` =
+  `decisions` = `rule` = `rules`. A whitespace-separated piece that is
+  several words joined by punctuation (`read-only`, `project-3`) is also a
+  term of its own, first, so a memory with the whole of it ranks above one
+  with a part (at most 4 such). At most 8 terms. A term matches a
+  **whole word** of a memory's folded title, keywords, summary or project
+  — `pr` is not in *project* or *prompt* — or, for a term of 4 runes or
+  more, the start of a word (`router` finds *routers*); in a script
+  written without spaces (Han, Hiragana, Katakana, Thai, Lao, Khmer,
+  Myanmar) any substring counts, so `タワー` finds *東京タワー*. A term in
+  the name of a topic, person or project the memory has an edge to counts
+  too. **Any term** matching is a hit (`ΑΘΗΝΑ` finds *Αθήνα*, `CAFE`
+  finds *café*). Each term weighs 3 for a whole word of the title or the
+  keywords, 2 for the start of one there, 1 for a whole word of the
+  summary or project, 0.7 for the start of one there, 0.8 for a linked
+  entity's name — a synonym 0.9 of that — times its **IDF** over the
+  memories searched, ln(1 + N/df), so a word few memories have outweighs
+  one most have; `rank` is the sum over the terms times 100, rounded.
+  When fewer than 5 memories match that way, a term of one word of 4–7
+  letters may also match a word 1 edit away, and one of 8 or more 2 edits
+  (insert, delete, change, or swap two neighbours), or the start of a
+  longer word that close — a typo or a different ending — weighing 0.6 in
+  the title or keywords and 0.3 elsewhere, both in memories no term
+  matched and for the terms a hit did not match; such a memory is a close
   match (`close: true`). Words with anything but letters and digits, and
   shorter ones, match exactly only. The close pass reads at most 20,000 of
   the newest matching-filter memories and compares at most 50,000
-  distinct words. Each memory's `rank` is the sum over the words of
-  40 (a title word is the word), 30 (a title word starts with it), 25
-  (elsewhere in the title), 20 (summary or project), 15 (a linked
-  entity's name), 10 (a close match in the title) or 5 (a close match
-  elsewhere). A search returns memories best first — rank, then pinned,
-  then newest — so `limit` keeps the best. `terms` are the folded words
-  and the close words that matched them (at most 32), for the screen to
-  mark; `close` is true when a returned memory is a close match. Both,
-  and `rank`, are absent without `q`. Measured with
+  distinct words. A search returns memories best first — current before
+  superseded (*Current decisions*, above), then rank, then pinned, then
+  newest — so `limit` keeps the best. `terms` are the folded terms with
+  their synonyms and the close words that matched (at most 32), for the
+  screen to mark; `close` is true when a returned memory is a close match.
+  Both, and `rank`, are absent without `q`. Measured with
   `BenchmarkBrainSearch` (2026-10-15, Apple M1 Pro, a 400-character
-  summary per memory, the graph read included): 1,000 memories 2–4 ms,
-  5,000 memories 10–14 ms for a word and 19–34 ms when the close pass
-  runs, against 6 ms and 56 ms for the same read with no search.
+  summary per memory, the graph read included, before whole words and
+  IDF): 1,000 memories 2–4 ms, 5,000 memories 10–14 ms for a word and
+  19–34 ms when the close pass runs, against 6 ms and 56 ms for the same
+  read with no search. On a copy of the owner's database (1,221 memories,
+  2026-10-22) each of five queries took 4–7 ms; `PR` went from 1,097
+  memories to 136.
 - **A drop.** `kind` defaults to `idea`. With `event_id` the daemon reads
   the note's text, session, time and project from `events` itself — the event
   must be main-thread assistant prose (§ Phase 0's notes rules), else `400`.
@@ -3946,7 +4058,7 @@ POST   /v1/brain/backfill       {days?: 1–90 (30), dry_run?} → BrainEstimate
   was saved, and the same request lands a moment later (the dashboard tries
   a drop three more times, a second apart). Every route answers a busy
   database that way rather than with a bare `500`.
-- **Who.** The four `GET`s are open to every paired device; every write,
+- **Who.** The five `GET`s are open to every paired device; every write,
   settings and backfill included, is the machine's (a device gets `403`).
 - **Live.** Every change publishes a `brain` frame on `/v1/live`: `{id, op:
   "added" | "changed" | "deleted", kind?, title?, auto?, session?, project?,
@@ -3970,18 +4082,20 @@ POST   /v1/brain/backfill       {days?: 1–90 (30), dry_run?} → BrainEstimate
   daily_tokens, spent, spent_usd, stage, last_read?, new_today, topics,
   links, handoff, running, pending, since?, backfill_since?, last_wake?,
   next_wake?, last_error?, recent: [BrainRun], reading?, build?,
-  agents_24h}`: `chosen` once
+  catch_up, retag?, agents_24h}`: `chosen` once
   the user has answered, `enabled` when on (only then does it read; no
   licence is looked at), `last_wake` and `next_wake` unix ms — `next_wake`
   absent while off, at or before now just after turning on or while a wake
   runs, so a screen can say when the first memories may come — `spent`
-  the tokens of the reads in the last 24 hours, `pending` the sessions
-  waiting (counted up to 200), `recent` the last reads that were not
-  skipped. `spent_usd` is the reads' `cost_usd` in the last 24 hours —
-  what claude reported, at API list price; `last_read` when the newest read
-  with status `ok` finished; `new_today` the memories (not entities) added
+  the tokens of the reads and re-tag batches (*Re-tag* below) in the last
+  24 hours, `pending` the sessions waiting (counted up to 200), `recent`
+  the last reads of sessions that were not skipped (no re-tag batch).
+  `spent_usd` is the `cost_usd` of the same reads and batches in the last
+  24 hours — what claude reported, at API list price; `last_read` when the
+  newest read of a session with status `ok` finished; `new_today` the memories (not entities) added
   since the daemon's local midnight, by hand or read; `topics` the topic
-  entities and `links` the rows of `brain_edges`. `stage` is where the
+  entities and `links` the rows of `brain_edges` that join one memory to
+  another (a link to a topic, person or project is not counted). `stage` is where the
   build is: `off` (not on), `extracting` or `linking` (a read is asking
   claude, or storing what it returned), `no_claude`, `limit` (sessions
   wait and `spent` has reached `daily_tokens`), `waiting` (sessions wait
@@ -3993,14 +4107,15 @@ POST   /v1/brain/backfill       {days?: 1–90 (30), dry_run?} → BrainEstimate
   memories with their handoff and how many (`sessions.handoff_brain`,
   § SessionStart handoff). `agents_24h` is `[{agent, sessions, last_at}]`:
   the agents whose sessions a read with status `ok` went through in the
-  last 24 hours (`brain_runs` joined to `sessions`; no agent recorded counts
-  as `claude`), `sessions` the distinct sessions, `last_at` when the newest
+  last 24 hours (`brain_runs` joined to `sessions`, re-tag batches left
+  out; no agent recorded counts as `claude`), `sessions` the distinct sessions, `last_at` when the newest
   of those reads finished (unix ms), most sessions first; `[]` when none.
   `BrainRun` is `{id, session_id, from_event_id,
   through_event_id, status: ok | failed | skipped, model?, tokens_in,
   tokens_out, cost_usd, nodes, error?, started_at, finished_at, project?,
-  title?, agent?}`; `title` is the session's own name, else its first
-  stored prompt, and `agent` its agent, joined in.
+  title?, agent?, gap_id?}`; `title` is the session's own name, else its first
+  stored prompt, and `agent` its agent, joined in; `gap_id` the catch-up
+  gap a read went through, absent on a regular read.
 - **What it reads now, and how far it is.** `reading` is present while a
   read is asking `claude` about a session: `{session_id, title?, agent?,
   project?, last_event_at?, started_at, phase, passages}` — `phase`
@@ -4020,6 +4135,19 @@ POST   /v1/brain/backfill       {days?: 1–90 (30), dry_run?} → BrainEstimate
   failure is in neither; `memories` what the reads of those sessions kept
   (as recorded per read); `truncated` when the waiting were counted only
   to 200; `sources` the same per project, most sessions first, at most 12.
+- **Catching up.** `catch_up` is `{kind, done, total, truncated?,
+  days_left?}` while it is on and a catch-up has reads left, else `null`.
+  One shape for every kind, so a screen reads it the same way whatever is
+  being caught up on; with both left, `skipped` (*Catch-up* below) is the
+  one shown, `backfill` once it is done. `kind`
+  `backfill` is the sessions a backfill brought into reach: those in reach
+  whose last event is before `since` (when it was turned on) — present
+  only while `backfill_since` is before `since` and one of them waits.
+  `done` is those read with nothing new since, `total` that plus the ones
+  waiting (`truncated` when the waiting were counted only to 200).
+  `days_left` is an estimate, said as one: the reads left times the mean
+  tokens of the reads that spent any in the last 14 days, over
+  `daily_tokens`, rounded up; absent before any read was measured.
 - **Settings.** `auto: true` starts reading from that moment and wakes the
   reader at once, not at the next five-minute wake — on the daemon's own
   loop, never under the request; a wake that read a full four is followed
@@ -4035,21 +4163,117 @@ POST   /v1/brain/backfill       {days?: 1–90 (30), dry_run?} → BrainEstimate
   days_estimate, daily_tokens, truncated?}`: the sessions since `days` ago
   with unread prose worth a read, and an estimate of their tokens (a
   quarter of the characters sent, plus the call's measured fixed cost,
-  4,300, plus 400 for the answer), labelled an estimate on screen. Without
+  4,300, plus 400 for the answer, for every read a session takes — a long
+  one is read in chunks), labelled an estimate on screen. Without
   `dry_run` it also sets `backfill_since`, which needs the extraction on
   (`409`), and wakes the reader.
 - **A read.** A session is a candidate when its last event is after
   `since` (or `backfill_since`), it has ended or been quiet ten minutes, and
   it has main-thread prompts or answers after the last read that did not
-  fail. Its passages are numbered and sent, with the project and up to 60
-  existing topic titles, on stdin to the user's `claude` (flags in
-  ADR-063). The answer is `{memories: [{kind, title, summary, topics?,
-  passage?, related?, contradicts?}]}`, at most eight kept: each a node with
-  `run_id`, `manual: false` and the cited passage's event as its source,
+  fail. Its passages are numbered and sent, with the project, up to 60
+  existing topic titles and — for a session with a project — that
+  project's 30 newest current decisions (`#id title`) and its 40 newest
+  memories besides them (`#id kind: title`, *do not repeat these*), on
+  stdin to the user's `claude` (flags in ADR-063). A "user" turn that starts with a machine tag — one of a
+  known list (`task-notification`, `system-reminder`, `command-name`,
+  `cross-session-message`, …) or any kebab-case tag — is left out; a
+  prompt is clipped at 2,000 characters, an answer at 2,500. One read
+  sends at most 24,000 characters and 400 passages,
+  the oldest unread first; a session with more is read in chunks, each
+  read's `through_event_id` the last passage it sent (the session's newest
+  event when it sent the rest), so nothing is skipped and the next read
+  goes on from there. A wake makes at most four calls, whether to four
+  sessions or four chunks of one, a session's chunks back to back; the
+  rest waits for the next wake. The answer is `{memories: [{kind, title, summary, topics?,
+  keywords, passage?, related?, contradicts?, supersedes?, related_ids?,
+  contradicts_ids?}]}`, at most eight kept: each a node with
+  `run_id`, `manual: false`, its `keywords` (English, whatever the
+  title's language; the title and summary stay in the session's) and the
+  cited passage's event as its source,
   `part_of` the project and its topics, `relates`/`contradicts` to the
-  others named. Fewer than 300 runes of agent prose: recorded `skipped`,
-  never sent. A failure is recorded with its error and retried after 15
-  minutes, doubling; after four the session waits for new prose.
+  others named by index, and to the shown memories named by id
+  (`related_ids`, `contradicts_ids`); a decision's `supersedes` ids become
+  `supersedes` edges from it to those shown current decisions. An id the
+  read was not shown is ignored. A memory whose title is near one the
+  project already keeps — among its 300 newest — or one kept earlier in
+  the same answer is left out: their folded words overlap by 0.75 or more
+  (Jaccard, shared over all, at least two words each; a one-word title
+  only when the same; `store.BrainTitlesNear`). Fewer than 300 runes of agent prose and fewer than 200 of the user's
+  typed prompts (machine-tagged turns do not count) in a read: recorded
+  `skipped`,
+  never sent — except at the end of a session that has not ended: there
+  the read is recorded `skipped` with `held` set and the cursor stays, so
+  that prose is read with whatever the session says next, and the session
+  is not a candidate again until it has newer events or ends; once it has
+  ended, a short tail is marked read. A failure is recorded with its error and retried after 15
+  minutes, doubling; after four the session waits for new prose. The
+  project is the session's own, except for a session whose `cwd` is under
+  the system's temp directory (`os.TempDir`, `/tmp`, `/var/folders` and
+  their `/private` forms), where that label is a throwaway folder's name:
+  there it is the repository's name from its remote's web address when the
+  session's `repo_root` is a checkout with one, else none, so the memories
+  hang off their topics only and the read is sent without a project.
+- **Catch-up.** Until 2026-10-22 a read kept only the newest 24,000
+  characters of a session's unread prose and moved the cursor past the
+  rest. Migration 0068 lists every read with status `ok` made before it in
+  `brain_gaps`; on its first wake the reader measures each by re-running
+  that old cut against the stored events (the newest 400 main-thread turns
+  up to the read's `through_event_id`, prompts clipped at 600 characters,
+  newest first until 24,000) and keeps the span it never sent, after
+  `from_event_id` up to the event before the oldest passage it did send,
+  with the reads that span takes now; a read that skipped nothing loses
+  its row. A gap is read with the same chunks, prompt and model as a
+  regular read, oldest first, its `cursor` saved with each read so a
+  restart goes on from there, its memories carrying the session's project
+  by the same rule, and its prompt opened with one line saying it is an
+  earlier part of a session already read. It is shown the project's recent
+  memories, as a regular read is, but not its current decisions: the prose
+  is older than they are, so nothing it says may supersede one. It is read only while the
+  extraction is on, only when no session waits, with what is left of a
+  wake's four calls, and within the same daily limit; a chunk with too
+  little to say is marked read; failures are retried as a session's are
+  and the gap given up after four in a row. The reads are `brain_runs`
+  rows with `gap_id` set, which never move a session's cursor. `catch_up`
+  in the status is `{kind, done, total, truncated?, days_left?}` while it
+  is on and a gap is left to read, else `null`. For this catch-up `kind`
+  is `skipped` (the screen also knows `backfill`), `done` and `total` the
+  reads made and in all over every gap found, `truncated` never set, and
+  `days_left`, present only when reads are left to estimate, an estimate,
+  labelled as one on screen, of the days the rest takes — the reads left
+  times the mean tokens of the catch-up reads so far (before the first, a
+  full read's: 6,000 + 4,300 + 400), over `daily_tokens`, as if the
+  catch-up had the whole limit.
+- **Re-tag.** A memory with no `keywords` — kept before migration 0069, or
+  typed by hand — is given them in batches, so an English query finds one
+  titled in another language. A memory here is `idea`, `decision`,
+  `finding` or `question`; an imported note and an entity never are. Only
+  while the extraction is on, and only in a wake that finds no session
+  waiting (a session waiting out a failure does not count): what the
+  catch-up (*Catch-up* above) leaves of the wake's four calls goes to the
+  re-tag then, and a session that comes to wait goes first at the next
+  wake. Each call sends 40 memories, lowest id first,
+  above the re-tag's cursor, one per line as `#id kind: title — summary`
+  (the summary clipped to 200 runes), to the same `claude`, flags and
+  model as a read, with its own instructions and `--json-schema`; the
+  answer is `{tags: [{id, keywords}]}`. Only an id the batch sent is kept,
+  the first answer for an id wins, the keywords are cleaned as a read's
+  are (five to eight, at most 40 runes each), and a memory that has
+  keywords by then is left alone; `updated_at` does not move. Each batch
+  is a `brain_runs` row with `session_id` `caprock:retag`,
+  `from_event_id` and `through_event_id` the first and last memory id it
+  sent, `nodes` the memories it gave keywords, and its tokens and cost as
+  claude reported them — so it counts toward `daily_tokens`, `spent` and
+  `spent_usd` like a read, and no migration is needed. The cursor is the
+  highest `through_event_id` of a batch that did not fail, so the re-tag
+  resumes there after a restart and a memory the answer left out is not
+  asked again. A failed batch is retried after 15 minutes, doubling;
+  after four it is recorded `skipped` (*gave up after repeated failures*)
+  and the re-tag goes on past it. `retag` in the status is `{done, total}`
+  while the extraction is on and memories without keywords wait above the
+  cursor: `done` the memories batches gave keywords, `total` that plus
+  those waiting; absent otherwise. It is its own field, not a kind of
+  any catch-up progress, and it adds no frame: a screen reads the status
+  while the extraction runs.
 
 ### Obsidian vaults
 
@@ -4160,19 +4384,31 @@ listener. Stdout carries the protocol and nothing else. Code:
 Every tool is annotated `readOnlyHint: true, destructiveHint: false,
 idempotentHint: true`; `openWorldHint` is true for `ci_status` alone.
 
-- **`search_memories`** `{query?, project?, limit?}` → `GET /v1/brain?summaries=1&q&project&limit`
+- **`search_memories`** `{query?, project?, limit? (30, at most 50)}` → `GET /v1/brain?summaries=1&q&project&limit`
   → `{total, returned, memories: [{id, kind, title, summary, project,
-  session_id, pinned, created_at, topics[]}]}`; entities are left out, a
-  memory's `topics` are the topic entities linked to it.
+  session_id, pinned, created_at, topics[], keywords[], superseded_by?}],
+  hint?}`: ranked candidates for the calling agent to judge by meaning,
+  each summary clipped to 200 runes; entities are left out, a memory's
+  `topics` are the topic entities linked to it; a superseded memory comes
+  last and names its replacement. `hint` asks the agent to rephrase and
+  search again when a query matched nothing; the tool's description says
+  the same, and that titles are often in the user's language while
+  keywords are English.
+- **`current_decisions`** `{project?, limit? (50, at most 100)}` →
+  `GET /v1/brain/decisions?project=&limit=` → `{project, decisions: [{id,
+  kind, title, summary, project, created_at, keywords[]}]}`; `project`
+  defaults to the repository the server was started in.
 - **`get_memory`** `{id}` → `GET /v1/brain/nodes/{id}` → `{memory, links:
   [{relation, id, kind, title}]}`, at most 30 links; `relation` is the edge
   kind, `(from)` when the edge points at this memory.
 - **`memory_topics`** `{project?}` → `GET /v1/brain` and `/v1/brain/status`
   → `{memories, topics: [{title, memories}], projects: [{project, count}]}`,
-  topics by linked memories, at most 60 of each.
+  topics by linked memories, at most 60 of each. With `project`, `memories`
+  is that project's count and `projects` holds that project alone (empty
+  when it has none), not the totals for every project.
 - **`next_session_handoff`** `{repo?}` → `GET /v1/brain/handoff?project=`
-  → `{project, memories[], max_memories, handoff_on, left_off_at,
-  holdout_pct, note}`.
+  → `{project, current_decisions[], memories[], max_memories, handoff_on,
+  left_off_at, holdout_pct, note}`.
 - **`recent_sessions`** `{repo?, all_repos?, limit?}` →
   `GET /v1/sessions?dir=<root>&limit=` (or `?chats=exclude&limit=` with
   `all_repos`) → `{repo, project, sessions: [{id, agent, title,
@@ -4180,8 +4416,11 @@ idempotentHint: true`; `openWorldHint` is true for `ci_status` alone.
   last_event_at, doing, cost_usd, tokens, turns, tool_calls, files_touched,
   loop?}]}`; `title` is the user's name for the session, else the agent's.
 - **`session_summary`** `{session_id}` → `GET /v1/sessions/{id}` →
-  `{session, files[] (at most 40, files_not_shown beyond), pull_requests:
-  [{number, title, url}]}`. An id holding `/`, `\`, `?` or `#` is refused
+  `{session, files[] (the 40 most recently touched), files_not_shown and
+  files_note (*The 40 most recently touched files; +N more.*) when the
+  session touched more, pull_requests: [{number, title, url}]}`.
+  `files_not_shown` counts from the session's `files_touched`, not from the
+  daemon's list, which stops at 100. An id holding `/`, `\`, `?` or `#` is refused
   before any request.
 - **`session_prose`** `{session_id, limit? (5, at most 20)}` →
   `GET /v1/sessions/{id}/notes` → `{session_id, notes: [{session_id,
@@ -4213,6 +4452,43 @@ idempotentHint: true`; `openWorldHint` is true for `ci_status` alone.
 runs from, with a Homebrew keg path (`<prefix>/Cellar/caprock/<v>/bin/caprock`)
 given as `<prefix>/bin/caprock`, which survives an upgrade; omitted when the
 path cannot be read. Settings puts it in the MCP command when asked.
+
+**Registering it with the agents** (2026-10-22, ADR-078 amended). Code:
+`internal/mcpreg`, `internal/api/mcpreg.go`. Nothing here runs except on a
+click.
+
+- **`GET /v1/mcp/agents`** → `{executable, unstable?, agents: [{agent:
+  "claude"|"codex", name, state, command?, config?}]}`. `state` is
+  `not_installed` (the CLI is not found the way a spawned agent's is: the
+  daemon's PATH, the login shell's, the installers' directories),
+  `not_connected`, `connected`, or `different` (a `caprock` entry whose
+  command is another path, or whose arguments are not `["mcp"]`: a stale
+  path). Read from the agent's own file, never by running it: Claude Code's
+  user scope is the top-level `mcpServers.caprock` of `.claude.json` in
+  `$CLAUDE_CONFIG_DIR` or the home directory (project-scoped entries are not
+  read); Codex's is the `[mcp_servers.caprock]` table of `config.toml` in
+  `$CODEX_HOME` or `~/.codex`, read line by line (`command = "…"`,
+  `args = [ … ]`). Either override is taken from the login shell's
+  environment. A registered `command` counts as this caprock when it equals
+  `executable`, is a bare `caprock` (the copy command), or resolves through
+  links to the same file. A file that cannot be read or parsed reads as
+  `not_connected`. The parse is cached on the file's size and mtime.
+  `executable` is `/v1/status`'s; `unstable` says why Connect would refuse it
+  (a macOS App Translocation path, an app on a mounted disk image, a
+  `go run` build). 501 when the daemon has no registrar.
+- **`POST /v1/mcp/agents/{agent}/connect`** runs, with the login shell's
+  environment, from the home directory, no stdin, a one-minute bound:
+  `claude mcp add -s user caprock -- <executable> mcp` or `codex mcp add
+  caprock -- <executable> mcp`. `different` first runs the remove below;
+  `connected` runs nothing. → `200` and the agent's new status.
+- **`POST /v1/mcp/agents/{agent}/disconnect`** runs `claude mcp remove -s
+  user caprock` or `codex mcp remove caprock`; `not_connected` runs nothing.
+  → `200` and the new status.
+- **Errors** are `{error, agent}`: `403` from any paired device (a phone or
+  an allowed computer: this changes the machine's agent config), `404` an
+  agent other than `claude` or `codex`, `409` not installed or an unstable
+  path, `502` the CLI failed — `error` is `<Name>: ` and the last 600
+  characters of what it printed. One change runs at a time.
 
 ### AI;DR
 
@@ -4862,8 +5138,9 @@ machine's alone (`403` from any device).
 - **`GET /v1/admin`** → `{admin: false}` without a valid key (and to any
   caller that is neither the machine nor a controller); with one,
   `{admin: true, subject, modules: ["<id>", …], installed: [{id, name,
-  version?, url: "/x/<id>/"}]}` — `installed` lists only the modules that are
-  installed and named in the key. A stored key that does not verify adds
+  version?, url: "/x/<id>/", attention?}]}` — `installed` lists only the
+  modules that are installed and named in the key; `attention` is the
+  module's current attention (below), absent at 0 or once it is a day old. A stored key that does not verify adds
   `key_error`, and nothing else.
 - **`PUT /v1/admin`** `{key}` verifies the key and stores it trimmed as
   `config.json`'s `admin_key`; 400 with the reason when it does not verify;
@@ -4904,6 +5181,43 @@ machine's alone (`403` from any device).
   session. While such a message is less than a day old the bridge reads
   updates even with every alert and two-way chat off. An answer for a
   module the key no longer names is not kept; the button says *Not saved*.
+  **`reply_to_message_id`** (optional) threads the new message under one
+  this module sent; any other id (another module's, the bridge's own, an
+  unknown or forgotten one) is `404` and nothing is sent; a negative one
+  is `400`. **`pin: true`** pins the message once sent (below); when only
+  the pin is refused the answer is `502` `{error, message_id}`, the message
+  having been sent.
+- **Editing a sent message** (amended 2026-10-22): **`PATCH
+  /v1/x/<id>/telegram/<message_id>`** `{text?, buttons?, pin?}` →
+  `{message_id}`. An omitted (or `null`) part is left as it is; `buttons:
+  []` removes the keyboard; `pin: true` pins the message, `pin: false`
+  unpins it; at least one part is required (`400` otherwise). Text and
+  buttons are changed first, then the pin. A message can be edited any
+  number of times. Same limits as
+  `POST`: `text` 1–3500 characters (the first line still names the module),
+  buttons as above. New text is `editMessageText` and keeps the keyboard the
+  message shows (its buttons in their order, or the `✓ <label>` of a press);
+  buttons alone are `editMessageReplyMarkup`. A press on new buttons is
+  written to the store exactly like one on the first (`telegram/<message_id>-<n>`,
+  `n` continuing); a press on a replaced button says *That button is out of
+  date*. Telegram's *message is not modified* is a `200`. Only a message
+  this module sent: any other — another module's, the bridge's own, an
+  unknown, non-numeric or forgotten id — is `404` and nothing is sent. Which
+  module sent a message is kept in `telegram.json` (§ Telegram bridge), so
+  it outlives a restart; it holds the last 400 messages the bridge sent, and
+  disconnecting the bot forgets them. `403` unless the key names `<id>`;
+  `409` with no bot or paired chat; `502` with Telegram's words. `/mute all`
+  does not hold an edit back: it changes a message already in the chat and
+  makes no sound.
+- **Pinning** (amended 2026-10-22): a module holds **at most one** pinned
+  message. A pin is `pinChatMessage` with `disable_notification: true`;
+  once it succeeds, the module's previous pin, if another message, is
+  unpinned with `unpinChatMessage` and that `message_id` — never a pin the
+  bridge, another module or the owner made. `pin: false` unpins only that
+  message; Telegram saying it is not pinned counts as done. The module's
+  pin is kept in `telegram.json` (`module_pins`), so it outlives a restart.
+  A refused pin (the bot lacks the right to pin) is `502` with Telegram's
+  words, the token never in them, and the previous pin stays.
 - **Notification** (amended 2026-10-22): **`POST /v1/x/<id>/notify`**
   `{title, body?}` → `204`: a desktop notification from the Caprock app,
   titled `<module name> · <title>`, whose click opens `#/x/<id>` (§ Notify
@@ -4912,9 +5226,32 @@ machine's alone (`403` from any device).
   shown: both desktop notification switches off, or no desktop app open (a
   browser tab shows none). It stays in Notification Center like the app's
   other notifications.
+- **Attention** (amended 2026-10-22, `internal/api/moduleattention.go`):
+  **`PUT /v1/x/<id>/attention`** `{count, items?: [{label, href}]}` → `200`
+  with what is kept, `{count, items, updated_at}` (ms), replacing what the
+  module said before. `count` is an integer ≥ 0, and `count: 0` clears it
+  (→ `{count: 0, items: []}`); at most 8 items; `label` 1–80 characters on
+  one line, trimmed; `href` a route inside the module's own page — `#` and
+  then 1–511 characters with no space or control character (`#review/42`),
+  never a URL. Unknown fields, or a body that is not that object (16 KB at
+  most), are `400`, like every refusal above; `403` unless the key names
+  `<id>`; `404` when the module is not installed. It is kept in memory and in
+  `module_docs` under the reserved collection `_attention`, document
+  `current` (a collection id the document routes cannot name), so it
+  survives a restart without a migration; it is shown while under a day old
+  (24 h after the last `PUT`, it is as if cleared). Every `PUT` publishes an
+  `admin` frame carrying `{}` (§ Live socket), on which the dashboard reads
+  `GET /v1/admin` again. In the app's sidebar it is the module row's informer
+  ([04-ui.md § Private modules](04-ui.md#private-modules)); an item opens
+  `#/x/<id>?to=<href, encoded>`, the frame loading `/x/<id>/?theme=…<href>`
+  on the machine and, on a phone, getting a `caprock:route` message
+  `{type: "caprock:route", hash: "<href>"}` on load, which the bootstrap
+  applies to `location.hash`.
 - **Who may call them:** the machine and a controller, like the store
   (`controllerRoutes`); on a phone the module bridge forwards a `POST` of
-  exactly `/v1/x/<id>/telegram` or `/v1/x/<id>/notify`.
+  exactly `/v1/x/<id>/telegram` or `/v1/x/<id>/notify`, a `PATCH` of
+  `/v1/x/<id>/telegram/<digits>`, and a `PUT` of exactly
+  `/v1/x/<id>/attention`.
 - **Install:** `caprock module install <dir>` (hidden) copies a folder with
   `module.json` (`{id, name, version?}`, name 1–40 characters) and
   `index.html` into `<data dir>/modules/<id>/`, whole, through a staging
@@ -4950,7 +5287,7 @@ machine's alone (`403` from any device).
   or `HEAD` under `/x/<id>/`, or `GET`, `HEAD`, `PUT`, `PATCH`, `DELETE`
   on `/v1/x/<id>/docs/<collection>[/<doc>]` — with no dot, empty or encoded
   `.`/`/`/`\` segment — or `POST` of exactly `/v1/x/<id>/telegram` or
-  `/v1/x/<id>/notify`. Anything else is answered `403` without a request. It
+  `/v1/x/<id>/notify`, or `PATCH` of `/v1/x/<id>/telegram/<digits>`, or `PUT` of exactly `/v1/x/<id>/attention`. Anything else is answered `403` without a request. It
   passes on `Content-Type` and `Accept` only, adds the device token, and says
   `application/json` on a write that did not; the reply carries the answer's
   `Content-Type`.
@@ -5782,8 +6119,9 @@ keeps its items, as it keeps its saved prompts.
 ### Second Brain DDL (migrations 0055, 0056)
 
 Second Brain's graph and the automatic extraction's reads (§ Second Brain,
-[ADR-063](08-decisions.md)). This is the initial DDL; migration 0062 extends
-it below (§ Obsidian vaults DDL). Writes go through `internal/store`.
+[ADR-063](08-decisions.md)). This is the initial DDL; migrations 0062 and
+0069 extend it below (§ Obsidian vaults DDL, § Second Brain find and
+decisions DDL). Writes go through `internal/store`.
 
 ```sql
 CREATE TABLE IF NOT EXISTS brain_nodes (
@@ -5856,8 +6194,49 @@ unique index makes an entity one per normalised title while memories may
 share one. Deleting a node deletes its edges (foreign keys are on), and the
 topics and people the delete leaves unlinked go too unless dropped in by hand
 or pinned. A session's newest `brain_runs` row says how far the extraction has
-read it (`through_event_id`); `tokens_in` is input, cache read and cache write
-as `claude` reported them, `cost_usd` its own `total_cost_usd`.
+read it (`through_event_id`, never past a passage it did not send); `tokens_in` is input, cache read and cache write
+as `claude` reported them, `cost_usd` its own `total_cost_usd`. A row with
+`session_id` `caprock:retag` is a re-tag batch, not a read: its
+`from_event_id` and `through_event_id` are memory ids (§ Second Brain,
+*Re-tag*).
+
+### Brain catch-up DDL (migration 0068)
+
+```sql
+CREATE TABLE IF NOT EXISTS brain_gaps (
+  id            INTEGER PRIMARY KEY,
+  run_id        INTEGER NOT NULL UNIQUE,     -- the brain_runs read that skipped it
+  session_id    TEXT    NOT NULL,
+  from_event_id INTEGER NOT NULL,
+  to_event_id   INTEGER,                     -- last event of the span; NULL until measured
+  cursor        INTEGER NOT NULL,
+  status        TEXT    NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','done','failed')),
+  reads_total   INTEGER NOT NULL DEFAULT 0,
+  reads_done    INTEGER NOT NULL DEFAULT 0,
+  attempts      INTEGER NOT NULL DEFAULT 0,
+  error         TEXT    NOT NULL DEFAULT '',
+  updated_at    INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_brain_gaps_status ON brain_gaps(status, id);
+ALTER TABLE brain_runs ADD COLUMN gap_id INTEGER;
+ALTER TABLE brain_runs ADD COLUMN held INTEGER NOT NULL DEFAULT 0;
+INSERT OR IGNORE INTO brain_gaps (run_id, session_id, from_event_id, cursor)
+  SELECT id, session_id, from_event_id, from_event_id FROM brain_runs WHERE status = 'ok';
+```
+
+A gap is the span of one past read that the read never sent: the
+session's events after `from_event_id` up to and including `to_event_id`,
+read up to `cursor`. Every successful read existing when the migration runs
+is listed, unmeasured (`to_event_id` NULL); the daemon measures them
+(§ Second Brain, *Catch-up*), deleting the rows that skipped nothing, so a
+measured row is a real gap. `reads_total` is the reads it was measured to
+take, set to `reads_done` when it is done or given up; `attempts` the
+failed reads in a row, reset by one that succeeds. A read with `gap_id`
+set is a catch-up read and a read with `held = 1` left a short, open tail
+for later; neither counts toward a session's cursor (the newest
+`through_event_id` of its other reads that did not fail), and catch-up
+reads are left out of a session's failure count. A held read's
+`through_event_id` is the session's newest event when it was held.
 
 ### Obsidian vaults DDL (migration 0062)
 
@@ -5926,6 +6305,33 @@ CREATE TABLE IF NOT EXISTS brain_vault_edges (
 CREATE INDEX IF NOT EXISTS idx_brain_vault_edges_edge ON brain_vault_edges(src, dst, kind);
 CREATE INDEX IF NOT EXISTS idx_brain_vault_edges_dst ON brain_vault_edges(dst);
 ```
+
+### Second Brain find and decisions DDL (migration 0069)
+
+[0069_brain_find_decisions.sql](../internal/store/migrations/0069_brain_find_decisions.sql)
+(§ Second Brain, *Search*, *Current decisions*; § SessionStart handoff):
+
+```sql
+ALTER TABLE brain_nodes ADD COLUMN keywords TEXT NOT NULL DEFAULT '';
+-- brain_edges rebuilt as 0062 did, its rows copied across, with:
+--   kind TEXT NOT NULL CHECK (kind IN ('relates','follows','contradicts','part_of','supersedes'))
+CREATE INDEX IF NOT EXISTS idx_brain_edges_dst ON brain_edges(dst);
+CREATE INDEX IF NOT EXISTS idx_brain_edges_supersedes ON brain_edges(dst) WHERE kind = 'supersedes';
+ALTER TABLE sessions ADD COLUMN handoff_runes INTEGER NOT NULL DEFAULT 0;
+```
+
+- **`keywords`** — a memory's English search keywords joined with `, `;
+  `brain_nodes.search` carries them, folded, on a fourth line, and search
+  weighs them like the title. `''` for memories made before 0069 and by
+  hand, until the extraction's re-tag gives them some (§ Second Brain,
+  *Re-tag*; no migration of its own).
+- **`supersedes`** — an edge from a newer decision to the older one it
+  replaces. Nothing references `brain_edges`, so the rebuild is a copy
+  aside, a drop, a create and a copy back, inside the migration's
+  transaction. The partial index answers "is this superseded" for the
+  current-decisions read, the handoff and every search.
+- **`handoff_runes`** — the length of a new session's handoff reply in
+  runes; 0 when nothing was handed.
 
 ### Turn bounds DDL (migration 0048)
 

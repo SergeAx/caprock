@@ -20,8 +20,22 @@ It is read-only and free.
 
 ## Turn it on
 
-Caprock has to be running (`caprock up`, or the desktop app). Then add the
-server to your agent.
+Caprock has to be running (`caprock up`, or the desktop app).
+
+**One click.** Open Second Brain: the row on top, *Let your agents ask Second
+Brain*, has a **Connect** button for each agent installed on this computer
+(Claude Code, Codex). Settings → *Use Caprock from your agents (MCP)* has the
+same buttons. Connect runs the agent's own command for you —
+`claude mcp add -s user caprock -- <path to caprock> mcp`, or
+`codex mcp add caprock -- <path to caprock> mcp` — so Caprock is in that
+agent's MCP servers for your user, in every project. **Disconnect** runs its
+`mcp remove`. If the agent's config points at an older caprock (you moved or
+reinstalled it), the button reads **Update path**. Nothing happens until you
+click, the click only changes that agent's config file on this computer, and
+it is not offered on a paired phone. If the agent's command fails, its
+message is shown under the button.
+
+**By hand** — the same thing, or for another client.
 
 **Claude Code** — in the project you want it in:
 
@@ -55,9 +69,10 @@ full path to the binary instead. Settings → *Use Caprock from your agents
 caprock*. On Windows the path ends in `caprock.exe`; quote it if it holds a
 space.
 
-To turn it off, remove it from the agent: `claude mcp remove caprock`,
-`codex mcp remove caprock`, or delete the lines. Nothing in Caprock changes
-either way.
+To turn it off, press **Disconnect**, or remove it from the agent yourself:
+`claude mcp remove caprock` (add `-s user` if you added it for every
+project), `codex mcp remove caprock`, or delete the lines. Nothing in
+Caprock changes either way.
 
 ## The tools
 
@@ -65,19 +80,20 @@ A tool about "this repository" uses the directory your agent started the
 server in — normally the project it is working in — unless it is given
 another (`repo`). A linked git worktree counts as its repository.
 
-| Tool                   | What it answers                                                        |
-| ---------------------- | ---------------------------------------------------------------------- |
-| `search_memories`      | Second Brain's memories matching some words, with their topics         |
-| `get_memory`           | One memory in full, with what it links to                              |
-| `memory_topics`        | The topics Second Brain knows, and the memories per project            |
-| `next_session_handoff` | What a new session in this repository is handed, and whether it is on  |
-| `recent_sessions`      | Recent sessions here (or everywhere): status, branch, cost, loop alert |
-| `session_summary`      | One session: description, files touched, pull requests, cost           |
-| `session_prose`        | What one session's agent wrote, newest first                           |
-| `search_prose`         | What agents wrote, searched across every session                       |
-| `cost`                 | Spend and tokens per day and model, for this repository or all         |
-| `ci_status`            | GitHub Actions on the default branch and the open pull request         |
-| `loop_alerts`          | Running sessions repeating the same tool call                          |
+| Tool                   | What it answers                                                           |
+| ---------------------- | ------------------------------------------------------------------------- |
+| `search_memories`      | Up to 30 ranked Second Brain memories for some words, to judge by meaning |
+| `current_decisions`    | The decisions in force for this repository, newest first                  |
+| `get_memory`           | One memory in full, with what it links to                                 |
+| `memory_topics`        | The topics Second Brain knows, and the memories per project               |
+| `next_session_handoff` | What a new session here is handed: current decisions, then memories       |
+| `recent_sessions`      | Recent sessions here (or everywhere): status, branch, cost, loop alert    |
+| `session_summary`      | One session: description, files touched, pull requests, cost              |
+| `session_prose`        | What one session's agent wrote, newest first                              |
+| `search_prose`         | What agents wrote, searched across every session                          |
+| `cost`                 | Spend and tokens per day and model, for this repository or all            |
+| `ci_status`            | GitHub Actions on the default branch and the open pull request            |
+| `loop_alerts`          | Running sessions repeating the same tool call                             |
 
 Costs are Caprock's own figures at API list prices; on a Pro or Max plan they
 are what the same usage would cost on the API, not what you were billed.

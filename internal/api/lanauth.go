@@ -331,11 +331,14 @@ var pairedDeviceRoutes = map[string]bool{
 	"GET /v1/tools/drill":                     true, // the tool drill-down; its Premium half is gated in the handler
 	"GET /v1/saved-prompts":                   true, // the phone's chips (ADR-051); changing them is the machine's
 	"GET /v1/attempts/{group}":                true, // Compare attempts (ADR-052): what each changed and cost, a read
+	"GET /v1/tabs":                            true, // the computer's open tabs in order: the phone home's Continue mirrors them
 	"GET /v1/inbox":                           true, // what was saved for later, from the phone or the machine
 	"GET /v1/inbox/{id}/files/{n}":            true, // an Inbox item's image, for its thumbnail
 	"GET /v1/brain":                           true, // Second Brain's graph (ADR-063); writing it is the machine's
 	"GET /v1/brain/status":                    true,
 	"GET /v1/brain/handoff":                   true,
+	"GET /v1/brain/spend":                     true, // what the reads spent, per day and project
+	"GET /v1/brain/decisions":                 true,
 	"GET /v1/brain/nodes/{id}":                true,
 
 	// The permission prompt an owned session waits on (ADR-035); the live
@@ -533,10 +536,15 @@ var controllerRoutes = map[string]bool{
 	"PATCH /v1/x/{id}/docs/{collection}/{doc}":  true,
 	"DELETE /v1/x/{id}/docs/{collection}/{doc}": true,
 	// And what such a module says to the owner (amended 2026-10-22): a
-	// message to the owner's own paired Telegram chat, and a desktop
-	// notification on the machine (moduleout.go).
-	"POST /v1/x/{id}/telegram": true,
-	"POST /v1/x/{id}/notify":   true,
+	// message to the owner's own paired Telegram chat (and an edit of one
+	// the module sent), and a desktop notification on the machine
+	// (moduleout.go).
+	"POST /v1/x/{id}/telegram":               true,
+	"PATCH /v1/x/{id}/telegram/{message_id}": true,
+	"POST /v1/x/{id}/notify":                 true,
+	// And what waits on the owner in it, for its sidebar row
+	// (moduleattention.go).
+	"PUT /v1/x/{id}/attention": true,
 
 	// Report a bug (ADR-073): the one outbound call a phone may make, because
 	// the phone is where a bug is often met, and the report is typed or

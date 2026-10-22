@@ -4222,15 +4222,16 @@ searching prose.
   many sessions and tokens that is.
 - **How a session is read** (`internal/brain`). A session is read once it
   has ended or been quiet for ten minutes, and again only when it has new
-  prose; at most four per wake, a wake every five minutes and one at once
+  prose; at most four reads per wake, a wake every five minutes and one at once
   when it is turned on, one at a time, off the request path. A wake that
   read a full four is followed by the next three seconds later, so a
   backfill reads straight through within the daily limit instead of four
   sessions per five minutes (2026-10-15: the screen that shows the build
-  as it happens sat still between wakes). A session whose agent wrote fewer than 300
-  characters is recorded as skipped and never sent. The read is the
-  session's prompts and answers (main thread only, the newest 24,000
-  characters when there are more), the project's name and the topics
+  as it happens sat still between wakes). A read with fewer than 300
+  characters of agent prose and fewer than 200 of the user's prompts is
+  recorded as skipped and never sent. The read is the
+  session's prompts and answers (main thread only, at most 24,000
+  characters), the project's name and the topics
   already in the brain, sent on stdin to `claude -p --output-format json
   --tools "" --no-session-persistence --setting-sources local --settings
   <{"disableAllHooks": true}> --model haiku --system-prompt … --json-schema
@@ -4241,6 +4242,53 @@ searching prose.
   fixed cost of a call from 16,637 input tokens to 4,318. A Windows `.cmd`
   shim cannot carry JSON on its command line, so there the instructions and
   schema go on stdin too.
+- **A long session is read in chunks** (2026-10-22). A session with more
+  unread prose than one read sends is read oldest first: each read sends
+  the oldest unread passages that fit in the 24,000 characters (and at
+  most 400 passages), and its `through_event_id` is the last passage it
+  sent, so the next read goes on from there. Until then a read kept the
+  newest 24,000 characters and moved the cursor past the whole session,
+  and the older part was never read: on a copy of the owner's database
+  (2026-10-22), 43 of 1,210 reads were over budget, in 25 sessions, and
+  left about 5.9 million characters of main-thread prose unread — about
+  273 reads at today's budget to recover, which no backfill has done. A
+  session's chunks run back to back within a wake, each one of the wake's
+  four calls; what is left waits for the next wake, three seconds later,
+  so the per-read cost, the calls per wake and the daily limit are
+  unchanged. The instructions also say to keep an explicit decision or
+  standing rule the user states ("from now on", "rule:") as a decision,
+  and a read with little agent prose is still sent when it carries 200
+  runes or more of the user's prompts, where such decisions are mostly
+  said; only a read with neither is skipped. "User" turns that start with
+  a machine tag (a background task's notice, a reminder, a slash
+  command's echo, a message from another session: a known list, or any
+  kebab-case tag) are not the user's words and are left out of the read
+  and of that count; `<pasted_content>` stays. With that room freed, a
+  prompt is clipped at 2,000 characters instead of 600, which cut a
+  third of the prompts in the owner's last 30 days; the 24,000 per read
+  is unchanged.
+- **What was skipped is caught up, for everyone** (2026-10-22). The span a
+  past read never sent is recomputable: re-running the old cut against the
+  stored events gives the oldest passage it sent, and everything after its
+  `from_event_id` before that is the gap. Almost every user who read a long
+  session has one, so the catch-up is automatic, not a button: migration
+  0068 lists the past reads, the first wake measures them, and the gaps are
+  read with the same chunks and prompt, oldest first, only when no session
+  waits and within the same daily limit and four calls per wake, so it
+  never delays a new session or spends more than the user set. On a copy of
+  the owner's database (2026-10-22) the measure found 42 gaps in 24
+  sessions, 5.8 million characters, 245 reads, in 16 seconds once. The
+  prompt says a gap is an earlier part of a session already read, which is
+  all the model needs to avoid repeating its later part. The status says
+  how far it is (`catch_up`), with the days left labelled an estimate.
+- **A short open tail waits** (2026-10-22). A read with too little to say
+  used to be recorded as skipped and move the cursor, so a short exchange
+  at the end of a session was never read even when the session went on: the
+  audit counted 58 such windows, about 5,800 characters, in 56 sessions.
+  Now a short window at the end of a session that has not ended is held:
+  the cursor stays, the session is left alone until it has newer events,
+  and the held prose is read with them. A session that has ended with a
+  short tail has it marked read, so nothing waits forever.
 - **What is kept, and its limits.** Each memory records the read it came
   from (`brain_runs`: model, tokens, cost, status) and the passage it
   cites, so its source link opens the moment it was said; it hangs off the
@@ -5572,14 +5620,44 @@ shows desktop notifications from the app. The decisions:
   name; a click opens `#/x/<id>`, a route the shell accepts only in that
   shape. The default banner style stays (owner, 2026-10-22); the
   notification stays in Notification Center like the app's others.
+- **A module may tidy what it sent** (relayed owner feedback, 2026-10-22:
+  approving a batch of drafts, he could not tell which cards were done).
+  `PATCH /v1/x/<id>/telegram/<message_id>` changes the text or the buttons
+  of a message **that module sent**, and `reply_to_message_id` on `POST`
+  threads a new one under it; any other message is `404`, the same answer
+  as an unknown one, so a module learns nothing about the chat beyond its
+  own messages. Which module sent which message is the bridge's record in
+  `telegram.json`, so it survives a restart. Presses on edited buttons go to
+  the module's store like any other. A module may also **pin** one of its
+  messages (`pin` on `POST` and `PATCH`, silently): it holds at most one
+  pin, pinning another unpins its previous one, and it never touches a pin
+  the bridge, another module or the owner made; its pin is kept in
+  `telegram.json` too.
 - **What is sent** (rule 4): to Telegram, the module's name and the text and
   button labels the module wrote, to the chat the owner paired, through the
   bot token he gave, as everything else the bridge sends; nothing else.
   The notification never leaves the machine.
+- **What waits on the owner, inside the module's sidebar row and nowhere
+  else.** The owner's ask (2026-10-22, translated): *"Not where the project
+  list is. On the left there is the Ops chip with its keyboard shortcut, and
+  Second Brain sits above it. One expands while the other collapses. Inside
+  the Ops chip, a microscopic informer, and from there I can jump in. Nothing
+  more."* So `PUT /v1/x/<id>/attention` `{count, items}` (at most eight,
+  each a short label and a `#route` inside the module, never a URL) is drawn
+  as *2 waiting* in the warn colour inside that row; a click unfolds the
+  items, and an item opens the module at its route. The row and Second Brain
+  fold as an accordion. Same callers and key as the messages above. It
+  survives a restart (kept under a collection the module's own store cannot
+  name, so no migration) and stops showing a day after the last report, so a
+  module that stopped reporting does not keep a count up. Nothing of it
+  leaves the machine; the live frame that says it changed carries nothing,
+  so a viewer learns nothing of a module.
 
 **Rules out (2026-10-22):** a module choosing a chat or a bot; a module's
 answer reaching a session; a notification route other than the module's own
-screen.
+screen; a module's attention anywhere but its own sidebar row (no badge on
+the project list, Home or the Dock), or an item opening anything but the
+module.
 
 ## ADR-077 — A project of chosen repositories: no folder of its own, the first one is home
 
@@ -5679,7 +5757,8 @@ decision avoids), or the home repository proves the wrong default and a
 ## ADR-078 — `caprock mcp`: a read-only MCP server on stdio, answered from the daemon's loopback API
 
 **Date:** 2026-10-18 · **Status:** accepted (owner, 2026-10-18, after
-reading how ScreenMind lets agents query it over MCP). Contract:
+reading how ScreenMind lets agents query it over MCP); amended 2026-10-22
+(registration on an explicit click, below). Contract:
 [03-contracts.md § MCP server](03-contracts.md#mcp-server); screen:
 [04-ui.md § Settings](04-ui.md#settings), *Use Caprock from your agents
 (MCP)*; user docs: [docs/mcp.md](../docs/mcp.md).
@@ -5713,6 +5792,10 @@ take tools from outside.
   tool that is about "this repository" defaults to the directory the agent
   started the server in, resolved the way the daemon groups sessions
   (`store.RepoFromCwd`: a linked worktree counts as its repository).
+  Amended 2026-10-22: a twelfth tool, `current_decisions`, reads the
+  registry of decisions nothing supersedes from a new read,
+  `GET /v1/brain/decisions` (03-contracts.md § Second Brain, *Current
+  decisions*).
 - **No new endpoint.** Every tool is an existing read: `/v1/brain`,
   `/v1/brain/nodes/{id}`, `/v1/brain/status`, `/v1/brain/handoff`,
   `/v1/sessions`, `/v1/sessions/{id}`, `/v1/sessions/{id}/notes`,
@@ -5753,6 +5836,37 @@ take tools from outside.
   its own decision.
 - **Resources and prompts.** Tools cover the questions; `resources/list` and
   `prompts/list` answer empty so a client that asks is not refused.
+
+**Amended 2026-10-22: registration on an explicit click** (owner
+approved). An audit found no agent had called `caprock mcp` in seven days:
+nobody registers it, because the one route was a command to copy from
+Settings. So the Second Brain screen leads with *Let your agents ask Second
+Brain* and a button per installed agent, and Settings shows the same
+status above the copy commands (which stay as the fallback).
+
+- **The agent's own CLI writes its config.** Connect runs `claude mcp add
+  -s user caprock -- <executable> mcp` or `codex mcp add caprock --
+  <executable> mcp`; Disconnect runs their `mcp remove`. Caprock never
+  edits `~/.claude.json` or `config.toml` itself: the agents own those
+  formats, and `~/.claude.json` is rewritten by every running Claude Code.
+- **Only on a click, only at the machine.** Nothing registers on start,
+  upgrade or any other event. A paired device — a phone or an allowed
+  computer — is refused (403) and not shown the row: this changes the
+  machine's agent config, like a custom agent's command (ADR-046).
+- **User scope, an absolute path.** User scope so every project has it,
+  which is what "let your agents ask" means. The path is `/v1/status`'s
+  `executable` — a Homebrew keg path given as its `bin` link, the desktop
+  app's daemon at its own copy in the data directory (ADR-040) — and a path
+  that will vanish (App Translocation, a mounted disk image, `go run`) is
+  refused rather than written.
+- **Status is read from the files, not from `claude mcp get`.** That
+  command starts Node and health-checks the server by starting it, which on
+  every screen open would launch a `caprock mcp` under Claude Code. The two
+  keys are documented and the reads are tolerant; a registration whose
+  command is not this caprock shows *Update path*.
+- **Rule 4.** The click changes a file on this machine; nothing is sent
+  anywhere. What the agents later ask is the condition stated in Settings'
+  first paragraph, unchanged.
 
 **Revisit if:** an agent needs to write into Second Brain from a session
 (a `remember` tool), a client that only speaks HTTP matters, or the SDK

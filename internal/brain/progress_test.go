@@ -3,6 +3,7 @@ package brain
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -97,7 +98,17 @@ func TestTheStatusNamesTheSessionBeingRead(t *testing.T) {
 // counted until it goes quiet, and one from before the reach not at all.
 func TestTheBuildCountsWhatIsReadAndWhatWaitsPerProject(t *testing.T) {
 	ctx := context.Background()
-	e := newEnv(t, twoMemories)
+	// Each read keeps two memories of its own: the same titles twice in a
+	// project would be near duplicates, and the second pair left out.
+	reads := 0
+	e := newEnv(t, func(r Request) (Result, error) {
+		reads++
+		res, err := twoMemories(r)
+		for i := range res.Memories {
+			res.Memories[i].Title = fmt.Sprintf("Read %d keeps %s", reads, []string{"alpha", "beta"}[i])
+		}
+		return res, err
+	})
 	e.session(t, "a1", "acme-api", 1*time.Hour, [2]string{"q", long})
 	e.session(t, "a2", "acme-api", 2*time.Hour, [2]string{"q", long})
 	e.session(t, "a3", "acme-api", 3*time.Hour, [2]string{"q", "too short"})
@@ -207,5 +218,42 @@ func TestTheStatusSaysTheStageAndWhatTheBrainGives(t *testing.T) {
 	e.cfg.Auto = &off
 	if st := e.eng.Status(ctx); st.Stage != StageOff {
 		t.Errorf("off: %q", st.Stage)
+	}
+}
+
+// A backfill's catch-up is on the status while sessions from before the
+// yes wait: reads done of all, and days left from the measured reads at the
+// daily limit. Without a backfill reaching back, or with nothing of it
+// left, there is none — a fresh session waiting is not a catch-up.
+func TestTheStatusCarriesTheBackfillsCatchUp(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, twoMemories)
+	e.session(t, "new", "web", time.Hour, [2]string{"q", long})
+	if cu := e.eng.Status(ctx).CatchUp; cu != nil {
+		t.Fatalf("no backfill, no catch-up: %+v", cu)
+	}
+	e.cfg.BackfillSince = e.now.Add(-30 * 24 * time.Hour).UnixMilli()
+	e.session(t, "old1", "acme-api", 5*24*time.Hour, [2]string{"q", long})
+	e.session(t, "old2", "acme-api", 6*24*time.Hour, [2]string{"q", long})
+	cu := e.eng.Status(ctx).CatchUp
+	if cu == nil || cu.Kind != CatchUpBackfill || cu.Done != 0 || cu.Total != 2 || cu.DaysLeft != 0 {
+		t.Fatalf("before any read: %+v (no read measured, so no days left)", cu)
+	}
+	if n, err := e.eng.Wake(ctx); err != nil || n != 3 {
+		t.Fatalf("wake: %d %v", n, err)
+	}
+	if cu := e.eng.Status(ctx).CatchUp; cu != nil {
+		t.Fatalf("all of it read: %+v", cu)
+	}
+	e.session(t, "old3", "web", 7*24*time.Hour, [2]string{"q", long})
+	e.session(t, "new2", "web", time.Hour, [2]string{"q", long})
+	cu = e.eng.Status(ctx).CatchUp
+	// One left at 4,200 tokens a read (twoMemories) against 300k a day.
+	if cu == nil || cu.Done != 2 || cu.Total != 3 || cu.DaysLeft != 1 {
+		t.Fatalf("one more old session: %+v", cu)
+	}
+	e.cfg.DailyTokens = 1000
+	if cu := e.eng.Status(ctx).CatchUp; cu == nil || cu.DaysLeft != 5 {
+		t.Fatalf("4,200 tokens at 1,000 a day: %+v", cu)
 	}
 }

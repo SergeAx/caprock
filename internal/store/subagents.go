@@ -146,10 +146,9 @@ func countSubagentCalls(ctx context.Context, q Querier, sessionID string, workin
 	return rows.Err()
 }
 
-// agentTaskID and agentTaskDesc are the agent id and the description a
-// parent's Agent/Task result names, exactly as idx_events_agent_task
-// (migration 0054) indexes them: SQLite matches an indexed expression by its
-// text, so a query that spells either differently opens every payload again.
+// agentTaskID and agentTaskDesc are the agent id and the description an
+// Agent/Task result names, read from a payload not yet in tool_fields —
+// spelled exactly as idx_events_agent_task (migration 0054) indexes them.
 const (
 	agentTaskID   = `(CASE WHEN json_valid(payload) THEN json_extract(payload, '$.tool_response.agentId') END)`
 	agentTaskDesc = `(CASE WHEN json_valid(payload) THEN json_extract(payload, '$.tool_response.description') END)`
@@ -157,38 +156,77 @@ const (
 
 // describeSubagents fills Description from the parent's Agent calls whose
 // result names the agent. Only the listed agents are looked up, each by its
-// id in idx_events_agent_task, so no result payload is read: they hold the
+// id in idx_tool_fields_agent, so no result payload is read: they hold the
 // subagent's whole answer, and reading all of a busy session's on every
-// refresh was 0.6 s (§ Subagent reads DDL).
+// refresh was 0.6 s (§ Subagent reads DDL, § Tool fields DDL).
 func describeSubagents(ctx context.Context, q Querier, sessionID string, working []SubagentActivity) error {
 	if len(working) == 0 {
 		return nil
 	}
-	args := []any{sessionID}
+	args := []any{}
 	for _, a := range working {
 		args = append(args, a.AgentID)
 	}
+	args = append(args, sessionID)
 	rows, err := q.QueryContext(ctx, `
-		SELECT COALESCE(`+agentTaskID+`, ''), COALESCE(`+agentTaskDesc+`, '')
-		  FROM events INDEXED BY idx_events_agent_task
-		 WHERE session_id = ? AND kind = 'tool.post' AND tool IN ('Agent', 'Task')
-		   AND `+agentTaskID+` IN (?`+strings.Repeat(`, ?`, len(working)-1)+`)`, args...)
+		SELECT f.agent_id, COALESCE(f.agent_desc, '')
+		  FROM tool_fields f INDEXED BY idx_tool_fields_agent
+		  JOIN events e ON e.id = f.event_id
+		 WHERE f.agent_id IN (?`+strings.Repeat(`, ?`, len(working)-1)+`)
+		   AND e.session_id = ? AND e.kind = 'tool.post' AND e.tool IN ('Agent', 'Task')`, args...)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = rows.Close() }()
 	desc := map[string]string{}
-	for rows.Next() {
-		var id, d string
-		if err := rows.Scan(&id, &d); err != nil {
+	if err := scanDescriptions(rows, desc); err != nil {
+		return err
+	}
+	// Results stored before tool_fields and not yet filled are read from
+	// their payloads, as all of them once were (§ Tool fields DDL). The
+	// newest are filled first, so this is brief for a live session.
+	var missing []any
+	for _, a := range working {
+		if desc[a.AgentID] == "" {
+			missing = append(missing, a.AgentID)
+		}
+	}
+	var pending int64
+	if len(missing) > 0 {
+		if err := q.QueryRowContext(ctx, `SELECT `+toolFieldsPending).Scan(&pending); err != nil {
 			return err
 		}
-		if id != "" && d != "" {
-			desc[id] = d
+	}
+	if pending > 0 {
+		// idx_events_agent_task, kept until the fill is done, holds these
+		// expressions; SQLite matches an indexed expression by its text.
+		rows, err := q.QueryContext(ctx, `
+			SELECT `+agentTaskID+`, `+agentTaskDesc+` FROM events
+			 WHERE session_id = ? AND kind = 'tool.post' AND tool IN ('Agent', 'Task')
+			   AND `+agentTaskID+` IN (?`+strings.Repeat(`, ?`, len(missing)-1)+`)`,
+			append([]any{sessionID}, missing...)...)
+		if err != nil {
+			return err
+		}
+		if err := scanDescriptions(rows, desc); err != nil {
+			return err
 		}
 	}
 	for i := range working {
 		working[i].Description = desc[working[i].AgentID]
+	}
+	return nil
+}
+
+func scanDescriptions(rows *sql.Rows, desc map[string]string) error {
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id, d sql.NullString
+		if err := rows.Scan(&id, &d); err != nil {
+			return err
+		}
+		if id.String != "" && d.String != "" {
+			desc[id.String] = d.String
+		}
 	}
 	return rows.Err()
 }

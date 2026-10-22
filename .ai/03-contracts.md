@@ -2098,6 +2098,8 @@ Premium fields below:
   file, shown relative to the home directory; WebFetch by domain; WebSearch
   by query; an MCP tool by its `action` input; any other tool by subagent
   type (Task), pattern (Grep, Glob) or command, else one `call` group.
+  The group is derived once, when the call is stored (`tool_fields`,
+  § Tool fields DDL); the home directory is applied when asked.
   A call stored with an empty input is
   grouped as `(input not recorded)`, one whose input names nothing
   groupable as `(no detail)`; neither gets a hint. Counts in hint text are
@@ -2107,7 +2109,8 @@ Premium fields below:
 - **Premium** (left out without an active licence, [ADR-022](08-decisions.md)):
   `results`, `failures` and `bytes` for the tool and per row — a result is a
   `tool.post` matched to its `tool.pre` by `key` through the unique
-  `(session_id, key)` index, a failure is one whose `is_error` is set, bytes
+  `(session_id, key)` index, a failure is one whose `is_error` is set
+  (read from `tool_fields`, § Tool fields DDL, not from the payload), bytes
   are the stored `tool_bytes` (migration 0018); a call with no stored result
   counts as a call and is left out of the rate. Each row's `trend` is 8
   equal buckets of calls placed by `trend_from_ms` and `trend_width_ms`.
@@ -6750,13 +6753,13 @@ walked its payload's overflow pages. The installed daemon's slow-query log
 named `describeSubagents` 441 times, `SubagentsSpend` 312 and
 `LiveSubagents` 48 in under two hours with nine live sessions (2026-10-14).
 
-- **`idx_events_agent_task`** holds the agent id and the description each
+- **`idx_events_agent_task`** held the agent id and the description each
   parent `Agent`/`Task` result names, as expressions, so
-  `store.describeSubagents` looks up the listed agents by id and opens no
-  payload. The query must spell the expressions exactly as the index does
-  (`store.agentTaskID`, `store.agentTaskDesc`); a test checks the plan seeks
-  on them. `json_valid` guards the extraction because `json_extract` raises
+  `store.describeSubagents` looked up the listed agents by id and opened no
+  payload. `json_valid` guarded the extraction because `json_extract` raises
   on malformed JSON, which in an index expression would fail the `INSERT`.
+  Migration 0070 dropped it: the two fields now live in `tool_fields`
+  (§ Tool fields DDL).
 - **`idx_events_subagent_turn`** covers `store.SubagentsSpend`. `kind` and
   `internal` are columns as well as conditions: SQLite counts an index as
   covering only when it holds every column the query names.
@@ -6786,6 +6789,72 @@ first event that names a type, where one pass had read the type off every
 event of every listed agent. The three indexes are 60 KB, 8.2 MB and 21.3 MB
 there over 597 Agent results, 75,244 subagent turns and 271,249 subagent
 rows, and took 8.7 s to build, once.
+
+### Tool fields DDL (migration 0070)
+
+```sql
+CREATE TABLE IF NOT EXISTS tool_fields (
+  event_id   INTEGER PRIMARY KEY,  -- events.id
+  drill_key  TEXT,                 -- tool.pre: the call's group, home not shortened
+  drill_by   TEXT,                 -- tool.pre: what the group is (command, file, ...)
+  is_error   INTEGER,              -- tool.post: 1 when the result says it failed
+  agent_id   TEXT,                 -- Agent/Task tool.post: tool_response.agentId
+  agent_desc TEXT                  -- Agent/Task tool.post: tool_response.description
+);
+CREATE INDEX IF NOT EXISTS idx_tool_fields_agent
+  ON tool_fields(agent_id, agent_desc)
+  WHERE agent_id IS NOT NULL;
+CREATE TRIGGER IF NOT EXISTS events_tool_fields_delete AFTER DELETE ON events BEGIN
+  DELETE FROM tool_fields WHERE event_id = OLD.id;
+END;
+DROP INDEX IF EXISTS idx_events_agent_task;
+```
+
+What the two readers that opened tool payloads need, stored once when the
+call is written, so no read depends on the payload's JSON — the first step of
+compressing tool payloads (#672). `store.ToolDrillStats` called
+`json_extract` eleven times per call and once per result;
+`store.describeSubagents` sought `idx_events_agent_task`, whose expressions
+parse the result JSON.
+
+- **Rows.** A `tool.pre` always has one: `drill_key` and `drill_by` are
+  `store.drillKey` over its input, with the home directory left as is (the
+  reader shortens it). A `tool.post` has one only when it failed or is an
+  `Agent`/`Task` result naming its subagent; no row means it succeeded and
+  names nobody.
+- **A side table, not columns on `events`.** A column added to `events` sits
+  after `payload`, and reading it walks the payload's overflow pages
+  (§ Subagent reads DDL); these rows are a few dozen bytes each.
+- **Written** by `store.InsertEvent` beside the event. A payload rewritten in
+  place (the Codex input repair) calls `store.RefreshToolFields`. The trigger
+  deletes a row with its event, whichever code deletes it.
+- **Filled in the background, never during the upgrade.** The migration
+  only creates the table, so the daemon answers as soon as before. Open
+  marks every event stored so far as pending (`meta.tool_fields_pending`,
+  the highest id not yet filled; also when `meta.tool_fields_version` differs
+  from `store.toolFieldsVersion`, which re-derives every call). The daemon's
+  `fillToolFields` then fills them newest first, 1,000 ids per step with a
+  50 ms rest, each step and the lowered mark in one transaction, resuming
+  after a restart.
+- **Until a row is filled, it is read from its payload, as before.**
+  `ToolDrillStats` takes the pre's payload and the post's `is_error` from
+  `events` for ids at or below the mark; `describeSubagents` seeks the
+  agents it did not find on `idx_events_agent_task`, which the migration
+  leaves in place for this. The step that empties the mark drops it, and
+  Open drops it at once on a database with nothing to fill. The screens
+  are the same before, during and after the fill.
+
+Measured on a copy of the owner's database (2026-10-22; 2.0 GB, 431,546
+tool events), through the Go driver, medians of five on a loaded Mac (load
+average 15): Open with the migration took 14 ms, where filling inside the
+migration had taken 15 s. While pending, the Bash drill-down over 30 days
+took 3.2 s, as before; the fill ran 55 s in the background, its longest
+step 147 ms; filled, 0.65 s (all time 4.8 s → 1.1 s). The old and new
+queries alternated on one copy: 3.2 s → 0.86 s. Subagent descriptions
+stayed under a millisecond throughout; without the kept index the pending
+lookup was 345 ms. Every group, count and hint of nine tools, and the
+descriptions, were byte-identical before and after the fill, and matched
+master's.
 
 ### First-prompt DDL (migration 0033)
 

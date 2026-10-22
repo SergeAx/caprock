@@ -321,6 +321,12 @@ func Open(ctx context.Context, path string, log *slog.Logger) (*Store, error) {
 		s.log.Warn("inner tool backfill incomplete; some Codex edits still count as commands",
 			"component", "store", "err", err)
 	}
+	// Migration 0070's fields are filled in the background
+	// (Store.FillToolFields); Open only marks what is pending.
+	if err := s.markToolFieldsPending(ctx); err != nil {
+		s.log.Warn("could not mark older tool calls for tool_fields; the Tools screen may show them as not recorded until the next start",
+			"component", "store", "err", err)
+	}
 	return s, nil
 }
 

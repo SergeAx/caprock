@@ -8,7 +8,7 @@ import type { PullRequest } from './github'
 import type { Usual } from './usual'
 import type { ActionsUsage, CICost, RunnerCost } from './runnercost'
 import type { BranchPR, SessionBranches } from './branches'
-import type { PRBoard } from './prboard'
+import type { Costliest, ExpensivePeriod, PRBoard } from './prboard'
 import type { ReposCI } from './reposci'
 import type { CreateRequest, GHStatus, Inspection, Template, TemplateInput, TemplateOp } from './templates'
 
@@ -1689,7 +1689,15 @@ export interface BrainCatchUp {
 }
 
 /** One local day of the reads (GET /v1/brain/spend). */
-export interface BrainDaySpend { day: string; start: number; tokens: number; cost_usd: number; reads: number }
+export interface BrainDaySpend {
+  day: string; start: number; tokens: number; cost_usd: number; reads: number
+  /** The day's tokens by project, keyed as `BrainProjectSpend` is, most
+   *  first; they add up to `tokens`. Absent from an older daemon. */
+  projects?: BrainDayProject[]
+}
+
+/** One project's tokens on one day; `retag` the re-tag batches. */
+export interface BrainDayProject { project: string; retag?: boolean; tokens: number }
 
 /** One project's share of the reads over the window; `retag` marks the one
  *  row that is no project: the batches that gave older memories keywords. */
@@ -2312,6 +2320,8 @@ export const api = {
   sessionCIMain: (id: string) => get<SessionRepoCI>(`/v1/sessions/${encodeURIComponent(id)}/ci/main`).then(listedJobs),
   /** The Pipeline page: the repository's pull requests and its figures over 14 days. Asked only while the tab is shown. */
   sessionCIStats: (id: string) => get<SessionCIStats>(`/v1/sessions/${encodeURIComponent(id)}/ci/stats`),
+  /** The Pipeline's Most expensive: the dearest pull requests and releases over a period, from this machine alone (no GitHub request). */
+  sessionCostliest: (id: string, days: ExpensivePeriod) => get<Costliest>(`/v1/sessions/${encodeURIComponent(id)}/ci/costliest?days=${days}`),
   /** The branches of the session's repository, with their PRs and what Caprock's sessions on each cost. */
   /** The Now screen's Repos section (.ai/04-ui.md § Repos on Now). */
   reposActivity: () => get<ReposActivity>('/v1/repos/activity'),

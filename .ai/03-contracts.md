@@ -579,7 +579,10 @@ cannot fill it), a decision already listed and a superseded memory left
 out, each `- kind: title — summary` with the summary clipped to 160 runes,
 in 700 runes. With **no passage** recent enough (none of 400 runes or more
 within 14 days), the decisions and memories go alone; nothing goes only
-when there is neither. The whole reply is then at most 1,200 + 1,500 + 700
+when there is neither. A session started with `automation: true` is handed
+nothing at all and recorded in neither group; one in a folder excluded from
+Second Brain is handed the passage only (§ Second Brain, *What is never
+read*). The whole reply is then at most 1,200 + 1,500 + 700
 runes and two headings, about 3,500. How many memories went is recorded on
 the session (migration 0058: `ALTER TABLE sessions ADD
 COLUMN handoff_brain INTEGER NOT NULL DEFAULT 0` and `CREATE INDEX
@@ -704,8 +707,81 @@ Every output byte has an offset and every input frame a sequence number, so a re
 - **Size: the terminal in use wins** (tmux's `latest`; `internal/api/termsize.go`). A session's PTY has one size and may have several terminals attached. The daemon remembers each socket's own size (its last `resize`) and gives the PTY the size of the one **in use**. A socket becomes the one in use when it sends input (any binary frame, before the bytes are typed), when it sends `focus` (the client's window gained focus or came into view, its tab came to the front, a click in the terminal), when it is the only socket with a size, or when its `client` id is the tab that last claimed the PTY (a reconnect of that tab). Every other socket is a **viewer**: its resizes are recorded, not applied, and it is drawn at the size in use. A claim by the socket already in use at the size the PTY already has changes nothing, so a claim on every keystroke costs nothing. A socket says `blur` when its terminal goes out of sight (the page hidden, a phone locked or in the background, an app tab behind another, the page going away); it stays a viewer until its next claim. When the socket in use sends `blur`, the PTY goes at once to the socket in sight that claimed most recently, at its last size, and that socket's `client` becomes the owner, so a phone whose socket died while locked does not take the PTY back by reconnecting; with no other socket in sight that has a size, nothing changes. When the socket in use closes, the PTY goes to another socket of the same `client`, else to the one that claimed most recently, a socket in sight before one out of sight, at its size. A client re-sends its current size with every `focus` (`{"resize":…,"focus":true}`), so a PTY left at another terminal's size by a close the daemon never saw is put right by looking. Before 2026-10-13 there was no `blur`: a phone put away kept the PTY until its socket was taken for dead (25–35 s when its page froze, never when its browser kept answering pings in the background), and the desktop stayed at the phone's width (Vova). Until 2026-10-12 every resize was applied and the last sender won: a phone that typed into a session left the desktop's agent drawn 45 columns wide in a wide pane until the desktop's box next changed (Vova).
 - **Repaint.** A socket's **first** resize repaints: the PTY is given one column less, then the full size once the program has written output after the narrower one (up to 750 ms for one that draws nothing on a resize, `repaintWait`) and at least 40 ms after that (`repaintGap`) — two real size changes, so whatever runs gets SIGWINCH and redraws its whole screen — at the new socket's size when it is in use, at the size in use when it is a viewer (a phone opening a session never shrinks the desktop's agent). Without it a reattached terminal kept the ring's replay, and a TUI that redraws by difference (Claude Code) showed rows whose labels had scrolled out of the ring as bare numbers until something changed size. A column, not a row (since 0.140.2): on one row less Claude Code clears only as many rows as it then thinks it has, so the terminal's bottom row kept a stale line after every attach and resume; a width change clears every row. It waits for output because a fixed 40 ms was not enough (owner, 2026-10-21, on a loaded Mac): two SIGWINCHes that arrive while a program's event loop is busy reach it as one, at the size it already drew at, so it redrew nothing and the replay's bare changed cells stayed — a status line of lone digits, the mode line's words gone. A Node program blocked 120 ms in every 150 saw no resize at all on 2 of 5 such repaints. A client sent `reset` and a snapshot mid-session (it fell behind the ring) gets the same repaint at the size in use. The PTY passing from one terminal to another repaints the same way; the socket in use resizing its own box is applied as sent. Version 1 sockets resize as before (every resize applied).
 - **Liveness.** Each side sends `{"ping":t}` every 10 s and answers the other's with `{"pong":t}`; 25 s with nothing received closes the socket.
-- **End.** When the process exits: the last output, `{"exit":{"code":N}}`, then close **1000**. When it exits to be resumed under the same id in another permission mode (`POST /v1/agents/{id}/permission-mode` with `restart`), the frame is `{"exit":{"code":N,"restart":1}}`: the client keeps the tab, forgets its offset (the new process has a new ring) and reconnects through the 1000 close, retrying while the daemon answers 501 until the new process is up. Close **1008**: the device lost the controller role, do not reconnect. Any other close is the connection, and the client reconnects by the policy `/v1/live` shares (§ Client reconnect policy, below).
+- **End.** When the process exits: the last output, `{"exit":{"code":N}}`, then close **1000**. When it exits to be resumed under the same id in another permission mode (`POST /v1/agents/{id}/permission-mode` with `restart`), the frame is `{"exit":{"code":N,"restart":1}}`: the client keeps the tab, forgets its offset (the new process has a new ring) and reconnects through the 1000 close, retrying while the daemon answers 501 until the new process is up. A program that exited **at once** (`early`: within 15 s of its start, nothing typed, not stopped by Caprock or restarted; § Session exits) says so: `{"exit":{"code":N,"early":1}}`, and a socket that arrives after such a process is gone — the usual case, since it lived ~100 ms — is accepted and gets that frame and the 1000 close at once, with no hello, rather than **409** (which a tab read as "Can't connect · next try in 5 s" for good). The client ends without reconnecting and the pane reads `GET /v1/agents/{id}/exit` for what the program printed. An exit that is not early, and a session with no exit recorded, are refused with 409 as before. Close **1008**: the device lost the controller role, do not reconnect. Any other close is the connection, and the client reconnects by the policy `/v1/live` shares (§ Client reconnect policy, below).
 - **Client backpressure.** The dashboard closes the socket while more than 1 MiB it has received waits for xterm.js to parse, and reconnects with `since` once that drops to 256 KiB.
+
+### Session exits
+
+How an owned session's program ended, so a program that could not start says
+why (a user pressing *Continue here* five times on 0.154.2: each tab read
+"Can't connect · next try in 5 s", and service.log said only `exit status 1`).
+Code: `internal/agents/exitreport.go`, `internal/api/agentexit.go`,
+`ui/src/components/EarlyExit.tsx`.
+
+- **What is kept.** When an owned session's process exits, its output is read
+  to the end (up to 750 ms), and the last 32 KiB is replayed onto a screen of
+  the terminal's width (`termbuf.Screen`): blank lines dropped at both ends,
+  the last 40 lines, at most 4 KiB, plain text. With the code, how long it ran
+  and when, it is kept in memory (the newest 64, with the request that started
+  it) and in `session_exits` (§ Session exits DDL).
+- **Early.** An exit within **15 s** of the start (`agents.EarlyExit`) with
+  nothing typed into the session, not asked for by Caprock (End, a stop
+  signal, a shutdown) and not a permission-mode restart. An early exit is
+  logged at **WARN** in service.log, `owned session exited at once`, with the
+  binary as resolved in the daemon's environment and its version (asked once and
+  cached; a second line when it was not cached yet), the
+  code, `ran_ms`, the command (flags as run; a first message or project
+  instructions passed on it cut to their length, anything key- or
+  token-shaped dropped) and the output tail.
+- **`GET /v1/agents/{id}/exit`** → `{session_id, agent?, binary?, code, early, ran_ms,
+  tail, at, retry?}`; **409** while the session runs, **404** when no exit is
+  recorded. `retry` is the request that started it, as `POST /v1/agents` takes
+  it — the folder it ran in, a worktree already made not made again, nothing
+  the daemon fills in (keys, configuration directories) — present only while
+  this daemon remembers the exit. A controller may read it (it may start the
+  same session anyway).
+- **The tab.** On `{"exit":{…,"early":1}}` the pane shows *<Agent> exited at
+  once (code N)*, how long it ran, the tail in a mono box, a one-line reading
+  of known messages (`ui/src/lib/earlyexit.ts`), **Try again** (posts `retry`
+  to `POST /v1/agents`; the new session takes the pane) and **Close**. It does
+  not turn into a shell as an ordinary exit does.
+- **Continue from where the conversation began.** `claude --resume <id>` finds
+  a conversation only under `~/.claude/projects/<the folder it was started
+  in>`; started anywhere else it prints `No conversation found with session ID:
+  …` and exits 1 (measured with 2.1.309, 2026-10-24). A session's recorded
+  `cwd` follows its `cd`s, so `POST /v1/agents` with `resume` for a Claude Code
+  session, when the asked folder does not find the transcript, starts in the
+  folder the transcript's first lines name — when that folder is the one its
+  project directory is named after and still exists — and the resume command
+  `GET /v1/sessions/{id}` offers `cd`s there. Anything less certain keeps the
+  asked folder.
+
+### Transcript retention
+
+Claude Code deletes a transcript older than `cleanupPeriodDays` (user
+settings; **30** when unset) from `~/.claude/projects` at startup, and Caprock
+imports only what is still on disk, so a new user's history starts about that
+far back. Code: `internal/hooks/retention.go`, `internal/api/retention.go`,
+`ui/src/components/RetentionNote.tsx`.
+
+- **`GET /v1/claude/retention`** → `{days, set, offer, keep_days, error?}`:
+  `days` is the period applied (the setting, else 30), `set` whether
+  `~/.claude/settings.json` names one (a non-number is unset), `offer` is
+  `!set || days <= 90`, `keep_days` is 36500, `error` why the file could not
+  be read (then `days` is the default, as Claude Code skips such a file).
+- **`POST /v1/claude/retention`** writes `cleanupPeriodDays: keep_days` into
+  that file and answers the new state. Only that key changes, in place when it
+  is there, else first in the object indented like the key after it; every
+  other byte of the file is kept. The file is backed up once
+  (`settings.json.caprock-backup-<ts>`, as for the hooks entry) and written
+  atomically; asking again for the period already set writes nothing. A file
+  that is not valid JSON (or whose top level is not an object) is refused with
+  **409** and left as it is. A mutating route: cross-site requests and paired
+  devices are refused, so it is asked at the machine. Nothing leaves it.
+- **The line.** Under the Lifetime screen's *Daily cost* chart, range *all*,
+  while `offer`: *Claude Code deletes conversations older than N days, so the
+  history before <first day> was gone before Caprock saw it.* with *Keep them
+  from now on*; after the write, *Kept from now on.* for 6 s, then nothing.
 
 ### Live socket, replay
 
@@ -783,6 +859,9 @@ POST /v1/update/check                  → check now (403 unless enabled); ?soon
 GET  /v1/update/busy                   → {working} — sessions an app restart would interrupt (Update automatically, ADR-042)
 POST /v1/hooks/install                 → {hooks: HooksStatus, backup?} — `caprock hooks install`, from the dashboard
 POST /v1/claude/bypass-consent         → {accepted: true} — the user accepted Caprock's copy of Claude Code's bypass warning (ADR-041)
+GET  /v1/claude/retention              → Retention — how long Claude Code keeps transcripts (cleanupPeriodDays; § Transcript retention)
+POST /v1/claude/retention              → Retention — write cleanupPeriodDays = keep_days into user settings; 409 when the file is not valid JSON
+GET  /v1/agents/{id}/exit              → ExitReport — how an owned session's program ended: code, early, ran_ms, tail, retry (§ Session exits)
 GET  /v1/stats/daily?days=30           → DailyStat[]
 GET  /v1/stats/trends?agent=…         → Trends — Now's Today cells: 14 previous days cut at this time of day, today, the usual burn
 GET  /v1/pipeline/agents?repo=…      → RepoAgents — the Pipeline's cost per agent-hour and agent team for a repository's folders (§ Pipeline agents)
@@ -2172,7 +2251,7 @@ machine, never from a forge's API (rule 4):
   guarded recent folder without checking that it still exists.
 
 ```
-POST   /v1/agents                    {cwd?, chat?, create?, worktree?, worktree_base?, worktree_pull?, worktree_pr?, agent?, subscription?, model?, permission_mode?, subagent_model?, resume?, fork?, command?, args?, attempts?, prompt?, relay_from?, end_when_done?} → {session_id, cwd, session_ids?, attempt_group?, error?}
+POST   /v1/agents                    {cwd?, chat?, create?, worktree?, worktree_base?, worktree_pull?, worktree_pr?, agent?, subscription?, model?, permission_mode?, subagent_model?, resume?, fork?, command?, args?, attempts?, prompt?, relay_from?, end_when_done?, automation?} → {session_id, cwd, session_ids?, attempt_group?, error?}
 GET    /v1/attempts/{group}          → {group, base?, attempts: [AttemptView]}; 404 for an unknown group
 GET    /v1/agents/models?agent=      {agent, default?, models:[{id,label}]}
 GET    /v1/agents/catalog            → {agents: [CatalogEntry], licensed, home?}
@@ -2194,16 +2273,16 @@ GET    /v1/inbox                     → {items, max}; what was saved for later 
 POST   /v1/inbox                     {text?, project_id?, files?} → {item}; save a note, a link or a photo (§ Inbox)
 DELETE /v1/inbox/{id}                → 204; with its files (§ Inbox)
 GET    /v1/inbox/{id}/files/{n}      → an item's image, for its thumbnail (§ Inbox)
-GET    /v1/brain                     ?q=&project=&since=&until=&limit=&summaries=1 → BrainGraph (§ Second Brain)
+GET    /v1/brain                     ?q=&project=&since=&until=&limit=&summaries=1 → BrainGraph; without project=, excluded folders' projects are left out (§ Second Brain)
 GET    /v1/brain/status              → BrainStatus: counts, projects (§ Second Brain)
-GET    /v1/brain/handoff             ?project= → {project, memories, max, budget, served?}; what a new session there is handed (§ Second Brain)
+GET    /v1/brain/handoff             ?project= → {project, memories, max, budget, served?, excluded?}; what a new session there is handed (§ Second Brain)
 GET    /v1/brain/spend               ?days= → BrainSpend; what the automatic reads spent, per day and project (§ Second Brain)
 POST   /v1/brain/nodes               {text | title, summary?, kind?, event_id?, session_id?, project?, topics?, pinned?} → {node, created}; no cap
 GET    /v1/brain/nodes/{id}          → {node, links}
 PATCH  /v1/brain/nodes/{id}          {kind?, title?, summary?, pinned?} → {node}
 DELETE /v1/brain/nodes/{id}          → 204; its edges go with it
 POST   /v1/brain/links               {from, to, kind?} → 204; DELETE with {from, to} → 204
-PUT    /v1/brain/settings            {auto?, daily_tokens?, model?} → BrainAutoStatus; no licence needed
+PUT    /v1/brain/settings            {auto?, daily_tokens?, model?, exclude?} → BrainAutoStatus; no licence needed
 POST   /v1/brain/backfill            {days?, dry_run?} → BrainEstimate; 409 while off (dry run: never)
 GET    /v1/terminals                 → {terminals: [{id, name}], preferred}; terminal apps installed here, most preferred first
 GET    /v1/editors                   → {editors: [{id, name}], preferred}; editors installed here (F18), this machine only
@@ -2400,6 +2479,21 @@ nothing waits on anyone.
   daemon), and a Codex request that finished while the daemon was stopped in
   a rollout not written to since — both stay running until ended by hand, as
   without the flag.
+
+**`automation` on `POST /v1/agents`** — a scheduled job's session, not a
+person's (2026-10-24). The owner's ops jobs start a Codex scout every 15
+minutes, about 140 sessions a week; Second Brain read every one and kept 188
+"memories" of run chatter in a week ("Chrome connection dropped mid-scout
+run"). `automation: true` says so at the start, and Second Brain never reads
+the session and hands it nothing (§ Second Brain, *What is never read*).
+Nothing else changes for it: it is owned, shown, priced and ended like any
+other. A value that is not a boolean is `400`; `false` or absent is an
+ordinary start; with `attempts` every attempt carries it. Recorded in the
+spawn's own transaction as a `brain_runs` row with status `skipped` and
+reason `automation` and no span (`store.MarkBrainAutomation`), the
+extraction's own record that it was told not to read the session — not a
+column on the session, and no migration: the extraction is the only reader
+of the mark. A phone may send it.
 
 **Ending idle sessions** (`internal/daemon/endidle.go`; owner,
 2026-10-21). An agent session Caprock started that no tab shows — a chat from
@@ -4104,7 +4198,7 @@ Brain DDL (migrations 0055, 0056).
 ```
 GET    /v1/brain                ?q=&project=&since=&until=&limit=&summaries=1 → {nodes: [BrainNode], edges: [BrainEdge], total, terms?, close?}
 GET    /v1/brain/status         → {memories, manual, projects: [{project, count}], auto?, db_path?}
-GET    /v1/brain/handoff        ?project= → {project, decisions: [BrainNode], memories: [BrainNode], max, budget, decisions_max, decisions_budget, served?: {on, left_off_at?, holdout_pct}}
+GET    /v1/brain/handoff        ?project= → {project, decisions: [BrainNode], memories: [BrainNode], max, budget, decisions_max, decisions_budget, served?: {on, left_off_at?, holdout_pct}, excluded?}
 GET    /v1/brain/spend          ?days=1–90 (14) → {days: [{day, start, tokens, cost_usd, reads, projects: [{project, retag?, tokens}]}], projects: [{project, reads, tokens, cost_usd, memories}], daily_tokens, spent_24h, claude_tokens_24h}
 GET    /v1/brain/decisions      ?project=&limit= → {project, decisions: [BrainNode]}
 POST   /v1/brain/nodes          {text?, title?, summary?, kind?, event_id?, session_id?, project?, topics?: [string], pinned?} → {node, created}
@@ -4113,7 +4207,7 @@ PATCH  /v1/brain/nodes/{id}     {kind?, title?, summary?, pinned?} → {node}
 DELETE /v1/brain/nodes/{id}     → 204
 POST   /v1/brain/links          {from, to, kind?} → 204
 DELETE /v1/brain/links          {from, to, kind?} → 204
-PUT    /v1/brain/settings       {auto?, daily_tokens?, model?} → BrainAutoStatus
+PUT    /v1/brain/settings       {auto?, daily_tokens?, model?, exclude?} → BrainAutoStatus
 POST   /v1/brain/backfill       {days?: 1–90 (30), dry_run?} → BrainEstimate
 ```
 
@@ -4312,7 +4406,7 @@ POST   /v1/brain/backfill       {days?: 1–90 (30), dry_run?} → BrainEstimate
   daily_tokens, spent, spent_usd, stage, last_read?, new_today, topics,
   links, handoff, running, pending, since?, backfill_since?, last_wake?,
   next_wake?, last_error?, recent: [BrainRun], reading?, build?,
-  catch_up, retag?, agents_24h}`: `chosen` once
+  catch_up, retag?, agents_24h, exclude, automation_24h}`: `chosen` once
   the user has answered, `enabled` when on (only then does it read; no
   licence is looked at), `last_wake` and `next_wake` unix ms — `next_wake`
   absent while off, at or before now just after turning on or while a wake
@@ -4340,6 +4434,9 @@ POST   /v1/brain/backfill       {days?: 1–90 (30), dry_run?} → BrainEstimate
   last 24 hours (`brain_runs` joined to `sessions`, re-tag batches left
   out; no agent recorded counts as `claude`), `sessions` the distinct sessions, `last_at` when the newest
   of those reads finished (unix ms), most sessions first; `[]` when none.
+  `exclude` is the folders never read (*What is never read* below), `[]`
+  when none; `automation_24h` the sessions started with `automation: true`
+  in the last 24 hours, skipped unread.
   `BrainRun` is `{id, session_id, from_event_id,
   through_event_id, status: ok | failed | skipped, model?, tokens_in,
   tokens_out, cost_usd, nodes, error?, started_at, finished_at, project?,
@@ -4386,9 +4483,39 @@ POST   /v1/brain/backfill       {days?: 1–90 (30), dry_run?} → BrainEstimate
   again, and a wake never runs beside another; `false` stops it. Neither needs a licence. `daily_tokens`
   is 20,000–5,000,000 (the screen offers 100k, 300k and 1M; the default is
   300,000) and `model` is `""`, `haiku` (the default) or `sonnet`; anything
-  else is `400`. Kept in `config.json` as `brain: {auto?, since?,
-  backfill_since?, daily_tokens?, model?}`; `auto` absent means the user has
-  not answered, and nothing runs.
+  else is `400`. `exclude` replaces the list of folders never read
+  (`[]` clears it): each an absolute folder, trimmed, in the store's path
+  form, without repeats, at most 64 of at most 1,024 bytes on one line;
+  the root, the home and the temp folder are refused, as is anything else
+  (`400`, `brain.CleanExclude`). Kept in `config.json` as `brain: {auto?,
+  since?, backfill_since?, daily_tokens?, model?, exclude?}`; `auto` absent
+  means the user has not answered, and nothing runs.
+- **What is never read** (2026-10-24; owner, translated: "accumulate only
+  important and necessary data, not everything including junk"). Two
+  filters sit before the read, where nothing has been sent and no token
+  spent. A session started with `automation: true` (`POST /v1/agents`,
+  above) is never a candidate: `BrainCandidates` leaves out a session with
+  the `automation` mark, so it is not pending, not estimated and not read,
+  and the SessionStart handoff hands it nothing and records neither
+  `served` nor `withheld` for it. A session whose working directory or
+  repository root is one of the excluded folders, or under one, is
+  recorded as a skipped read with reason `excluded: <folder>` and its
+  cursor moved to the session's newest event, so it is not looked at again
+  until it has new events (a catch-up gap in such a session is closed
+  unread); decided at read time, because the list can change after the
+  session ran. The excluded folders' projects (`store.ProjectFromCwd` of
+  each; `brain.ExcludedProjects`) are left out of `GET /v1/brain` without
+  `project=` — the graph and search, so an MCP `search_memories` does not
+  find them — and `GET /v1/brain/handoff` and `/v1/brain/decisions` answer
+  empty lists for them (`excluded: true` on the handoff view); a new
+  session in such a folder is handed the passage but no memories. Opening
+  the project by name (`?project=`) still shows everything: nothing is
+  deleted, and the user can read or delete what was kept before. Last, the
+  instructions tell the model to skip what is true only of this run — what
+  the agent did, saved, searched or found this time, a dropped connection,
+  a failed tool — and keep what still holds for the product, the codebase
+  or the way of working; a nudge, not a guarantee, so it is the third
+  filter, not the first.
 - **Backfill.** `BrainEstimate` is `{sessions, tokens_estimate,
   days_estimate, daily_tokens, truncated?}`: the sessions since `days` ago
   with unread prose worth a read, and an estimate of their tokens (a
@@ -4398,9 +4525,10 @@ POST   /v1/brain/backfill       {days?: 1–90 (30), dry_run?} → BrainEstimate
   `dry_run` it also sets `backfill_since`, which needs the extraction on
   (`409`), and wakes the reader.
 - **A read.** A session is a candidate when its last event is after
-  `since` (or `backfill_since`), it has ended or been quiet ten minutes, and
-  it has main-thread prompts or answers after the last read that did not
-  fail. Its passages are numbered and sent, with the project, up to 60
+  `since` (or `backfill_since`), it has ended or been quiet ten minutes, it
+  has main-thread prompts or answers after the last read that did not
+  fail, and it is not marked `automation` (*What is never read*, above; a
+  session in an excluded folder is a candidate and is recorded as skipped). Its passages are numbered and sent, with the project, up to 60
   existing topic titles and — for a session with a project — that
   project's 30 newest current decisions (`#id title`) and its 40 newest
   memories besides them (`#id kind: title`, *do not repeat these*), on
@@ -7049,6 +7177,26 @@ holds, so a list read late never undoes a newer one. The migration only
 creates the table — nothing is filled at startup; it grows as lists are read.
 Read by `store.KnownPRs` (§ Most expensive) for the head branch, title, state
 and stamps of pull requests no agent recorded.
+
+### Session exits DDL (migration 0072)
+
+```sql
+CREATE TABLE IF NOT EXISTS session_exits (
+  session_id TEXT    PRIMARY KEY,
+  code       INTEGER NOT NULL,
+  ran_ms     INTEGER NOT NULL DEFAULT 0,  -- spawn to exit
+  early      INTEGER NOT NULL DEFAULT 0,  -- 1: ended within agents.EarlyExit, nothing typed
+  tail       TEXT    NOT NULL DEFAULT '', -- last lines on its screen, plain text
+  at         INTEGER NOT NULL             -- unix ms it ended
+) WITHOUT ROWID;
+```
+
+One row per owned session (shells excepted) whose program ended, written by
+`agents.Manager` when the process exits (`store.RecordExit`; a later exit
+under the same id replaces it) and removed with the session
+(`store.RemoveSession`). The migration only creates the table. Read by
+`GET /v1/agents/{id}/exit` (§ Session exits) once the daemon no longer
+remembers the exit itself.
 
 ### Touch attribution DDL (migration 0012)
 

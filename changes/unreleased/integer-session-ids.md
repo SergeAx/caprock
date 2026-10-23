@@ -11,5 +11,9 @@ kind: Changed
   are in, the Now screen and `caprock status` say so, older history is
   incomplete, the other agents' importers wait, and removing a session asks
   to try again later. A query on `caprock.db` joins `sessions` for a
-  session's id (`docs/schema.md`). No earlier release can use the upgraded
-  database, so there is no going back to one.
+  session's id (`docs/schema.md`). No earlier release opens the upgraded
+  database, so the upgrade first keeps a copy of it as `caprock.pre-0073.db`
+  in the data directory for 30 days: to go back, stop Caprock, put the copy
+  in place of `caprock.db`, remove `caprock.db-wal` and `caprock.db-shm`,
+  and install the older release. `caprock up` and the desktop app wait for
+  the copy and say the database is upgrading.

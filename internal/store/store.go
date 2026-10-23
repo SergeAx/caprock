@@ -136,9 +136,11 @@ const maxOpenConns = 8
 
 // Store wraps the database handle.
 type Store struct {
-	db     *sql.DB
-	log    *slog.Logger
-	moving atomic.Bool // events_legacy holds rows (move.go)
+	db        *sql.DB
+	log       *slog.Logger
+	path      string
+	onUpgrade func() (done func())
+	moving    atomic.Bool // events_legacy holds rows (move.go)
 }
 
 // Open opens (creating if needed) the SQLite database at path and applies pending
@@ -146,7 +148,7 @@ type Store struct {
 // memSeq names in-memory databases uniquely; see the ":memory:" branch in Open.
 var memSeq atomic.Int64
 
-func Open(ctx context.Context, path string, log *slog.Logger) (*Store, error) {
+func Open(ctx context.Context, path string, log *slog.Logger, opts ...Option) (*Store, error) {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -272,7 +274,10 @@ func Open(ctx context.Context, path string, log *slog.Logger) (*Store, error) {
 	// them costs a fixed handful of file descriptors and the page cache we
 	// wanted anyway.
 	db.SetConnMaxIdleTime(0)
-	s := &Store{db: db, log: log}
+	s := &Store{db: db, log: log, path: path}
+	for _, o := range opts {
+		o(s)
+	}
 	if err := s.migrate(ctx); err != nil {
 		_ = db.Close()
 		var newer *SchemaTooNewError
@@ -636,6 +641,12 @@ func (s *Store) migrate(ctx context.Context) error {
 	// its backfills against tables of an unknown shape.
 	if latest := migs[len(migs)-1].version; current > latest {
 		return &SchemaTooNewError{Database: current, Binary: latest}
+	}
+	if v := backupDue(migs, current); v > 0 && s.path != ":memory:" {
+		if s.onUpgrade != nil {
+			defer s.onUpgrade()()
+		}
+		s.backup(ctx, v)
 	}
 	for _, m := range migs {
 		if m.version <= current {

@@ -52,6 +52,22 @@ func TestQueryPlans(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
+	// The tables migration 0073's move reads exist only while it runs; the
+	// temporary one lives on a single connection.
+	st.DB().SetMaxOpenConns(1)
+	for _, q := range []string{
+		`CREATE TABLE events_legacy (id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, session_id TEXT NOT NULL,
+			source TEXT NOT NULL, kind TEXT NOT NULL, tool TEXT, payload TEXT NOT NULL, tokens_in INTEGER,
+			tokens_out INTEGER, cache_read INTEGER, cache_write INTEGER, cost_usd REAL, key TEXT, model TEXT,
+			cache_write_1h INTEGER, agent_id TEXT, msg_id TEXT, touch_dir TEXT, tool_bytes INTEGER NOT NULL DEFAULT 0,
+			internal INTEGER NOT NULL DEFAULT 0, inner_tool TEXT)`,
+		`CREATE UNIQUE INDEX idx_events_session_key ON events_legacy(session_id, key) WHERE key IS NOT NULL`,
+		`CREATE TEMP TABLE events_moving AS SELECT * FROM events_legacy WHERE false`,
+	} {
+		if _, err := st.DB().ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	var b strings.Builder
 	b.WriteString("# Written by `make plans`: each statement `go test ./...` runs outside test\n" +

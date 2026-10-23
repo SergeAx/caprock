@@ -1290,6 +1290,8 @@ held are soon someone else's, and such a session stayed live, with an empty
 terminal, for as long as the stranger ran.
 
 `GET /v1/status` carries `ingest_error` — the terminal error that stopped transcript ingest, when one happened — and omits it while ingest is running. The tailer runs in a goroutine whose failure used to be logged and swallowed, so a fatal ingest error (a read-only `~/.claude` reproduces it) left the daemon reporting healthy, `caprock status` printing `backfill done`, and the dashboard showing its "No sessions yet — start `claude` in any terminal" empty state forever, while nothing was being captured at all. `caprock status` and the Now and Status screens all report it.
+While the events stored before migration 0073 move into place it also
+carries `events_move: {moved, total}` (§ Session key DDL).
 
 `/v1/stats/summary` and `/v1/history` carry `unpriced` — `{turns, tokens, models[]}` — the volume in range whose model has no row in the pricing table, and which models caused it. It is **omitted entirely when everything in range was priced**, which is the normal case. A model missing from the table leaves `cost_usd` NULL (the rollup logs "model not in pricing table; cost left unknown"), and every aggregate flattens NULL with `COALESCE(SUM(cost_usd),0)` — so tens of thousands of tokens of an unpriced model summed to exactly `$0.00` and rendered as a confident, indistinguishable-from-free number. That is an invented number (rule 6), and it is certain to occur the day a model ships newer than the pricing table, or on a gateway whose model ids do not normalise. The models are **named**, not merely counted: an unknown model id is something a user can report or add a pricing override for, whereas "some tokens are unpriced" is not actionable. `cost_usd` continues to mean "the cost we could price", so the two are reported side by side and never summed.
 
@@ -6475,7 +6477,8 @@ CREATE TABLE events (
 -- The indexes on events keep their names; those that led on session_id
 -- lead on sid, so a section above that indexes events(session_id, …) means
 -- events(sid, …) from this migration on. idx_events_agent_task is back only
--- while a tool_fields fill is pending (§ Tool fields DDL).
+-- while a tool_fields fill is pending (§ Tool fields DDL), and the unique
+-- (sid, key) index is idx_events_sid_key.
 ```
 
 An event names its session by `sessions.sid` instead of repeating the
@@ -6502,9 +6505,55 @@ on insert.
 
 The migration numbers sessions by `started_at`, and gives each session that
 has events but no row (some older versions wrote events first and never the
-row) one marked `ended`, spanning its events. On a copy of a contributor's
-database (1 GB, 554,147 events, 2026-10-19) it took 47 s, and VACUUM then
-made the file 128 MiB smaller (1,029 → 902 MiB).
+row) one marked `ended`, spanning its events. Copying every row inside the
+migration took 47 s on a contributor's 1 GB database (2026-10-19) and
+105–501 s on copies of real databases (2026-10-21), all of it before the
+daemon answered; VACUUM then made the 1 GB file 128 MiB smaller
+(1,029 → 902 MiB). So the rows move in the background instead:
+
+- **What the migration does.** It renames `events` to `events_legacy`,
+  drops that table's triggers and every index but `idx_events_session_key`,
+  creates `events` in the new shape with its indexes and triggers, and moves
+  the newest 1,000 rows: `id` has no AUTOINCREMENT, so a new event takes the
+  highest id in `events` plus one, which must be above every old one.
+  `meta.events_move_total` is the number of rows to move, `meta.events_moved`
+  how many have.
+- **The move.** `store.MoveEventsStep` moves the newest 500 rows left, and
+  the daemon's `moveEvents` runs it with a 50 ms rest between steps. A step
+  takes its rows out of `events_legacy`, puts them in `events` with their ids
+  and bumps their sessions' `session_gen`, in one transaction: an
+  interrupted move resumes at the next start, and a row is never in both
+  tables or in neither. A row whose session has no row any more is dropped.
+  The step that finds nothing left drops `events_legacy`, its trigger and the
+  two meta keys.
+- **Duplicates.** A row not moved yet still holds its key: the trigger
+  `events_legacy_dedupe` ignores an insert whose `(session, key)` is in
+  `events_legacy`, and `store.InsertEvent` reports it as a duplicate. The new
+  table's unique index is `idx_events_sid_key` because `events_legacy` keeps
+  `idx_events_session_key` for this until it is dropped.
+- **What waits.** While `Store.Moving` is true, `events` holds the newest
+  rows only, so what reads a whole history or marks itself done over one
+  starts after the move (`daemon.afterMove`): the OpenCode, Codex, DeepSeek,
+  Hermes and Gemini importers, which offer their history again on every
+  start; the transcript repairs and Open's `touch_dir` and `inner_tool`
+  backfills; the rollup repairs and pricing corrections; `fillToolFields`,
+  `backfillToolLinks` and `backfillPRs`; the retention prune; payload
+  compaction and the idle vacuum; and Second Brain's reads. Claude Code's
+  hooks and transcripts are recorded throughout. Removing a session or a
+  chat answers 503 until then, and `caprock export --table events` refuses.
+- **What it looks like.** `GET /v1/status` carries `events_move:
+  {moved, total}`, which `caprock status`, the Now screen and Status show.
+  `store.EventsVersion` adds `meta.events_moved`, so the cached aggregates
+  are counted again as rows arrive, and the API forgets them all when the
+  move ends.
+
+On a copy of a contributor's database (1.23 GB, 603,141 events, schema 69,
+Windows 10, 2026-10-23) the start took 3.0 s with migrations 0070, 0071 and 0073,
+and the move 1 min 52 s in steps of 34 ms at the median and 405 ms at most.
+An event written meanwhile waited 21 ms at the median and 396 ms at most for
+the write lock. The file and its write-ahead log grew by 17 MB at the peak,
+where copying every row in the migration had needed 1.58 times the used
+size; 87 MiB of free pages were left for the incremental vacuum to return.
 
 ### Worked-at and parent DDL (migration 0027)
 

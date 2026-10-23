@@ -148,6 +148,10 @@ ORDER BY e.ts, e.id;
 Over many events, group by `e.sid` first and join `sessions` to the groups:
 the join then runs once per session instead of once per event.
 
+For a few minutes after the upgrade to this layout, `events` holds the newest
+events only: the rest wait in `events_legacy`, in the old layout, and move
+over in the background. `caprock status` shows how far it has come.
+
 ## Imported Obsidian sources
 
 Migration 0062 adds kind `note` and `vault_id` to `brain_nodes`, preserving

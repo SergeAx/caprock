@@ -90,7 +90,7 @@ SELECT id, COALESCE(key,''), ts, COALESCE(json_extract(payload,'$.text'),'') FRO
 
 ## codex.(*Ingester).syncText
 SELECT id, ts, COALESCE(json_extract(payload,'$.text'),'') FROM events WHERE sid = (SELECT sid FROM sessions WHERE session_id = ?) AND key = ? AND source = ? AND kind = ?
-    SEARCH events USING INDEX idx_events_session_key (sid=? AND key=?)
+    SEARCH events USING INDEX idx_events_sid_key (sid=? AND key=?)
     SCALAR SUBQUERY 1
         SEARCH sessions USING COVERING INDEX sqlite_autoindex_sessions_1 (session_id=?)
 
@@ -110,7 +110,7 @@ UPDATE daily_stats SET tokens_total = tokens_total - ?, cost_usd = cost_usd - ? 
 
 ## deepseek.(*Ingester).dropKeys.func1
 DELETE FROM events WHERE sid = (SELECT sid FROM sessions WHERE session_id = ?) AND key = ? AND source = ? AND kind = ? RETURNING ts
-    SEARCH events USING INDEX idx_events_session_key (sid=? AND key=?)
+    SEARCH events USING INDEX idx_events_sid_key (sid=? AND key=?)
     SCALAR SUBQUERY 1
         SEARCH sessions USING COVERING INDEX sqlite_autoindex_sessions_1 (session_id=?)
 
@@ -175,7 +175,7 @@ UPDATE events SET payload = ? WHERE id = ?
 
 ## opencode.(*Ingester).refreshInputs
 SELECT key FROM events WHERE sid = (SELECT sid FROM sessions WHERE session_id = ?) AND key >= 'oc-tool:' AND key < 'oc-tool;' AND source = ? AND kind = 'tool.pre' AND json_valid(payload) AND NOT EXISTS ( SELECT 1 FROM json_each(payload, '$.tool_input') WHERE json_each.key != 'file_path')
-    SEARCH events USING INDEX idx_events_session_key (sid=? AND key>? AND key<?)
+    SEARCH events USING INDEX idx_events_sid_key (sid=? AND key>? AND key<?)
     SCALAR SUBQUERY 1
         SEARCH sessions USING COVERING INDEX sqlite_autoindex_sessions_1 (session_id=?)
     CORRELATED SCALAR SUBQUERY 2
@@ -183,7 +183,7 @@ SELECT key FROM events WHERE sid = (SELECT sid FROM sessions WHERE session_id = 
 
 ## opencode.(*Ingester).refreshInputs.func1
 UPDATE events SET payload = json_set(payload, '$.tool_input', json(?), '$.cwd', ?) WHERE sid = (SELECT sid FROM sessions WHERE session_id = ?) AND key = ? AND json_valid(payload)
-    SEARCH events USING INDEX idx_events_session_key (sid=? AND key=?)
+    SEARCH events USING INDEX idx_events_sid_key (sid=? AND key=?)
     SCALAR SUBQUERY 1
         SEARCH sessions USING COVERING INDEX sqlite_autoindex_sessions_1 (session_id=?)
 
@@ -271,6 +271,45 @@ UPDATE events SET payload = ?, tool_bytes = CASE WHEN kind = 'tool.post' AND too
 SELECT v FROM meta WHERE k = ?
     SEARCH meta USING INDEX sqlite_autoindex_meta_1 (k=?)
 
+## store.(*Store).MoveEventsStep.func1
+DELETE FROM events_legacy WHERE id >= ?
+    SEARCH events_legacy USING INTEGER PRIMARY KEY (rowid>?)
+
+## store.(*Store).MoveEventsStep.func1
+INSERT INTO events(id, ts, sid, source, kind, tool, payload, tokens_in, tokens_out, cache_read, cache_write, cost_usd, key, model, cache_write_1h, agent_id, msg_id, touch_dir, tool_bytes, internal, inner_tool) SELECT m.id, m.ts, s.sid, m.source, m.kind, m.tool, m.payload, m.tokens_in, m.tokens_out, m.cache_read, m.cache_write, m.cost_usd, m.key, m.model, m.cache_write_1h, m.agent_id, m.msg_id, m.touch_dir, m.tool_bytes, m.internal, m.inner_tool FROM temp.events_moving m JOIN sessions s ON s.session_id = m.session_id WHERE true ORDER BY m.id ON CONFLICT(sid, key) WHERE key IS NOT NULL DO NOTHING
+    SCAN m
+    SEARCH s USING COVERING INDEX sqlite_autoindex_sessions_1 (session_id=?)
+    USE TEMP B-TREE FOR ORDER BY
+
+## store.(*Store).MoveEventsStep.func1
+INSERT INTO session_gen(session_id, gen) SELECT DISTINCT session_id, 1 FROM temp.events_moving WHERE true ON CONFLICT(session_id) DO UPDATE SET gen = gen + 1
+    SCAN temp.events_moving
+    USE TEMP B-TREE FOR DISTINCT
+
+## store.(*Store).MoveEventsStep.func1
+INSERT INTO temp.events_moving SELECT * FROM events_legacy WHERE id >= ?
+    SEARCH events_legacy USING INTEGER PRIMARY KEY (rowid>?)
+
+## store.(*Store).MoveEventsStep.func1
+SELECT MIN(id) FROM (SELECT id FROM events_legacy ORDER BY id DESC LIMIT ?)
+    CO-ROUTINE (subquery-1)
+        SCAN events_legacy
+    SEARCH (subquery-1)
+
+## store.(*Store).MoveEventsStep.func1
+UPDATE meta SET v = CAST(v AS INTEGER) + (SELECT COUNT(*) FROM temp.events_moving) WHERE k = 'events_moved'
+    SEARCH meta USING INDEX sqlite_autoindex_meta_1 (k=?)
+    SCALAR SUBQUERY 1
+        SCAN events_moving
+
+## store.(*Store).MoveProgress
+SELECT COALESCE((SELECT CAST(v AS INTEGER) FROM meta WHERE k = ?), 0), COALESCE((SELECT CAST(v AS INTEGER) FROM meta WHERE k = ?), 0)
+    SCAN CONSTANT ROW
+    SCALAR SUBQUERY 1
+        SEARCH meta USING INDEX sqlite_autoindex_meta_1 (k=?)
+    SCALAR SUBQUERY 2
+        SEARCH meta USING INDEX sqlite_autoindex_meta_1 (k=?)
+
 ## store.(*Store).ToolFieldsStep
 SELECT id, kind, COALESCE(tool, ''), payload FROM events WHERE id > ? AND id <= ? AND kind IN ('tool.pre', 'tool.post')
     SEARCH events USING INDEX idx_events_kind_id (kind=? AND id>? AND id<?)
@@ -318,6 +357,18 @@ SELECT id, payload FROM events WHERE kind = 'tool.pre' AND touch_dir IS NULL AND
 ## store.(*Store).backfillTouch.func1
 UPDATE events SET touch_dir = ? WHERE id = ?
     SEARCH events USING INTEGER PRIMARY KEY (rowid=?)
+
+## store.(*Store).checkMove
+SELECT EXISTS (SELECT 1 FROM events_legacy)
+    SCAN CONSTANT ROW
+    SCALAR SUBQUERY 1
+        SCAN events_legacy
+
+## store.(*Store).checkMove
+SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'events_legacy')
+    SCAN CONSTANT ROW
+    SCALAR SUBQUERY 1
+        SCAN sqlite_master
 
 ## store.(*Store).compactCeiling
 SELECT MAX(id) FROM events
@@ -853,7 +904,7 @@ SELECT session_id, pid, COALESCE(started_at, 0), COALESCE(last_event_at, 0) FROM
 
 ## store.EventByKey
 SELECT id, ts, (SELECT session_id FROM sessions WHERE sessions.sid = e.sid), source, kind, COALESCE(tool,''), payload, tokens_in, tokens_out, cache_read, cache_write, cost_usd, COALESCE(key,''), COALESCE(model,''), cache_write_1h, COALESCE(agent_id,'') FROM events e WHERE sid = (SELECT sid FROM sessions WHERE session_id = ?) AND key = ? AND kind = ?
-    SEARCH e USING INDEX idx_events_session_key (sid=? AND key=?)
+    SEARCH e USING INDEX idx_events_sid_key (sid=? AND key=?)
     SCALAR SUBQUERY 2
         SEARCH sessions USING COVERING INDEX sqlite_autoindex_sessions_1 (session_id=?)
     CORRELATED SCALAR SUBQUERY 1
@@ -866,8 +917,10 @@ SELECT id, ts, (SELECT session_id FROM sessions WHERE sessions.sid = e.sid), sou
         SEARCH sessions USING INTEGER PRIMARY KEY (rowid=?)
 
 ## store.EventsVersion
-SELECT COALESCE(MAX(id), 0) FROM events
+SELECT COALESCE(MAX(id), 0) + COALESCE((SELECT CAST(v AS INTEGER) FROM meta WHERE k = 'events_moved'), 0) FROM events
     SEARCH events
+    SCALAR SUBQUERY 1
+        SEARCH meta USING INDEX sqlite_autoindex_meta_1 (k=?)
 
 ## store.FindRemovalCandidates
 SELECT s.session_id, COALESCE(s.cwd,''), COALESCE(s.project,''), COALESCE(s.agent,''), s.status, COALESCE(s.owned,0), COALESCE(s.last_event_at,0), COALESCE(st.turns,0), COALESCE(st.cost_usd,0) FROM sessions s LEFT JOIN session_stats st ON st.session_id = s.session_id WHERE s.cwd = ? OR substr(s.cwd, 1, ?) = ? OR substr(s.cwd, 1, ?) = ? ORDER BY s.last_event_at
@@ -1125,7 +1178,7 @@ UPDATE brain_vault_edges SET pre = 1 WHERE src = ? AND dst = ? AND kind = ?
 
 ## store.LinkToolCall
 UPDATE events SET msg_id = ? WHERE sid = (SELECT sid FROM sessions WHERE session_id = ?) AND key = ? AND kind = ? AND msg_id IS NULL
-    SEARCH events USING INDEX idx_events_session_key (sid=? AND key=?)
+    SEARCH events USING INDEX idx_events_sid_key (sid=? AND key=?)
     SCALAR SUBQUERY 1
         SEARCH sessions USING COVERING INDEX sqlite_autoindex_sessions_1 (session_id=?)
 
@@ -1333,7 +1386,7 @@ UPDATE brain_gaps SET to_event_id = ?, reads_total = ?, updated_at = ? WHERE id 
 
 ## store.MergeAssistantText
 SELECT id, payload FROM events WHERE sid = (SELECT sid FROM sessions WHERE session_id = ?) AND key = ? AND kind = ?
-    SEARCH events USING INDEX idx_events_session_key (sid=? AND key=?)
+    SEARCH events USING INDEX idx_events_sid_key (sid=? AND key=?)
     SCALAR SUBQUERY 1
         SEARCH sessions USING COVERING INDEX sqlite_autoindex_sessions_1 (session_id=?)
 
@@ -2139,7 +2192,7 @@ SELECT COALESCE(tool,'?') AS t, SUM(CASE WHEN kind = 'tool.pre' THEN 1 ELSE 0 EN
 SELECT pr.ts, COALESCE(f.drill_key, ''), COALESCE(f.drill_by, ''), CASE WHEN pr.id <= (SELECT COALESCE(MAX(CAST(v AS INTEGER)), 0) FROM meta WHERE k = 'tool_fields_pending') THEN pr.payload END, po.id IS NOT NULL, CASE WHEN po.id <= (SELECT COALESCE(MAX(CAST(v AS INTEGER)), 0) FROM meta WHERE k = 'tool_fields_pending') THEN json_valid(po.payload) AND COALESCE(json_extract(po.payload, '$.is_error'), 0) <> 0 ELSE COALESCE(pf.is_error, 0) END, COALESCE(po.tool_bytes, 0) FROM events pr LEFT JOIN tool_fields f ON f.event_id = pr.id LEFT JOIN events po ON po.sid = pr.sid AND po.key = 'post:' || substr(pr.key, 5) LEFT JOIN tool_fields pf ON pf.event_id = po.id WHERE pr.kind = 'tool.pre' AND pr.tool = ? AND pr.ts >= ? AND pr.internal = 0 ORDER BY pr.ts
     SEARCH pr USING INDEX idx_events_kind_ts (kind=? AND ts>?)
     SEARCH f USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN
-    SEARCH po USING INDEX idx_events_session_key (sid=? AND key=?) LEFT-JOIN
+    SEARCH po USING INDEX idx_events_sid_key (sid=? AND key=?) LEFT-JOIN
     SEARCH pf USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN
     SCALAR SUBQUERY 1
         SEARCH meta USING INDEX sqlite_autoindex_meta_1 (k=?)
@@ -2403,6 +2456,10 @@ SELECT f.agent_id, COALESCE(f.agent_desc, '') FROM tool_fields f INDEXED BY idx_
     SCALAR SUBQUERY 1
         SEARCH sessions USING COVERING INDEX sqlite_autoindex_sessions_1 (session_id=?)
 
+## store.endMove
+DELETE FROM meta WHERE k IN ('events_move_total', 'events_moved')
+    SEARCH meta USING INDEX sqlite_autoindex_meta_1 (k=?)
+
 ## store.eventBreakdown
 SELECT sid, kind, ts, COALESCE(octet_length(payload), 0) FROM events
     SCAN events
@@ -2498,7 +2555,7 @@ SELECT EXISTS (SELECT 1 FROM brain_vault_notes)
 
 ## store.preInput
 SELECT payload FROM events WHERE sid = (SELECT sid FROM sessions WHERE session_id = ?) AND key = ?
-    SEARCH events USING INDEX idx_events_session_key (sid=? AND key=?)
+    SEARCH events USING INDEX idx_events_sid_key (sid=? AND key=?)
     SCALAR SUBQUERY 1
         SEARCH sessions USING COVERING INDEX sqlite_autoindex_sessions_1 (session_id=?)
 

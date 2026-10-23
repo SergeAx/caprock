@@ -78,9 +78,44 @@ CREATE INDEX idx_sessions_repo ON sessions(session_id, project, repo_path);
 CREATE INDEX idx_sessions_repo_branch ON sessions(repo_root, git_branch);
 CREATE INDEX idx_sessions_subscription ON sessions(subscription) WHERE subscription <> '';
 
--- One pass over events: adding sid, filling it and dropping session_id would
--- write every row twice.
-CREATE TABLE events_new (
+-- events is not copied here: copying every row took 105-501 s on copies of
+-- real databases (2026-10-21), and a migration runs before the daemon
+-- answers. The old table stays as events_legacy, and Store.MoveEventsStep
+-- moves its rows into the new one in the background, the newest first.
+ALTER TABLE events RENAME TO events_legacy;
+-- Its triggers went with it: moving a row out must neither count as a
+-- change to its session nor take its tool_fields.
+DROP TRIGGER events_gen_update;
+DROP TRIGGER events_gen_delete;
+DROP TRIGGER events_tool_fields_delete;
+-- What the move's progress is counted against, read while an index can
+-- answer it.
+INSERT INTO meta(k, v) SELECT 'events_move_total', COUNT(*) FROM events_legacy WHERE true
+  ON CONFLICT(k) DO UPDATE SET v = excluded.v;
+INSERT INTO meta(k, v) VALUES('events_moved', 0)
+  ON CONFLICT(k) DO UPDATE SET v = excluded.v;
+-- Its indexes keep the names the new ones need, and each would be written
+-- for every row moved out. (session_id, key) stays: a key still waiting to
+-- move is a duplicate too (events_legacy_dedupe).
+DROP INDEX IF EXISTS idx_events_ts;
+DROP INDEX IF EXISTS idx_events_kind_ts;
+DROP INDEX IF EXISTS idx_events_kind_id;
+DROP INDEX IF EXISTS idx_events_tool_dist;
+DROP INDEX IF EXISTS idx_events_session_ts;
+DROP INDEX IF EXISTS idx_events_session_id;
+DROP INDEX IF EXISTS idx_events_ts_cover;
+DROP INDEX IF EXISTS idx_events_turn_msg;
+DROP INDEX IF EXISTS idx_events_turn_agent;
+DROP INDEX IF EXISTS idx_events_user_turn;
+DROP INDEX IF EXISTS idx_events_attr_work;
+DROP INDEX IF EXISTS idx_events_turn_bounds;
+DROP INDEX IF EXISTS idx_events_agent;
+DROP INDEX IF EXISTS idx_events_agent_task;
+DROP INDEX IF EXISTS idx_events_subagent_turn;
+DROP INDEX IF EXISTS idx_events_agent_ts;
+DROP INDEX IF EXISTS idx_events_todo;
+
+CREATE TABLE events (
   id             INTEGER PRIMARY KEY,          -- rowid, monotonic
   ts             INTEGER NOT NULL,             -- unix ms
   sid            INTEGER NOT NULL REFERENCES sessions(sid),
@@ -103,24 +138,15 @@ CREATE TABLE events_new (
   internal       INTEGER NOT NULL DEFAULT 0 CHECK (internal IN (0,1)),
   inner_tool     TEXT
 );
-INSERT INTO events_new(id, ts, sid, source, kind, tool, payload, tokens_in, tokens_out, cache_read,
-                       cache_write, cost_usd, key, model, cache_write_1h, agent_id, msg_id, touch_dir,
-                       tool_bytes, internal, inner_tool)
-  SELECT e.id, e.ts, s.sid, e.source, e.kind, e.tool, e.payload, e.tokens_in, e.tokens_out, e.cache_read,
-         e.cache_write, e.cost_usd, e.key, e.model, e.cache_write_1h, e.agent_id, e.msg_id, e.touch_dir,
-         e.tool_bytes, e.internal, e.inner_tool
-    FROM events e JOIN sessions s ON s.session_id = e.session_id
-   ORDER BY e.id;
-DROP TABLE events;
-ALTER TABLE events_new RENAME TO events;
-
 CREATE INDEX idx_events_ts ON events(ts);
 CREATE INDEX idx_events_kind_ts ON events(kind, ts);
 CREATE INDEX idx_events_kind_id ON events(kind, id);
 CREATE INDEX idx_events_tool_dist ON events(kind, ts, tool, tool_bytes, internal);
 CREATE INDEX idx_events_session_ts ON events(sid, ts);
 CREATE INDEX idx_events_session_id ON events(sid, id);
-CREATE UNIQUE INDEX idx_events_session_key ON events(sid, key) WHERE key IS NOT NULL;
+-- Not idx_events_session_key: events_legacy holds that name until the
+-- move is done.
+CREATE UNIQUE INDEX idx_events_sid_key ON events(sid, key) WHERE key IS NOT NULL;
 CREATE INDEX idx_events_ts_cover
   ON events(ts, internal, kind, sid, tokens_in, tokens_out, cache_read, cache_write, cost_usd);
 CREATE INDEX idx_events_turn_msg
@@ -173,4 +199,30 @@ END;
 
 CREATE TRIGGER events_tool_fields_delete AFTER DELETE ON events BEGIN
   DELETE FROM tool_fields WHERE event_id = OLD.id;
+END;
+
+-- The newest rows move now: id has no AUTOINCREMENT, so a new event takes
+-- the highest id in events plus one, and that must be above every old one.
+INSERT INTO events(id, ts, sid, source, kind, tool, payload, tokens_in, tokens_out, cache_read,
+                   cache_write, cost_usd, key, model, cache_write_1h, agent_id, msg_id, touch_dir,
+                   tool_bytes, internal, inner_tool)
+  SELECT e.id, e.ts, s.sid, e.source, e.kind, e.tool, e.payload, e.tokens_in, e.tokens_out, e.cache_read,
+         e.cache_write, e.cost_usd, e.key, e.model, e.cache_write_1h, e.agent_id, e.msg_id, e.touch_dir,
+         e.tool_bytes, e.internal, e.inner_tool
+    FROM events_legacy e JOIN sessions s ON s.session_id = e.session_id
+   WHERE e.id >= (SELECT MIN(id) FROM (SELECT id FROM events_legacy ORDER BY id DESC LIMIT 1000))
+   ORDER BY e.id;
+DELETE FROM events_legacy WHERE id >= (SELECT MIN(id) FROM events);
+UPDATE meta SET v = (SELECT COUNT(*) FROM events) WHERE k = 'events_moved';
+
+-- Until it is moved, a row in events_legacy keeps its key: an importer that
+-- offers its history again on start finds the old row here, and InsertEvent
+-- reads the ignored row as a duplicate. Store.MoveEventsStep takes a row out
+-- of events_legacy before it puts it in, and drops this with the table.
+CREATE TRIGGER events_legacy_dedupe BEFORE INSERT ON events
+  WHEN NEW.key IS NOT NULL AND EXISTS (
+    SELECT 1 FROM events_legacy
+     WHERE session_id = (SELECT session_id FROM sessions WHERE sid = NEW.sid) AND key = NEW.key)
+BEGIN
+  SELECT RAISE(IGNORE);
 END;

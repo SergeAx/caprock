@@ -2720,7 +2720,7 @@ over the 14 local calendar days ending today:
   workflow with the most such time first.
 
 - **Board** (2026-10-14) — `board` `{cards[], releases[], flow,
-  default_branch?, ships_by?}`, the tab's Board view (`internal/api/prboard.go`). Each
+  default_branch?, ships_by?, closed[]}`, the tab's Board view (`internal/api/prboard.go`). Each
   `BoardCard` `{number, stage, stage_at?, ci?, why?, failed[]?, os[]?, ci_ms?, review?, release?,
   spend, stale?}` is a pull request of `prs` (its title, `author`, `author_avatar`
   and link are that entry's); closed unmerged ones and merges before the 14
@@ -2755,7 +2755,12 @@ over the 14 local calendar days ending today:
   back to the release before it), newest first, at most 6. `flow`
   `{counts{stage}, days, merged, ttm_median_ms?, ttm_count,
   release_lag_median_ms?, release_lag_count, release_gap_median_ms?,
-  release_gap_count, ci_median_ms?, cost_usd, series}`:
+  release_gap_count, ci_median_ms?, cost_usd, series}`; `cost_usd` sums
+  the cards' `spend` and the closed ones'. `closed[]` (2026-10-24; owner:
+  a closed pull request's $29.89 in flight beside $0.00 in the figure) is
+  each pull request closed without a merge within the window — or read
+  closed just now while the list still said open — `{number, closed_at?,
+  spend}`: on no stage, but what agents spent on it was spent. In `flow`,
   merged → released is the median of publish minus merge over the window's
   released cards (absent with fewer than two), CI the busiest workflow's
   median. `release_gap_median_ms` is the median time between consecutive
@@ -4503,7 +4508,21 @@ POST   /v1/brain/backfill       {days?: 1–90 (30), dry_run?} → BrainEstimate
   cursor moved to the session's newest event, so it is not looked at again
   until it has new events (a catch-up gap in such a session is closed
   unread); decided at read time, because the list can change after the
-  session ran. The excluded folders' projects (`store.ProjectFromCwd` of
+  session ran. A session whose working directory is a filesystem or drive
+  root (`/`, `C:\`) or the home directory itself (`%USERPROFILE%` on
+  Windows; not a folder under it) is never read either (2026-10-24, owner:
+  launchd and cron start a scheduled `claude -p` in `/`, 975 such sessions
+  on his machine, 143 of them waiting on the daily limit) —
+  `store.RootOrHome`, the set `brain.exclude` refuses minus the temp
+  folder. The engine's candidate list marks one as it meets it with a
+  skipped read through its newest event, reason `root or home: <cwd>`
+  (`store.MarkBrainRootOrHome`; no migration), and `BrainCandidates`
+  leaves a marked session out for good, so it is not pending (the count
+  drops at the first status), not estimated, not counted as read in the
+  build, and a catch-up gap in it is closed unread. Its memories had no
+  project (`memoryProject`), and the SessionStart handoff already hands
+  such a folder nothing (`store.NotAProject`); memories kept from such
+  sessions before are not deleted. The excluded folders' projects (`store.ProjectFromCwd` of
   each; `brain.ExcludedProjects`) are left out of `GET /v1/brain` without
   `project=` — the graph and search, so an MCP `search_memories` does not
   find them — and `GET /v1/brain/handoff` and `/v1/brain/decisions` answer
@@ -4579,8 +4598,9 @@ POST   /v1/brain/backfill       {days?: 1–90 (30), dry_run?} → BrainEstimate
   neither the backoff nor the daily limit, and the same chunk was asked
   again every few seconds (3,363 times in 13 hours on the owner's Mac,
   2026-10-22). The project is the session's own — none for a session
-  opened in the filesystem root, the home directory or the temp directory
-  itself (`store.NotAProject`), or whose label folds to nothing (`/`) —
+  opened in the temp directory itself (`store.NotAProject`; one opened in
+  the filesystem root or the home directory itself is not read at all,
+  *What is never read*), or whose label folds to nothing (`/`) —
   except for a session whose `cwd` is under
   the system's temp directory (`os.TempDir`, `/tmp`, `/var/folders` and
   their `/private` forms), where that label is a throwaway folder's name:
@@ -5135,12 +5155,14 @@ GET /v1/work → Work
   repo_root?, worktree?, branch?, on_default?, started_at, worked_at?,
   state, turn_started_at?, turn_left?, estimate?, estimate_note?, todo?,
   cost_usd, today_usd, prs: [{number, url, title?, opened_at?,
-  merged_at?}], link, link_note?}`. Every session not ended, shells left
+  merged_at?, closed_at?}], link, link_note?}`. Every session not ended, shells left
   out, at most 200: waiting on you first, then working, background, at
   the prompt, each by project. `description` is the session list's.
   `on_default` is whether `branch` is the remote's default branch as the
   clone knows it, absent when either is unknown. `prs` are the session's
-  recorded pull requests (§ session_prs), newest four. `cost_usd` is the
+  recorded pull requests (§ session_prs), newest four; `closed_at` is set
+  when the session's own command closed one (2026-10-24: the dashboard
+  never draws a closed one as in flight). `cost_usd` is the
   session's total, `today_usd` its priced cost since `day_start`
   (`store.SpendBySessionSince`: one grouped sum over
   `idx_events_attr_work`, which covers it).

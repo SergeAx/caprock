@@ -6659,6 +6659,19 @@ the write lock. The file and its write-ahead log grew by 17 MB at the peak,
 where copying every row in the migration had needed 1.58 times the used
 size; 87 MiB of free pages were left for the incremental vacuum to return.
 
+No release before 0073 opens the upgraded database (ADR-082), so before
+migrating a database below it `Open` keeps a copy, `caprock.pre-0073.db`
+beside `caprock.db` (`store.BackupPath`), through SQLite's online backup:
+one snapshot, write-ahead log included, 0600 like the database. It is the
+way back to an older release: stop Caprock, put the copy in place of
+`caprock.db`, remove `caprock.db-wal` and `caprock.db-shm`, and install the
+older one. The volume needs free disk of 1.1 times the database's pages;
+without it the upgrade goes on with no copy, and the log says so. The
+data-directory sweep removes the copy 30 days after it was made. While it
+copies and migrates, the daemon keeps `upgrading.json` fresh (§ Runtime
+file). On the 1.23 GB copy above the copy took 4.8 s and 8.7 s in two
+runs, and the whole start with it 5.7 s and 9.6 s.
+
 ### Worked-at and parent DDL (migration 0027)
 
 ```sql
@@ -7802,6 +7815,8 @@ preview stands) never meet. Before it, the port's bind was the only lock,
 which a second daemon on another port walked past.
 
 `<data_dir>/runtime.json` = `{"port": 22776, "token": "<random per run>", "pid": <daemon pid>, "started_at": <unix ms>, "version": "<daemon version>", "api_level": 1, "exe": "<absolute path of the daemon binary>"}`; written 0600 by `caprock up`, deleted by `caprock down`; the shim reads it on every invocation.
+
+`<data_dir>/upgrading.json` = `{"pid": <daemon pid>, "started_at": <unix ms>}`, written 0600 by the daemon before it copies the database ahead of an upgrade (§ Session key DDL) and deleted once the migrations have run, before the daemon listens. Its modification time is touched every 2 s meanwhile; a file older than 10 s was left by a daemon that died and means nothing. While it is fresh, `caprock up` waits for the daemon instead of starting a second one, which would only fail on the lock, or giving up after 10 s, and prints `Upgrading the database, which can take a minute…`; the app's supervisor shows the same as its start step instead of the failure page. Once the file is gone, both give the daemon the 10 s of any start to finish starting and answer.
 
 **`api_level`** (also in `GET /v1/status`) is an integer raised by every change a client must know about and never lowered: `1` is the first level, added for the desktop app ([ADR-038](08-decisions.md#adr-038--the-desktop-app-is-a-thin-tauri-v2-shell-around-the-existing-react-ui-and-xtermjs-on-the-go-daemon)). A client declares the minimum it needs; a daemon below it, or one with no `api_level` (read as `0`), is shown as needing an upgrade. **`exe`** is how the desktop app tells a daemon it installed (`<data_dir>/bin/caprock`, which it may replace) from one a package manager owns (which it must not touch); omitted when the OS cannot say.
 

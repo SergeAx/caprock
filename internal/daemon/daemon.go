@@ -395,7 +395,8 @@ func newDaemon(ctx context.Context, opt Options) (*Daemon, error) {
 	// migrated is refused inside Open before any write (ADR-082), and its
 	// error is the whole message, unwrapped, because it is what `caprock up`
 	// and the desktop app show.
-	st, err := store.Open(ctx, config.DBPath(opt.DataDir), log)
+	st, err := store.Open(ctx, config.DBPath(opt.DataDir), log,
+		store.OnUpgrade(func() func() { return config.MarkUpgrading(opt.DataDir) }))
 	if err != nil {
 		var newer *store.SchemaTooNewError
 		if errors.As(err, &newer) {

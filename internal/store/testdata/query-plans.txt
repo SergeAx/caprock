@@ -358,6 +358,11 @@ SELECT id, payload FROM events WHERE kind = 'tool.pre' AND touch_dir IS NULL AND
 UPDATE events SET touch_dir = ? WHERE id = ?
     SEARCH events USING INTEGER PRIMARY KEY (rowid=?)
 
+## store.(*Store).backup
+SELECT page_count * page_size FROM pragma_page_count, pragma_page_size
+    SCAN pragma_page_count VIRTUAL TABLE INDEX 0:
+    SCAN pragma_page_size VIRTUAL TABLE INDEX 0:
+
 ## store.(*Store).checkMove
 SELECT EXISTS (SELECT 1 FROM events_legacy)
     SCAN CONSTANT ROW

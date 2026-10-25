@@ -494,6 +494,9 @@ func statusCmd() *cobra.Command {
 				fmt.Fprintf(out, "         STOPPED: %s\n", st.IngestError)
 				fmt.Fprintln(out, "         No new sessions are being captured. Check that ~/.claude is readable, then restart with `caprock down && caprock up`.")
 			}
+			if m := st.EventsMove; m != nil {
+				fmt.Fprintf(out, "upgrade: moving older events into the upgraded database, %d of %d (%d%%)\n", m.Moved, m.Total, m.Moved*100/max(m.Total, 1))
+			}
 			// A machine that runs OpenCode shows those sessions mixed in with
 			// Claude Code's, so "no OpenCode sessions" and "OpenCode is not
 			// being read" look identical on the dashboard. Say which it is.

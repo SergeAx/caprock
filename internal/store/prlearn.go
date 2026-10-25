@@ -312,3 +312,9 @@ func (c *hitMemo) put(key string, h learnHit) {
 	}
 	c.m[key] = h
 }
+
+func (c *hitMemo) reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.m = map[string]learnHit{}
+}

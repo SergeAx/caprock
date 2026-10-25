@@ -161,6 +161,14 @@ func Write(ctx context.Context, db *sql.DB, w io.Writer, o Options) (int64, erro
 	if keyed == 0 {
 		return 0, errors.New("this database was written by an older Caprock: start Caprock once (`caprock up`) to upgrade it, then export again")
 	}
+	// Until migration 0073's move is done, events holds the newest rows only.
+	var moving int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'events_legacy'`).Scan(&moving); err != nil {
+		return 0, err
+	}
+	if moving > 0 && o.Table == "events" {
+		return 0, errors.New("older events are still moving into the upgraded database: export again once `caprock status` no longer shows it")
+	}
 
 	cols, query, args := build(o)
 	rows, err := db.QueryContext(ctx, query, args...)

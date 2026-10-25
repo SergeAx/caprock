@@ -403,6 +403,12 @@ func (c *memoSums) get(key, fp string, n int) ([]prSum, []bool) {
 	return sums, have
 }
 
+func (c *memoSums) reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.m = map[string]memoEntry{}
+}
+
 // put keeps the slices rows of sums, beside those already kept for the
 // same fingerprint.
 func (c *memoSums) put(key, fp string, sums []prSum, rows []int) {

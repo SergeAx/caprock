@@ -226,9 +226,12 @@ func FirstEventTs(ctx context.Context, q Querier) (int64, error) {
 // EventsVersion is the newest event's id: it moves on every event written,
 // and an answer counted at one version is still right at the same version
 // unless rows were removed. Read off the primary key, so it costs one lookup.
+// The rows migration 0073 moves in come below it, so their count is added
+// while they do.
 func EventsVersion(ctx context.Context, q Querier) (int64, error) {
 	var v int64
-	err := q.QueryRowContext(ctx, `SELECT COALESCE(MAX(id), 0) FROM events`).Scan(&v)
+	err := q.QueryRowContext(ctx, `SELECT COALESCE(MAX(id), 0)
+		+ COALESCE((SELECT CAST(v AS INTEGER) FROM meta WHERE k = '`+metaMoved+`'), 0) FROM events`).Scan(&v)
 	return v, err
 }
 

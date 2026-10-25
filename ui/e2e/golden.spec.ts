@@ -134,7 +134,9 @@ test('the share dialog opens, draws its card and closes, with no network', async
   await page.keyboard.press('Enter')
   const dialog = page.getByRole('dialog', { name: 'Share your figures' })
   await expect(dialog).toBeVisible()
-  await expect(dialog.getByRole('img', { name: /Your figures/ })).toBeVisible()
+  // The week card (WeekCard), labelled by its own figures; the sandbox's
+  // sessions may fall outside the week, and then the dialog says so instead.
+  await expect(dialog.getByRole('img').first().or(dialog.getByText(/so there is no card yet/))).toBeVisible()
   await dialog.getByRole('button', { name: 'Close' }).click()
   await expect(dialog).toHaveCount(0)
 })
@@ -180,6 +182,12 @@ test('a chat starts in one tap, opens as a conversation, shows its files, and is
   await expect(list.getByRole('link')).toHaveCount(1)
   await expect(page.getByLabel('1 chats')).toBeVisible()
   await list.getByRole('button', { name: /^More for / }).click()
+  // #816: the list clips its rows, so the menu's last item was hidden under
+  // the box's edge; it is the topmost thing at its own centre now.
+  await expect.poll(() => page.getByRole('menuitem', { name: 'Delete…' }).evaluate((el) => {
+    const r = el.getBoundingClientRect()
+    return el.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2))
+  })).toBe(true)
   await page.getByRole('menuitem', { name: 'Archive' }).click()
   await expect(page.getByText('No chats yet.')).toBeVisible()
   await page.getByRole('link', { name: 'Archived · 1' }).click()

@@ -43,6 +43,7 @@ import (
 	"github.com/dspv/caprock/internal/nativeterm"
 	"github.com/dspv/caprock/internal/obsidian"
 	"github.com/dspv/caprock/internal/pairing"
+	"github.com/dspv/caprock/internal/planshare"
 	"github.com/dspv/caprock/internal/premium"
 	"github.com/dspv/caprock/internal/projects"
 	"github.com/dspv/caprock/internal/store"
@@ -117,15 +118,18 @@ type Deps struct {
 	// list (at most 30 s old), and fresh is &fresh=1, which takes it now.
 	// StopOrphans stops processes from that list for POST
 	// /v1/footprint/orphans/stop; force (the second click on one that
-	// outlived SIGTERM) sends SIGKILL. nil ⇒ 501.
+	// outlived SIGTERM) sends SIGKILL; skipHeld (Free up memory) refuses a
+	// listed process the scan holds (its `hold`). nil ⇒ 501.
 	Footprint   func(ctx context.Context, orphans, fresh bool) any
-	StopOrphans func(ctx context.Context, targets []OrphanTarget, force bool) any
+	StopOrphans func(ctx context.Context, targets []OrphanTarget, force, skipHeld bool) any
 	// SystemMemory returns the machine's memory with the agents' states and
 	// the other apps for GET /v1/system/memory; paired leaves the apps'
-	// names out. EndIdleAgents ends the named idle agents Caprock started
-	// for POST /v1/system/memory/end-idle. nil => 501.
-	SystemMemory  func(ctx context.Context, paired bool) any
-	EndIdleAgents func(ctx context.Context, sessionIDs []string) any
+	// names out; front is ?front=, the session whose tab is in front of the
+	// asking dashboard, never offered. EndIdleAgents ends the named idle
+	// agents Caprock started for POST /v1/system/memory/end-idle, front
+	// likewise. nil => 501.
+	SystemMemory  func(ctx context.Context, paired bool, front string) any
+	EndIdleAgents func(ctx context.Context, sessionIDs []string, front string) any
 	// RestartEnd ends a heavy agent Caprock started and waits for it to exit,
 	// so the dashboard can continue it fresh: POST /v1/system/memory/restart.
 	RestartEnd func(ctx context.Context, sessionID string) any
@@ -216,6 +220,10 @@ type Deps struct {
 	// Subscriptions keeps the sign-ins of Settings → Subscriptions (ADR-048).
 	// nil ⇒ /v1/subscriptions returns 501.
 	Subscriptions SubscriptionManager
+	// PlanShare computes the rates behind the plan figures — plan dollars
+	// and share of a week per API dollar, per sign-in (internal/planshare).
+	// nil ⇒ /v1/plan-share returns 501.
+	PlanShare func(ctx context.Context) (planshare.Response, error)
 	// Tasks is the Phase 2 hive-backed task board (nil ⇒ endpoints return 501).
 	Tasks TaskController
 	// Settings reads and persists the user-editable settings (the subscription
@@ -610,6 +618,9 @@ type Server struct {
 	relHist relHistCache
 	// repos answers "which repository, on which host" per directory.
 	repos *repoCache
+	// prsFill reads the older pull requests a period's card needs and
+	// github_prs lacks, once per repository (weekbackfill.go).
+	prsFill prsBackfill
 	// sizes decides which attached terminal a session's PTY is sized for
 	// (termsize.go).
 	sizes *ptySizes
@@ -713,6 +724,7 @@ func New(d Deps) *Server {
 	m.HandleFunc("POST /v1/browsers/open", s.handleOpenBrowser)
 	m.HandleFunc("GET /v1/stats/summary", s.handleSummary)
 	m.HandleFunc("GET /v1/stats/limits", s.handleLimits)
+	m.HandleFunc("GET /v1/plan-share", s.handlePlanShare)
 	m.HandleFunc("GET /v1/stats/trends", s.handleTrends)
 	// The offer survey: forwards one answer to caprock.dev on a click (offer.go, ADR-062).
 	m.HandleFunc("POST /v1/offer", s.handleOffer)
@@ -2087,6 +2099,22 @@ type LimitsResponse struct {
 	CodexRateLimits *RateLimits `json:"codex_rate_limits,omitempty"`
 }
 
+// handlePlanShare serves the rates behind the plan figures: every sign-in's
+// plan factor and weekly share per API dollar, computed in one place
+// (internal/planshare) so every screen prices a cost the same way.
+func (s *Server) handlePlanShare(w http.ResponseWriter, r *http.Request) {
+	if s.d.PlanShare == nil {
+		http.Error(w, "plan figures unavailable", http.StatusNotImplemented)
+		return
+	}
+	resp, err := s.d.PlanShare(r.Context())
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 // handleLimits serves the plan windows: the same reads as the summary's
 // rate_limits and codex_rate_limits (the latest rows and the kept pace),
 // nothing range- or agent-scoped.
@@ -2186,7 +2214,16 @@ func (s *Server) trendsFor(ctx context.Context, agent store.AgentFilter) (any, e
 func (s *Server) rangeSummary(ctx context.Context, from int64, label string, agent store.AgentFilter) (store.Summary, error) {
 	spark := s.sparkSpec(label, from)
 	compute := func(c context.Context) (store.Summary, error) {
-		return store.SummarizeSparkFor(c, s.d.Store.DB(), from, spark, agent)
+		sum, err := store.SummarizeSparkFor(c, s.d.Store.DB(), from, spark, agent)
+		if err != nil {
+			return sum, err
+		}
+		// The same range and agent filter, split by sign-in for the plan
+		// figures. A failure costs those figures, never the summary.
+		if parts, err := store.SpendPartsBetween(c, s.d.Store.DB(), from, 0, agent); err == nil {
+			sum.CostParts = parts
+		}
+		return sum, nil
 	}
 	cache := s.summ
 	if label == "today" {

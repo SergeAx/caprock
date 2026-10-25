@@ -48,6 +48,8 @@ func newOrphanFixture() orphanFixture {
 		{pid: 210, ppid: 1, name: "caprock", start: old},             // `caprock up` left behind
 		{pid: 211, ppid: 50, name: "caprock", start: old, tty: true}, // `caprock status` in the user's terminal
 		{pid: 212, ppid: 1, name: "caprock", start: ms(time.Minute)}, // `caprock up` detaching right now
+		{pid: 213, ppid: 1, name: "caprock-mail", start: old},        // Caprock Mail, an app of its own
+		{pid: 214, ppid: 1, name: "caprock", start: old},             // the CLI inside Caprock.app, left behind
 		{pid: 400, ppid: 1, name: "caprock-pty-host", start: old},    // a registered holder: a live session of ours
 		{pid: 401, ppid: 400, name: "claude", start: old, tty: true}, // its claude
 		{pid: 402, ppid: 1, name: "caprock-pty-host", start: old},    // unreachable, claude still runs in it
@@ -131,6 +133,8 @@ func newOrphanFixture() orphanFixture {
 			{pid: 210, start: old, exe: "/x/caprock", sub: "up"},
 			{pid: 211, start: old, exe: "/x/caprock", sub: "status"},
 			{pid: 212, start: ms(time.Minute), exe: "/x/caprock", sub: "up"},
+			{pid: 213, start: old, exe: "/Applications/Caprock Mail.app/Contents/MacOS/caprock-mail"},
+			{pid: 214, start: old, exe: "/Applications/Caprock.app/Contents/MacOS/caprock", sub: "up"},
 		},
 	}
 	in := orphanInput{
@@ -162,7 +166,7 @@ func TestOrphansAreListedConservatively(t *testing.T) {
 		got[o.PID] = o
 	}
 	want := map[int32]string{
-		200: OrphanDaemon, 402: OrphanHolder, 404: OrphanHolder, 210: OrphanCaprockOther,
+		200: OrphanDaemon, 402: OrphanHolder, 404: OrphanHolder, 210: OrphanCaprockOther, 214: OrphanCaprockOther,
 		405: OrphanOldHolder,
 		500: OrphanClaude, 503: OrphanClaude, 508: OrphanClaude, 509: OrphanClaude,
 		510: OrphanCodex, 512: OrphanCodex, 513: OrphanCodex,
@@ -390,7 +394,7 @@ func TestStopOnlyWhatIsListedWithItsStart(t *testing.T) {
 		{PID: 600, StartedAt: 1},    // never listed
 		{PID: 500, StartedAt: 1000}, // named twice
 		{PID: 501, StartedAt: 7},    // listed, but not with this start
-	}, 300*time.Millisecond, false)
+	}, 300*time.Millisecond, false, false)
 
 	if len(res.Stopped) != 1 || res.Stopped[0].PID != 500 {
 		t.Errorf("stopped: %+v", res.Stopped)
@@ -423,12 +427,26 @@ func TestStopOnlyWhatIsListedWithItsStart(t *testing.T) {
 
 	// The second click: force, for 501 alone.
 	f.sent = nil
-	res = stopListed(context.Background(), f, list, []OrphanTarget{{PID: 501, StartedAt: 1001}}, 300*time.Millisecond, true)
+	res = stopListed(context.Background(), f, list, []OrphanTarget{{PID: 501, StartedAt: 1001}}, 300*time.Millisecond, true, false)
 	if len(res.Stopped) != 1 || res.Stopped[0].PID != 501 || len(res.Running) != 0 || len(res.Failed) != 0 {
 		t.Errorf("force: %+v", res)
 	}
 	if got := strings.Join(f.sent, ","); got != "KILL 501" {
 		t.Errorf("force sent %q, want SIGKILL to 501 alone", got)
+	}
+
+	// Free up memory's stop (skip_held): a held one is refused with its
+	// hold and never signalled; Stop on its row (no skip_held) may stop it.
+	f.sent = nil
+	f.start[520] = 1020
+	held := []Orphan{{PID: 520, StartedAt: 1020, Kind: OrphanDaemon, Label: "caprock up", Hold: holdAgentRunning}}
+	res = stopListed(context.Background(), f, held, []OrphanTarget{{PID: 520, StartedAt: 1020}}, 300*time.Millisecond, false, true)
+	if len(res.Stopped) != 0 || len(res.Failed) != 1 || res.Failed[0].Error != holdAgentRunning || len(f.sent) != 0 {
+		t.Errorf("skip_held stopped a held test copy: %+v, sent %v", res, f.sent)
+	}
+	res = stopListed(context.Background(), f, held, []OrphanTarget{{PID: 520, StartedAt: 1020}}, 300*time.Millisecond, false, false)
+	if len(res.Stopped) != 1 {
+		t.Errorf("row Stop refused a held test copy: %+v", res)
 	}
 }
 

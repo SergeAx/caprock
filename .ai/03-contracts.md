@@ -707,7 +707,7 @@ Every output byte has an offset and every input frame a sequence number, so a re
 - **Size: the terminal in use wins** (tmux's `latest`; `internal/api/termsize.go`). A session's PTY has one size and may have several terminals attached. The daemon remembers each socket's own size (its last `resize`) and gives the PTY the size of the one **in use**. A socket becomes the one in use when it sends input (any binary frame, before the bytes are typed), when it sends `focus` (the client's window gained focus or came into view, its tab came to the front, a click in the terminal), when it is the only socket with a size, or when its `client` id is the tab that last claimed the PTY (a reconnect of that tab). Every other socket is a **viewer**: its resizes are recorded, not applied, and it is drawn at the size in use. A claim by the socket already in use at the size the PTY already has changes nothing, so a claim on every keystroke costs nothing. A socket says `blur` when its terminal goes out of sight (the page hidden, a phone locked or in the background, an app tab behind another, the page going away); it stays a viewer until its next claim. When the socket in use sends `blur`, the PTY goes at once to the socket in sight that claimed most recently, at its last size, and that socket's `client` becomes the owner, so a phone whose socket died while locked does not take the PTY back by reconnecting; with no other socket in sight that has a size, nothing changes. When the socket in use closes, the PTY goes to another socket of the same `client`, else to the one that claimed most recently, a socket in sight before one out of sight, at its size. A client re-sends its current size with every `focus` (`{"resize":…,"focus":true}`), so a PTY left at another terminal's size by a close the daemon never saw is put right by looking. Before 2026-10-13 there was no `blur`: a phone put away kept the PTY until its socket was taken for dead (25–35 s when its page froze, never when its browser kept answering pings in the background), and the desktop stayed at the phone's width (Vova). Until 2026-10-12 every resize was applied and the last sender won: a phone that typed into a session left the desktop's agent drawn 45 columns wide in a wide pane until the desktop's box next changed (Vova).
 - **Repaint.** A socket's **first** resize repaints: the PTY is given one column less, then the full size once the program has written output after the narrower one (up to 750 ms for one that draws nothing on a resize, `repaintWait`) and at least 40 ms after that (`repaintGap`) — two real size changes, so whatever runs gets SIGWINCH and redraws its whole screen — at the new socket's size when it is in use, at the size in use when it is a viewer (a phone opening a session never shrinks the desktop's agent). Without it a reattached terminal kept the ring's replay, and a TUI that redraws by difference (Claude Code) showed rows whose labels had scrolled out of the ring as bare numbers until something changed size. A column, not a row (since 0.140.2): on one row less Claude Code clears only as many rows as it then thinks it has, so the terminal's bottom row kept a stale line after every attach and resume; a width change clears every row. It waits for output because a fixed 40 ms was not enough (owner, 2026-10-21, on a loaded Mac): two SIGWINCHes that arrive while a program's event loop is busy reach it as one, at the size it already drew at, so it redrew nothing and the replay's bare changed cells stayed — a status line of lone digits, the mode line's words gone. A Node program blocked 120 ms in every 150 saw no resize at all on 2 of 5 such repaints. A client sent `reset` and a snapshot mid-session (it fell behind the ring) gets the same repaint at the size in use. The PTY passing from one terminal to another repaints the same way; the socket in use resizing its own box is applied as sent. Version 1 sockets resize as before (every resize applied).
 - **Liveness.** Each side sends `{"ping":t}` every 10 s and answers the other's with `{"pong":t}`; 25 s with nothing received closes the socket.
-- **End.** When the process exits: the last output, `{"exit":{"code":N}}`, then close **1000**. When it exits to be resumed under the same id in another permission mode (`POST /v1/agents/{id}/permission-mode` with `restart`), the frame is `{"exit":{"code":N,"restart":1}}`: the client keeps the tab, forgets its offset (the new process has a new ring) and reconnects through the 1000 close, retrying while the daemon answers 501 until the new process is up. A program that exited **at once** (`early`: within 15 s of its start, nothing typed, not stopped by Caprock or restarted; § Session exits) says so: `{"exit":{"code":N,"early":1}}`, and a socket that arrives after such a process is gone — the usual case, since it lived ~100 ms — is accepted and gets that frame and the 1000 close at once, with no hello, rather than **409** (which a tab read as "Can't connect · next try in 5 s" for good). The client ends without reconnecting and the pane reads `GET /v1/agents/{id}/exit` for what the program printed. An exit that is not early, and a session with no exit recorded, are refused with 409 as before. Close **1008**: the device lost the controller role, do not reconnect. Any other close is the connection, and the client reconnects by the policy `/v1/live` shares (§ Client reconnect policy, below).
+- **End.** When the process exits: the last output, `{"exit":{"code":N}}`, then close **1000**. When it exits to be resumed under the same id in another permission mode (`POST /v1/agents/{id}/permission-mode` with `restart`), the frame is `{"exit":{"code":N,"restart":1}}`: the client keeps the tab, forgets its offset (the new process has a new ring) and reconnects through the 1000 close, retrying while the daemon answers 501 until the new process is up. A program that exited **at once** (`early`: within 15 s of its start, nothing typed, not stopped by Caprock or restarted; § Session exits) says so: `{"exit":{"code":N,"early":1}}`, and a socket that arrives after such a process is gone — the usual case, since it lived ~100 ms — is accepted and gets that frame and the 1000 close at once, with no hello, rather than **409** (which a tab read as "Can't connect · next try in 5 s" for good). The client ends without reconnecting and the pane reads `GET /v1/agents/{id}/exit` for what the program printed. An agent Caprock ended to **free memory** (`POST /v1/system/memory/end-idle`; `ExitReport.freed`) is said the same way, live or to a socket that arrives after: `{"exit":{"code":N,"freed":1}}` and the 1000 close; the client is gone at once (`gone`, with the reason) and the app shows the conversation with Continue here instead of a shell or "Can't connect · next try in 10 s". Any other exit, and a session with no exit recorded, are refused with 409 as before. Close **1008**: the device lost the controller role, do not reconnect. Any other close is the connection, and the client reconnects by the policy `/v1/live` shares (§ Client reconnect policy, below).
 - **Client backpressure.** The dashboard closes the socket while more than 1 MiB it has received waits for xterm.js to parse, and reconnects with `since` once that drops to 256 KiB.
 
 ### Session exits
@@ -848,6 +848,7 @@ GET  /v1/notes?q=…&before=…            → AssistantNote[] — search that p
 GET  /v1/sessions/{id}/diff            → { files: FileDiff[] } | 409 not-a-git-repo — a shell tab's id gives its folder's diff (machine only; 403 to a paired device)
 GET  /v1/stats/summary?range=today     → totals: tokens, cost, sessions, models
 GET  /v1/stats/limits                  → {rate_limits?, codex_rate_limits?} — the plan windows alone, as the summary carries them
+GET  /v1/plan-share                    → PlanShare — per sign-in, plan dollars and share of a week per API dollar (§ Plan figures)
 GET  /v1/settings                      → user-stated settings (plan, update checks)
 PUT  /v1/settings                      → store them
 PUT  /v1/tabs                          {viewer, sessions} → 204: the sessions this dashboard has a tab for, in strip order (§ Open tabs)
@@ -900,18 +901,60 @@ The Week screen's shareable card. `start` is a local date and the window is
 Cost screen's `7d` range uses, so the two never disagree about which day a
 turn fell on. A `start` that is not `YYYY-MM-DD` is `400`.
 
-`{start, end, partial, from_ms, to_ms, days[], sessions, active_days, turns,
-cost_usd, unpriced_turns?, models[], prs_opened, prs_merged,
-merges_unresolved, commits, files_edited, lines_added, lines_removed,
-ci_wait_ms, tool_ms, agents[], loop?, biggest?, tax?, subagent_saving?, cost_per_merged_pr?,
-estimates[], pricing_version?}`. `days[]` is `{day, prs_opened, cost_usd,
+`{start, end, partial, from_ms, to_ms, days[], sessions, scheduled_sessions,
+active_days, turns, cost_usd, unpriced_turns?, tokens, models[], prs_opened,
+prs_merged, prs_source?, merges_unresolved, commits, files_edited, lines_added,
+lines_removed, ci_wait_ms, tool_ms, agents[], loop?, biggest?, tax?,
+subagent_saving?, cost_per_merged_pr?, estimates[], pricing_version?}`. `days[]` is `{day, prs_opened, cost_usd,
 active}` × 7; `agents[]` is `{agent, subagent, turns, cost_usd, sessions,
 threads?}`; `loop` is `{agent, tool, kind, calls, first_ms, last_ms, tax_usd?,
 tax_priced_calls?}`; `biggest` is `{agent, cost_usd, turns, active_days}`.
 
 Everything is computed from the local database (`store.WeekStats`); the daemon
-asks nothing of GitHub, so what can be said is bounded by what the agents'
-own tool calls recorded:
+asks nothing of GitHub for it.
+
+**Hand-run sessions only** (owner, 2026-10-25: 480 of a week's 1,036 sessions
+were scheduled scripts). A session whose cwd is a filesystem root or the home
+directory itself (`store.RootOrHome`, the rule Second Brain skips by) is left
+out of every figure — sessions, turns, `tokens`, cost, the per-day cost, the
+models, the agents, the biggest session, the loop, the tool counts and the
+subagent saving — and counted in `scheduled_sessions` instead. The clause is
+built once per request from the distinct `sessions.cwd` values that match.
+
+**Pull requests from GitHub's record where the daemon holds one** (owner,
+2026-10-25: the card said 5 merged in a week GitHub merged 59, because a
+script's or a batch merge is no agent's `gh pr merge`). Each repository root
+the window's hand-run turns ran in (`sessions.repo_root`, else the cwd) is
+mapped to its GitHub `owner/name` as the Pipeline maps a session (the repo
+cache, `github.ParseRemote`). For a repository with any row in `github_prs`
+(migration 0071, the pull request lists the Pipeline read), `prs_merged`
+counts its rows with `merged_at` in the window and `prs_opened` those with
+`created_at` in it, and `days[].prs_opened` buckets those by local day. A
+repository with no such row keeps the agents' own count below, as does a pull
+request the agents ran in a repository no hand-run session worked in.
+`prs_source` says which: `github`, `agents` or `both`; absent with no record
+and nothing counted.
+
+**What `github_prs` lacks of the window is read from GitHub once** (owner,
+2026-10-25: the card said 48 merged in a week GitHub merged 59, and he shares
+the figure publicly). The Pipeline's lists are the newest 50 by update per
+read, from the day the table was made, so a window reaching before that, or
+one busier than 50 between two reads, held only part of it. On every ask for
+a Week, for each repository counted, `meta["prs_read:<owner/name>"]` =
+`"<from>,<at>"` (unix ms) records the span read whole. When it is absent or
+`from` is after the window's start, the daemon reads, in the background, every
+pull request updated since the start (`github.Service.PullsSince`:
+`GET /repos/{o}/{r}/pulls?state=all&sort=updated&direction=desc&per_page=100&page=N`,
+page by page until one reaches past the start or a short page ends the list,
+at most 10 pages) and keeps them in `github_prs` (`store.UpsertGitHubPRs`,
+a fork's pull request without its head branch). A covered window whose `at`
+is 30 minutes old reads only what changed since `at` (less 5 minutes), one
+page as a rule. A complete read rewrites the record; a failed one waits 30
+minutes, one cut at 10 pages six hours; in-flight reads and waits are kept in
+memory. The answer never waits on GitHub: it is the count held so far, and
+the Week caches are dropped when a read kept anything, so the next ask counts
+GitHub's whole window. Nothing is sent while GitHub is not connected. The
+agents' count:
 
 - **Opened** is distinct `github.com/<owner>/<repo>/pull/<n>` URLs printed by
   a successful Bash call that ran `gh pr create`, minus lines saying the pull
@@ -923,7 +966,11 @@ own tool calls recorded:
   current-branch form — by the one URL the command printed. A merge whose
   target cannot be read (`$N`, a branch name, several URLs) is counted in
   `merges_unresolved` and nowhere else. It is a merge the agents ran, not
-  GitHub's state.
+  GitHub's state. A `cd ~` or `cd ~/…` before it resolves against the
+  daemon's home (the agents' user's), so the merge maps to the same
+  repository as the absolute path and is not counted again beside GitHub's
+  record (2026-10-25: `cd ~/dev/caprock; gh pr merge 783` from another
+  repository's session read as a fourth repository, 62 merged against 59).
 - **Commits** are `git commit` statements, read with a small shell splitter
   (quotes, heredoc bodies, `cd`, `-C`) so a commit message mentioning a commit
   is not one; output saying "nothing to commit" takes one off.
@@ -932,8 +979,13 @@ own tool calls recorded:
   counts its whole file.
 - **Cost** is the stored `cost_usd`, priced once per message id and never
   twice across forks; `tax` prices each model's cache reads exactly as
-  `/v1/history` does. `cost_per_merged_pr` divides all of the week's cost by
-  the merges — an estimate, absent when nothing merged.
+  `/v1/history` does. `cost_per_merged_pr` is an estimate, absent when
+  nothing merged: with GitHub's record, the mean of what the Pipeline charges
+  each pull request merged in the window (`store.KnownPRs` over the
+  repository's dearest root — the figure its Most expensive list shows; one
+  with no agent work recorded counts as $0), so the card and the Pipeline
+  never disagree; with the agents' count only, all of the window's cost over
+  its merges.
 - **CI wait** is the hook-plane `duration_ms` of Bash calls whose statement is
   `gh pr checks`, `gh run watch`, or a script named like `wait-ci`. Tool time,
   not wall clock: parallel calls overlap.
@@ -1496,7 +1548,8 @@ The machine's memory as a whole (2026-10-22): how full it is, who holds it,
 and ending the idle agents Caprock started on the user's click. A user's Mac
 froze with agents holding all its memory while the status bar said only what
 the agent in front used. Code: `internal/procstat/sysmem*.go` (the readings),
-`internal/daemon/sysmem.go` (the split, the states, the end). The status
+`internal/daemon/sysmem.go` (the split, the states, the end),
+`internal/daemon/agentwork.go` (what runs under an agent). The status
 bar's item and popover are in [04-ui.md § Status strip](04-ui.md).
 
 **On every resource sample** (§ Resources, *When it samples*: every 5 s, only
@@ -1548,14 +1601,19 @@ carry `memory`, totals only — the live socket reaches every paired device:
 - **Cost** (measured 2026-10-22, Apple M1 Pro, 16 GB, 669 processes,
   `BenchmarkSystemMemory`): 7.4 µs per sample.
 
-`GET /v1/system/memory` is the popover's list, read only while it is open:
+`GET /v1/system/memory[?front=<session_id>]` is the popover's list, read
+only while it is open; `front` (2026-10-25) is the session whose tab is in
+front of the asking dashboard, which Free up memory never offers:
 
 ```json
 {"at": 1791400000000,
  "memory": {…the object above…},
  "agents": [{"session_id": "…", "pid": 4242, "mem_bytes": 1932735283, "procs": 9,
              "owned": true, "state": "idle", "idle_since": 1791397480000, "endable": true,
-             "max_proc_bytes": 1610612736, "heavy": "growing", "restartable": true}],
+             "max_proc_bytes": 1610612736, "heavy": "growing", "restartable": true},
+            {"session_id": "…", "pid": 4300, "mem_bytes": 734003200, "procs": 4,
+             "owned": true, "state": "idle", "idle_since": 1791399000000, "endable": false,
+             "why_not": "running in the background: npm", "max_proc_bytes": 400000000, "restartable": true}],
  "apps": [{"name": "Google Chrome", "mem_bytes": 7348010288, "procs": 49},
           {"name": "colima", "mem_bytes": 8770000000, "procs": 5, "vm": true}],
  "idle_end": {"count": 3, "mem_bytes": 2576980377, "session_ids": ["…"]},
@@ -1568,9 +1626,24 @@ carry `memory`, totals only — the live socket reaches every paired device:
   (a permission prompt or question open, a message queued, a subagent at
   work, paused, or the turn ended asking the user something), or `idle`,
   with `idle_since` its last activity (§ Ending idle sessions' *last
-  activity*). `endable` is an idle agent Caprock started that is not the
-  orchestrator or one of its workers; a session another terminal started is
-  never endable.
+  activity*).
+- **`endable`** (tightened 2026-10-25, [ADR-059](08-decisions.md) amended:
+  the owner wanted ending idle agents "fully safe") is an agent Caprock
+  started that is `idle`, has been for at least 15 minutes (`memEndQuiet`;
+  chosen, not measured), is not the orchestrator or one of its workers, is
+  not `front` (its spawn id or the session it runs now), and has nothing
+  running under its process but its own helpers: a process whose command
+  line says MCP (and what that starts), `caffeinate`, `conhost`,
+  `caprock-hook`, and the agent itself below its launcher (the npm Codex's
+  node running the native `codex`). Any other descendant — a dev server, a
+  watcher, a `run_in_background` command — is background work that ending
+  would stop. A process table that cannot be read counts as background work.
+  A session another terminal started is never endable.
+- **`why_not`** (2026-10-25) says, for an agent Caprock started that is not
+  endable, why: its state (`working`, `waiting`), `the orchestrator or one
+  of its workers`, `the tab in front`, `idle under 15 min`, or `running in
+  the background: <program>` (the first such process, by its label). Absent
+  when endable and for a session another terminal started.
 - **`max_proc_bytes`, `heavy`** are the tree's, as in § Resources' *Heavy*.
   **`restartable`** is an agent Caprock started, not the orchestrator or a
   worker, whose state is not `working`: Restart it fresh may run now.
@@ -1600,14 +1673,16 @@ carry `memory`, totals only — the live socket reaches every paired device:
   8.2 GB under *Other apps and the system* at 7.6 GB. A group is never
   smaller than its members, so it takes their sum; `agents + caprock +
   other` may then pass `used`, and the popover says why.
-- **`idle_end`** is what the button would end: the `endable` agents, how
+- **`idle_end`** is what Free up memory would end: the `endable` agents, how
   many and their memory together.
 
-`POST /v1/system/memory/end-idle` `{"session_ids": ["…"]}` (1 to 256) →
-`{"ended": ["…"], "skipped": [{"session_id": "…", "why": "working"}]}`.
-Each named session is judged again under its queue lock and ended only if it
-is still `endable`; `why` is its state, `not started by Caprock`, or
-`already ending`. Ending is End's, the same as closing an idle agent's tab:
+`POST /v1/system/memory/end-idle` `{"session_ids": ["…"], "front"?: "…"}`
+(1 to 256) → `{"ended": ["…"], "skipped": [{"session_id": "…", "why":
+"working"}]}`: Free up memory's idle agents (04-ui.md § Free up memory).
+Each named session is judged again under its queue lock, its process tree
+read again then, and ended only if it is still `endable` with the body's
+`front`; `why` is its `why_not`, `not started by Caprock`, or `already
+ending`. Ending is End's, the same as closing an idle agent's tab:
 asked first, so the transcript is written, killed after the grace; the
 conversation is continued later like any ended one. The session is not
 marked as ended for idling (§ Ending idle sessions) — the user ended it.
@@ -1726,15 +1801,29 @@ and once a minute as the fallback for a daemon before them; it asked every
   `data_dir_gone` (a Caprock daemon's or
   holder's data directory, when it can be told), `cpu_pct` (absent until
   two samples; the orphan list has its own sampler, so it never resets the
-  session meter's rates), `mem_bytes`, `why` (a sentence) and `auto` (a
-  holder the sweep stops on its own). Kinds: `caprock_daemon` (another
+  session meter's rates), `mem_bytes`, `why` (a sentence), `auto` (a
+  holder the sweep stops on its own) and `hold` (2026-10-25,
+  [ADR-059](08-decisions.md) amended: why Free up memory leaves it alone —
+  set on a `caprock_daemon` whose starter still runs: `its agent is still
+  running`, `what started it is still running`, or `an agent in its
+  repository is still running`; absent otherwise). The first that holds
+  wins: its parent is not gone (a claude or codex up the chain says *its
+  agent*); `CLAUDE_PID` in its environment names a running process started
+  before it, or `CLAUDE_CODE_SESSION_ID` a live session; the session an
+  agent scratchpad in its data directory or executable names
+  (`…/<uuid>/scratchpad/…`) is live or named on a running agent's command
+  line; or it runs from a `.claude/worktrees/<name>` checkout that still
+  exists while a live session's folder is in that repository. A daemon none
+  of these places is not held. Code: `internal/daemon/starter.go`. Kinds: `caprock_daemon` (another
   `caprock up --foreground`), `caprock_holder` (a holder whose verdict is an
   orphan, any install), `caprock_old_holder` (2026-10-18: a holder this
   daemon still lists — a live session — whose executable is outside its
   install directories, the same ones as `other_install_holders`; at least
   two minutes old; never `auto`; only when a daemon answers, since without
   one there is no install to compare with), `caprock_other` (another caprock
-  command whose parent is gone), `claude` (no terminal, and its parent gone,
+  command whose parent is gone; 2026-10-25: a separate Caprock app inside a
+  `.app` bundle, such as Caprock Mail's `caprock-mail`, is launchd's child by
+  design and never listed — only the `caprock` binary itself), `claude` (no terminal, and its parent gone,
   or the latest ended session in `sessions` with its pid started after the
   process did), `codex` (2026-10-18: the Codex CLI — named `codex`, argv[0]
   `codex`, or node/bun running `@openai/codex` — by the same rule as
@@ -1797,12 +1886,15 @@ and once a minute as the fallback for a daemon before them; it asked every
   object as `caprock doctor`'s text, and `testdata/footprint/doctor.json`
   with `doctor.txt` pin the two renderings to each other.
 
-`POST /v1/footprint/orphans/stop` `{targets: [{pid, started_at}], force?}`
-(1 to 256) → `{stopped: [orphan…], running: [orphan…], failed: [{pid,
-error}]}`: the doctor's Clean up, row Stop and Force stop
-([ADR-059](08-decisions.md), amended 2026-10-18). The daemon takes the
-orphan list again and stops only a target that list holds with the same
-`started_at`; anything else fails with *not on the doctor's list now*.
+`POST /v1/footprint/orphans/stop` `{targets: [{pid, started_at}], force?,
+skip_held?}` (1 to 256) → `{stopped: [orphan…], running: [orphan…],
+failed: [{pid, error}]}`: Free up memory's leftovers, row Stop and Force
+stop ([ADR-059](08-decisions.md), amended 2026-10-18 and 2026-10-25). The
+daemon takes the orphan list again and stops only a target that list holds
+with the same `started_at`; anything else fails with *not on the doctor's
+list now*. With `skip_held` (2026-10-25; Free up memory sends it, row Stop
+does not) a target that list now holds (`hold`) fails with its hold as the
+error and is not signalled.
 Each is sent one signal — SIGTERM, or SIGKILL when `force` is true
 (Windows: TerminateProcess either way) — the start time checked again
 before it (a pid whose start changed fails with *the process changed*), and
@@ -1949,7 +2041,16 @@ On a paired device's read list. `501` without the projects service.
 
 `GET /v1/repos/remotes?dir=…&dir=…` (2026-10-15) → `ReposRemotes` `{repos[]}`: the Pipeline's repository picker ([04-ui.md § CI on the Pipeline and in the cockpit, and Investigate](04-ui.md#ci-on-the-pipeline-and-in-the-cockpit-and-investigate)) asks which of the folders agent sessions worked in are git repositories with a GitHub remote. One `RepoRemote` `{dir, root?, repo?, guarded?}` per distinct non-empty `dir`, in the order asked, at most 100 (`reposRemotesMax`): `root` is the repository's top level (absent outside git), `repo` is owner/name when its remote is on GitHub (`github.ParseRemote`; absent with no remote or another host). A folder macOS guards (`tcc.Guarded`: Documents, Downloads, Desktop…) is never read here and answers `guarded: true` alone, so opening the Pipeline asks for no folder access. Read through the session page's `repoCache` (one minute per folder), at most 8 folders at once; nothing is sent anywhere. Nothing asked answers `{"repos":[]}`. On a paired device's read list.
 
-**Pull request spend** (`store.SpendByPR`, 2026-10-14) charges recorded agent work to pull requests, at API list price, each session through one way only so the figures add up to what the sessions cost and never more (rule 6). A session on a pull request's head branch (`sessions.git_branch`, `repo_root` the repository's) is charged to it whole, unless it opened or merged more than one pull request (`session_prs` rows with `opened_at` or `merged_at`): `git_branch` is the branch a session was on last, and a long session that drove hundreds of pull requests and ended on a release branch was charged whole to the release's pull request (#601 read as $1,884.29, the session's entire spend; cut as below it is $2.12, measured on the owner's database 2026-10-14). Where two pull requests share a head branch the open one owns it, else the most recently updated. A session not charged by its branch that recorded pull requests in `session_prs` is cut at them: ordered by `opened_at` (else `last_at`), each is charged the session's `events.cost_usd` (`internal = 0`) after the previous one's moment up to its own, and the newest also everything after it; a session with one pull request is charged its `session_stats.cost_usd` whole. `PRSpend` `{cost_usd, sessions, live, agents[], by_branch, by_slice, shared?, tokens_in, tokens_out, cache_read, cache_write}`: the tokens are the same work's (`session_stats` for a whole session, the slice's `events` sums for a cut one), `shared` counts the cut sessions: `live` counts sessions not ended — for a cut session only on its newest pull request. Three reads: the repository's sessions with a branch (`idx_sessions_repo_branch`), the `session_prs` rows of the sessions that recorded one of the pull requests, and the slices' sums over the sessions' events, all in one statement (a JSON array of `[session, lo, hi]`, each two ranges of `idx_events_attr_work`, which carries every column summed; 2026-10-23: one query per slice spent most of its time taking and dropping the WAL read lock). 18–57 ms warm and 105 ms cold for 49 pull requests on a 2.3 GB copy of the owner's database (2026-10-14), one session holding 308 of them. An ended session's slice sums are kept in the process (`sliceMemo`, per database and session, at most 1,024 sessions) while its fingerprint — status, `session_stats` cost and tokens, its pull requests' moments — is unchanged; only the slices asked for are summed and kept. For every pull request of the owner's repository (665, 14 cut sessions, 380,000 of their events; a 2 GB copy, 2026-10-23) that took the sum from 190–250 ms warm to 9–14 ms once kept; the first read in a process still sums them (~300 ms).
+**Pull request spend** (`store.SpendByPR`, 2026-10-14) charges recorded agent work to pull requests, at API list price, each session through one way only so the figures add up to what the sessions cost and never more (rule 6). A session on a pull request's head branch (`sessions.git_branch`, `repo_root` the repository's) is charged to it whole, unless it opened or merged more than one pull request (`session_prs` rows with `opened_at` or `merged_at`): `git_branch` is the branch a session was on last, and a long session that drove hundreds of pull requests and ended on a release branch was charged whole to the release's pull request (#601 read as $1,884.29, the session's entire spend; cut as below it is $2.12, measured on the owner's database 2026-10-14). Where two pull requests share a head branch the open one owns it, else the most recently updated. A session not charged by its branch that recorded pull requests in `session_prs` is cut at them: ordered by `opened_at` (else `last_at`), each is charged the session's `events.cost_usd` (`internal = 0`) after the previous one's moment up to its own, and the newest also everything after it; a session with one pull request is charged its `session_stats.cost_usd` whole. `PRSpend` `{cost_usd, sessions, live, agents[], by_branch, by_slice, shared?, tokens_in, tokens_out, cache_read, cache_write, parts?}`: `parts` splits `cost_usd` by the sign-in each session ran on (`SpendPart`, § Plan figures), dearest first; the tokens are the same work's (`session_stats` for a whole session, the slice's `events` sums for a cut one), `shared` counts the cut sessions: `live` counts sessions not ended — for a cut session only on its newest pull request. Three reads: the repository's sessions with a branch (`idx_sessions_repo_branch`), the `session_prs` rows of the sessions that recorded one of the pull requests, and the slices' sums over the sessions' events, all in one statement (a JSON array of `[session, lo, hi]`, each two ranges of `idx_events_attr_work`, which carries every column summed; 2026-10-23: one query per slice spent most of its time taking and dropping the WAL read lock). 18–57 ms warm and 105 ms cold for 49 pull requests on a 2.3 GB copy of the owner's database (2026-10-14), one session holding 308 of them. An ended session's slice sums are kept in the process (`sliceMemo`, per database and session, at most 1,024 sessions) while its fingerprint — status, `session_stats` cost and tokens, its pull requests' moments — is unchanged; only the slices asked for are summed and kept. For every pull request of the owner's repository (665, 14 cut sessions, 380,000 of their events; a 2 GB copy, 2026-10-23) that took the sum from 190–250 ms warm to 9–14 ms once kept; the first read in a process still sums them (~300 ms).
+
+**Pull requests a script made** (2026-10-25; `internal/store/prlearn.go`). `session_prs` is filled only from the `gh pr` commands a session ran, so a pull request a script made had no row: `bash relgen.sh …` running `gh pr create` and `gh pr merge` inside, or `PR=$(gh pr create …)`, which neither Claude Code's `gitOperation` nor the parser reads as one. The session that drove it was never cut at it, and on the owner's board v0.155.0, v0.157.0 and v0.158.0 read "–" while v0.156.0 read $9.23. SpendByPR now also reads `github_prs` for every repository its pull requests belong to (from their `https://github.com/<owner>/<name>/pull/` address). For each of those pull requests, a `created_at` that no `session_prs` row of it records as `opened_at`, and a `merged_at` that none records as `merged_at`, is matched to the sessions of `repo_root` that had a Bash call over it. Such a call has a `tool.pre` (`internal = 0`) before the end of the stamp's second (GitHub stamps whole seconds) and at most 15 minutes earlier (`learnLookback`, past Claude Code's 10-minute foreground limit), and its `tool.post`, paired by tool-use id (`pre:`/`post:` keys), at or after the stamp. Every Bash call of a session counts, a subagent's included.
+- **Exactly one session** — the stamp is that session's, as if it had recorded the command when its earliest such call ended. It is folded into its rows the way `store.RecordPR` folds one: the earliest opening wins, `last_at` is the latest move. The cut, the head-branch rule's count of pull requests opened or merged (each counted once) and `sliceMemo`'s fingerprint all take it as a row.
+- **None or several** — the stamp stays unattributed. A background call (`run_in_background`) ends at once, so a pull request a detached script made while the session only waited on it in the background is not matched: the owner's release pull requests (#815, #818, #822, #824) stay at $0.00.
+- **Never stored** — the match is made at read time. `session_prs` keeps only what sessions ran, and nothing reads it as a command. Every stamp of the repository is matched, not only those asked for, so a session's cut is the same on every screen, and the figures still add up to what the sessions cost and never more.
+- **Kept once settled** — a stamp older than `learnLookback` is settled, and its match, or its lack of one, is kept in the process (`learnMemo`, at most 8,192 stamps). A younger one is matched again on each read, so a call still running is found once it ends.
+- **Read in one statement** — the stamps lead (`CROSS JOIN` over a JSON array), each one range of `idx_events_tool_dist`. Left to itself, the planner walked every `tool.pre` row once per stamp: 6.9 s for three stamps, against 6 ms in this order.
+- **Measured** — 2026-10-25, on a copy of the owner's database, the board's 50 pull requests of dspv/caprock: 22 stamps matched, as 19 rows, 8 of them in session e49da112 (all older pull requests of the repository included; the rest from session a2ef22a8). The first read went from 194 ms to 207 ms, and later reads from 8 ms to 10 ms. The releases, before → after: v0.155.0 $0.00 → $7.37 (#814), v0.156.0 $9.23 → $1.86 (#814's opening now cuts what #817 had), v0.157.0 $0.00 → $19.92 (#821), v0.158.0 $0.00 → $32.09 (#823, the session's newest, so with everything it did since). The session's slices still sum to its $157.41. Every pull request of the repository (704) totals $7,684.10, against $11,552.91 for the sessions that could be charged.
+- **What is not inferred** — a batch pull request's `Merge remote-tracking branch 'origin/<branch>'` commits name the branches it carries, but no session is charged from them unless it is on that branch (`sessions.git_branch`, the head-branch rule above). A pull request opened by hand on GitHub while one session of the repository had a Bash call running over that second would be matched to it. It is the one way this rule can be wrong, and the cost it moves is still that session's own.
 
 **Phone alerts** ([ADR-036](08-decisions.md)) go through the same bot and are
 free: no licence is checked. `PUT /v1/settings` accepts `alert_approval` and
@@ -2751,7 +2852,8 @@ over the 14 local calendar days ending today:
   at `merged_at`. Waiting stages are ordered longest-waiting first, merges
   newest first. `spend` is `store.PRSpend` (§ Pull request spend). Each
   `BoardRelease` is a `RepoRelease` plus `prs[]` (the listed merges it
-  shipped), `cost_usd`, `sessions` and `partial` (the list may not reach
+  shipped), `cost_usd`, `sessions`, `parts?` (its pull requests' parts
+  summed, § Plan figures) and `partial` (the list may not reach
   back to the release before it), newest first, at most 6. `flow`
   `{counts{stage}, days, merged, ttm_median_ms?, ttm_count,
   release_lag_median_ms?, release_lag_count, release_gap_median_ms?,
@@ -2855,7 +2957,8 @@ all time), `prs[]`, `prs_counted`, `prs_known`, `releases[]`,
   are those of `git log --first-parent prev..tag`. A tag off that line is left
   out; of several on one commit the highest version is the release; CRLF is
   read as LF. Each `CostlyRelease` `{tag, at, url, prs[], cost_usd, sessions,
-  first?}`: `at` the tag's date, `url`
+  parts?, first?}` (`parts`: its pull requests' parts summed, § Plan
+  figures): `at` the tag's date, `url`
   `https://github.com/<repo>/releases/tag/<tag>`, `cost_usd` and `sessions`
   the sums of its pull requests' `KnownPR.spend` (the same figure as the left
   list, so no session is counted twice; a session cut between two pull
@@ -7193,12 +7296,18 @@ CREATE TABLE IF NOT EXISTS github_prs (
 
 The headers of every pull request list the daemon read from GitHub
 (`store.UpsertGitHubPRs`, through `github.Service.OnPulls`; § the Pipeline's
-*Kept headers*): the repository's own pull requests, a fork's left out. A row
+*Kept headers*): in those lists the repository's own pull requests, a fork's
+left out. A row
 is rewritten only by a header whose `updated_at` is at least the one it
 holds, so a list read late never undoes a newer one. The migration only
-creates the table — nothing is filled at startup; it grows as lists are read.
-Read by `store.KnownPRs` (§ Most expensive) for the head branch, title, state
-and stamps of pull requests no agent recorded.
+creates the table — nothing is filled at startup; it grows as lists are read,
+and as a Week reads the part of its window the lists missed (§ Week, *What
+`github_prs` lacks*; those rows include a fork's pull requests, with `head`
+empty). Read by `store.KnownPRs` (§ Most expensive) for the head branch,
+title, state and stamps of pull requests no agent recorded, and by
+`store.SpendByPR` to match the opening and merge stamps no session recorded
+to the session acting then (§ Pull requests a script made); nothing it
+matches is written to `session_prs`.
 
 ### Session exits DDL (migration 0072)
 
@@ -7313,7 +7422,10 @@ is free text, and the migration-0005 comment listing two values is history.
   sample deletes every `codex_` row and writes its own windows, so a plan with
   no 5-hour window (`prolite`) leaves none behind from an earlier plan; an older
   sample read later is ignored.
-- **No `rate_limit_history` rows**, hence no forecast.
+- **History rows since 2026-10-25:** each replacing sample also appends its
+  windows to `rate_limit_history`, throttled like the status line's (30 s per
+  window), for the plan figures' weekly calibration (§ Plan figures). No
+  forecast is built on them.
 
 `GET /v1/stats/summary` returns them as `codex_rate_limits` (same shape as
 `rate_limits`: `five_hour?`, `seven_day?`, each `{used_percentage, resets_at,
@@ -7331,6 +7443,65 @@ Measured on a sandbox daemon over a 1.9 GB copy of the owner's database
 and 22,116 bytes, `/v1/stats/limits` 1.6 ms and 242 bytes. The time is small
 either way; the size is what a phone on mobile data, through the relay, pays
 for.
+
+**Plan figures** (`GET /v1/plan-share`, 2026-10-25, [ADR-084](08-decisions.md))
+— the rates that put a cost at API list price into subscription terms: *$50
+at API · ≈$1.65 of plan · ≈2.3% of a week*. Computed once, in the daemon
+(`internal/planshare`, kept 5 minutes and then served while one refresh runs
+behind it, recomputed at once when a plan changes), so every screen prices a
+cost the same way; the screens multiply through one function
+(`ui/src/lib/planShare.ts`). Answer: `{computed_at, plan_days: 30, rates[]}`,
+one `rate` per sign-in — the own Claude Code sign-in, each added
+subscription, Claude Code on DeepSeek while a key is set, the own Codex
+sign-in, each added Codex subscription — `{agent, subscription, label,
+plan_kind, plan?, plan_note?, week?, week_note?}`. `subscription` is what
+sessions record (`""` the own sign-in, an id, `deepseek`).
+
+- **`plan`** `{label?, usd_per_month, days, fee_usd, api_usd, from, to,
+  factor}`: `factor` = `fee_usd / api_usd`, the plan's price over the
+  trailing 30 days (`usd_per_month × days / 30`) over the API-equivalent
+  spend recorded on that sign-in in the same days (`events.cost_usd`,
+  `internal = 0`, joined to `sessions.agent` and `sessions.subscription`).
+  Trailing rather than the calendar month, so it does not jump on the first.
+  A sign-in whose first session is newer than 30 days counts only the days
+  since (`days` < 30). The plan is the sign-in's own; for a Claude Code
+  sign-in without one, the main plan (`plan_kind` in `/v1/settings`, which is
+  how the user pays for Claude Code). **A Codex sign-in has a plan only when
+  one is stated on it** — a Claude plan's price says nothing about Codex.
+  Absent with `plan_note`: `metered` (the API figure is the bill),
+  `no_plan` (none stated, or a price of 0), `no_spend`.
+- **`week`** `{resets_at, completed, from, to, used_points, api_usd,
+  pct_per_usd}`: a week's percent per API dollar = the percentage points of
+  the weekly limit used over a measured stretch / the spend recorded on the
+  sign-in over the same stretch. Samples are the weekly window's
+  (`seven_day`, `codex_seven_day`, `sub:<id>:seven_day`) in
+  `rate_limit_history` and `rate_limit_latest`, grouped by reset (resets
+  within an hour are one window). In a window the stretch runs from its start
+  (`resets_at − 7 days`, 0% used) to the first sample at its highest
+  percentage; a fall of 20 points or more below the highest so far is an
+  early reset and starts the stretch again at that sample, with its
+  percentage as the base (smaller falls are samples from two sessions
+  arriving out of order, and are ignored). The latest **completed** window
+  that ended within 35 days and has **at least 10 points and $1** of spend
+  is used; with none, the current window once it has as much; else no
+  `week` and `week_note` `not_enough`, or `no_window` when no weekly window
+  was ever observed (DeepSeek; Codex before its first sample).
+
+A figure is priced per part: its cost split by sign-in. Plan dollars sum
+each part × its sign-in's `factor`; a part with no factor leaves the figure a
+floor, drawn with a `+`, and under half covered there is no plan figure.
+Week shares are per sign-in and never added across sign-ins (different
+limits). Both may pass 100%. Use outside Caprock (claude.ai chats, another
+computer) draws on the same plan and limits unrecorded, so both run a little
+high; the screens say so. The parts travel with the figures:
+`SpendPart` `{agent, subscription, cost_usd}` as `PRSpend.parts`,
+`BoardRelease.parts`, `CostlyRelease.parts` and the summary's `cost_parts`
+(`store.SpendPartsBetween`, the same range and `?agent=` filter as
+`cost_usd`, cached with the summary). Each is absent from an older daemon,
+and a client then draws no plan figure. Open to a paired device
+(`pairedDeviceRoutes`), like the figures it prices. Measured on a 2.2 GB copy
+of the owner's database (2026-10-25): 1.4 s cold for the whole answer, of
+which the 30-day split was 0.8 s.
 
 **A subscription's windows are stored under `sub:<id>:`** —
 `sub:ab12cd34:five_hour` — for either agent ([ADR-048](08-decisions.md)), so

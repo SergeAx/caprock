@@ -188,6 +188,9 @@ type Agent struct {
 	// stopped is set when Caprock was asked to end it (End, a stop signal,
 	// a restart): an exit then is not one the program chose.
 	stopped atomic.Bool
+	// freed is set when it was ended to free memory (MarkFreed): its tab
+	// shows the conversation with Continue rather than a shell.
+	freed atomic.Bool
 	// pumped is closed when its output has been read to the end, so the
 	// screen it left is complete when its exit is recorded.
 	pumped chan struct{}
@@ -976,6 +979,14 @@ var endGrace = ShutdownGrace
 // flushes its transcript and the conversation can be continued with
 // --resume; killed only if it is still running after endGrace. It returns
 // once the request is sent; the kill, if needed, follows in the background.
+// MarkFreed notes that the next End of this session frees memory: the
+// exit it records says so (ExitReport.Freed).
+func (m *Manager) MarkFreed(sessionID string) {
+	if a, ok := m.Get(sessionID); ok {
+		a.freed.Store(true)
+	}
+}
+
 func (m *Manager) End(sessionID string) error {
 	a, ok := m.Get(sessionID)
 	if !ok {
@@ -1285,7 +1296,12 @@ func (a *Agent) TouchIO(t time.Time) { a.ioAt.Store(t.UnixNano()) }
 
 // PID is the agent's (or shell's) own process id — the child of its pty-host,
 // not the host. The resource meter starts its process tree here.
-func (a *Agent) PID() int { return a.sess.PID() }
+func (a *Agent) PID() int {
+	if a.sess == nil {
+		return 0
+	}
+	return a.sess.PID()
+}
 
 // childEnv is the environment for a spawned session: the user's login-shell
 // environment (see internal/userenv — the daemon's own is launchd's bare one,

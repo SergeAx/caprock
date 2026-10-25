@@ -159,6 +159,8 @@ type Daemon struct {
 	slow   slowStatus
 	// subSpend keeps the Subscriptions answer's week of spend (subspend.go).
 	subSpend subSpendCache
+	// planShareC keeps GET /v1/plan-share's rates (planshare.go).
+	planShareC planShareCache
 	// headless remembers which sessions were print-mode runs (interrupted.go),
 	// by session id; a transcript's entrypoint never changes.
 	headless sync.Map
@@ -734,15 +736,21 @@ func (d *Daemon) run(ctx context.Context) error {
 		Resources:       func(ctx context.Context) any { return d.resources(ctx) },
 		ResourceHistory: func(since int64) any { return d.resourceHistory(since) },
 		Footprint:       func(ctx context.Context, orphans, fresh bool) any { return d.footprint(ctx, orphans, fresh) },
-		StopOrphans:     func(ctx context.Context, t []api.OrphanTarget, force bool) any { return d.stopOrphans(ctx, t, force) },
-		SystemMemory:    func(ctx context.Context, paired bool) any { return d.systemMemory(ctx, paired) },
-		EndIdleAgents:   func(ctx context.Context, ids []string) any { return d.endIdle.endIdleNow(ctx, ids) },
-		RestartEnd:      func(ctx context.Context, id string) any { return d.endIdle.restartEnd(ctx, id) },
-		KeepAwake:       d.keepAwakeStatus,
-		OpenTabs:        d.tabs.report,
-		LatestTabs:      d.tabs.latest,
-		UpdateBusy:      d.workingSessions,
-		ReapOrphans:     func(ctx context.Context) (any, error) { return d.reapOrphans(ctx, true) },
+		StopOrphans: func(ctx context.Context, t []api.OrphanTarget, force, skipHeld bool) any {
+			return d.stopOrphans(ctx, t, force, skipHeld)
+		},
+		SystemMemory: func(ctx context.Context, paired bool, front string) any {
+			return d.systemMemory(ctx, paired, front)
+		},
+		EndIdleAgents: func(ctx context.Context, ids []string, front string) any {
+			return d.endIdle.endIdleNow(ctx, ids, front)
+		},
+		RestartEnd:  func(ctx context.Context, id string) any { return d.endIdle.restartEnd(ctx, id) },
+		KeepAwake:   d.keepAwakeStatus,
+		OpenTabs:    d.tabs.report,
+		LatestTabs:  d.tabs.latest,
+		UpdateBusy:  d.workingSessions,
+		ReapOrphans: func(ctx context.Context) (any, error) { return d.reapOrphans(ctx, true) },
 		RateLimitsRecorded: func(ctx context.Context) {
 			if d.winStop != nil {
 				d.winStop.Check(ctx)
@@ -750,7 +758,7 @@ func (d *Daemon) run(ctx context.Context) error {
 		},
 		ActiveLoops: d.activeLoop, IdleAfter: d.opt.IdleAfter,
 		LoopK: d.det.K, LoopWindow: d.det.Window,
-		Token: rt.Token, Shutdown: cancel, Agents: &agentAdapter{m: d.mgr, d: d}, Queue: d.queue, Board: d.queue, Work: newWorkBoard(d, d.queue), Catalog: &catalogAdapter{d: d}, Subscriptions: &subsAdapter{d: d},
+		Token: rt.Token, Shutdown: cancel, Agents: &agentAdapter{m: d.mgr, d: d}, Queue: d.queue, Board: d.queue, Work: newWorkBoard(d, d.queue), Catalog: &catalogAdapter{d: d}, Subscriptions: &subsAdapter{d: d}, PlanShare: d.planShare,
 		Tasks: &boardAdapter{d: d}, Settings: &settingsAdapter{d: d}, Admin: &adminAdapter{d: d}, Update: d.upd,
 		ModuleNotify: moduleNotifier{d: d},
 		AskGemini:    d.askGemini,
